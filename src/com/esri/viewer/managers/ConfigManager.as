@@ -677,16 +677,95 @@ public class ConfigManager extends EventDispatcher
 
                     configData.webMapData = result.itemData;
 
-                    if (addArcGISBasemaps)
-                    {
-                        appendPortalBasemaps(portalURL);
-                    }
-                    else
-                    {
-                        AppEvent.dispatch(AppEvent.CONFIG_LOADED, configData);
-                    }
+					/* -----------------------------------------------------------------------------
+					CHANGE BY RYAN ELLEY 04/07/2014  
+					
+					Change to prevent loading arcgis basemaps if the web map uses a coordinate system 
+					other than web mercator and to load config basemaps instead
+					
+					ORIGINAL CODE
+					if (addArcGISBasemaps)
+					{
+						appendPortalBasemaps(portalURL);
+					}
+					else
+					{
+						AppEvent.dispatch(AppEvent.CONFIG_LOADED, configData);
+					}
+					
+					-----------------------------------------------------------------------------  */
+					
+					
+					if (addArcGISBasemaps && (result.map.spatialReference == null || 
+						result.map.spatialReference.wkid == 4326 || 
+						result.map.spatialReference.wkid == 102100))
+					{
+						trace( result.map.spatialReference == null ? "No Spatial Reference" : result.map.spatialReference.wkid.toString() );
+						
+						appendPortalBasemaps(portalURL);
+					}
+					else
+					{
+						var configBasemaps:Array = [];
+						var maplayerList:XMLList = configXML.map.basemaps.mapservice; // TODO - is this still in use ???
+						if (maplayerList.length() < 1)
+						{
+							maplayerList = configXML.map.basemaps.layer;
+						}
+						
+						for (i = 0; i < maplayerList.length(); i++)
+						{
+							var basemapXML:XML = maplayerList[i];
+							var basemap:Object = configData_findBasemap(basemapXML);
+							
+							
+							// Check if this basemap has already been included in the map
+							if (basemap == null)
+							{
+								// Ensure visible attribute set to false to make sure it doesn't override the webmap's current basemap 
+								basemapXML.@visible = false;
+								
+								// Add a basemap object to the maps configData
+								configData.basemaps.push(LayerObjectUtil.getLayerObject(basemapXML, configData.basemaps.length, false, bingKey, null, proxyUrl));
+							}
+							else 
+							{
+								// Update the icon property on the basemap item to match the config value
+								if (basemapXML.@icon)
+								{
+									basemap.icon = basemapXML.@icon.toString();
+								}
+							}
+						}
+						
+						AppEvent.dispatch(AppEvent.CONFIG_LOADED, configData);
+					}
                 }
 
+				function configData_findBasemap(basemapXML:XML):Object
+				{
+					var found:Object = null;
+					
+					for each(var basemap:Object in configData.basemaps)
+					{
+						var basemapUrl:String = basemap.url.toUpperCase();
+						var basemapXMLUrl:String = basemapXML.@url.toString().toUpperCase();
+						
+						if (basemapUrl == basemapXMLUrl)
+						{
+							found = basemap;
+							break;
+						}
+					}
+					
+					return found;
+				}
+				
+				/* -----------------------------------------------------------------------------
+				END OF CHANGE by Ryan Elley 
+				-----------------------------------------------------------------------------  */
+				
+				
                 function webMapUtil_createMapByIdFaultHandler(error:Fault):void
                 {
                     AppEvent.showError(

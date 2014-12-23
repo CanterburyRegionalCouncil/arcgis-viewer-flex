@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<configuration label="Coordinates (default)">
+    <!-- geo, dms, mercator -->
+    <outputunit>geo</outputunit>
+    
+   	<!-- Coordinate number formatting properties.  Number formatting settings including 
+		 precision/number of decimal places to display on result coordinate values, 
+		 characters to use for the decimal and thousands separator, and rounding 
+		 (valid values are "down", "nearest", "up", and "none")-->
+	<numberformatter decimalseparator="." thousandsseparator="," usethousandsseparator="true" precision="-1" precisiongeo="5" rounding="nearest" />
+
+    <!-- Map scale display properties. Number formating settings include 
+		 precision/number of decimal places to display on result scale value, 
+		 characters to use for the decimal and thousands separator, and rounding 
+		 (valid values are "down", "nearest", "up", and "none").  The template
+		 text used for displaying the scale requires a place holder "(0)" -->
+    <scale showscale="true" template="Scale 1:{0}" decimalseparator="." thousandsseparator="," usethousandsseparator="true" rounding="" />
+
+	<!-- Label display properties.  Template text and style properties for 
+		 displaying the x and y coordinates and scale (if displayed).  -->
+    <labelstyle color="0x000000" fontfamily="Verdana" fontsize="9" fontweight="bold"/>
+</configuration>
+
+<!--
+    See Coordinate widget tag reference at
+    http://links.esri.com/coordinatewidget
+-->

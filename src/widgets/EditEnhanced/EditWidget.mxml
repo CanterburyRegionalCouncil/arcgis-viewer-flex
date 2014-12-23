@@ -1,0 +1,4831 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+<viewer:BaseWidget xmlns:fx="http://ns.adobe.com/mxml/2009"
+                   xmlns:s="library://ns.adobe.com/flex/spark"
+                   xmlns:mx="library://ns.adobe.com/flex/mx"
+                   xmlns:esri="http://www.esri.com/2008/ags"
+                   xmlns:viewer="com.esri.viewer.*"
+                   creationComplete="basewidget_creationCompleteHandler(event)"
+                   initialize="basewidget_initializeHandler()"
+                   widgetConfigLoaded="basewidget_widgetConfigLoaded()"
+				   currentState="deactivated" >
+
+    <fx:Style>
+        @namespace esri "http://www.esri.com/2008/ags";
+        
+		esri|Editor
+		{
+		  	skin-class: ClassReference("widgets.EditEnhanced.EditWidgetEditorSkin");
+		}
+		
+        esri|TemplatePicker
+        {
+            skin-class: ClassReference("widgets.EditEnhanced.EditWidgetTemplatePickerSkin");
+        }
+    </fx:Style>
+
+    <fx:Script>
+        <![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.components.AttributeInspector;
+			import com.esri.ags.components.supportClasses.FieldInspector;
+			import com.esri.ags.components.supportClasses.Template;
+			import com.esri.ags.events.AttributeInspectorEvent;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.EditEvent;
+			import com.esri.ags.events.FeatureLayerEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.events.TemplatePickerEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Multipoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.supportClasses.FeatureEditResult;
+			import com.esri.ags.layers.supportClasses.FeatureEditResults;
+			import com.esri.ags.layers.supportClasses.FeatureLayerDetails;
+			import com.esri.ags.layers.supportClasses.FeatureTableDetails;
+			import com.esri.ags.layers.supportClasses.FeatureTemplate;
+			import com.esri.ags.layers.supportClasses.Field;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.skins.supportClasses.AttachmentMouseEvent;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.JSONTask;
+			import com.esri.ags.tasks.supportClasses.Query;
+			import com.esri.ags.tools.EditTool;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			import com.esri.viewer.utils.MapServiceUtil;
+			
+			import flash.text.engine.FontWeight;
+			
+			import mx.binding.utils.ChangeWatcher;
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.core.FlexGlobals;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.EffectEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.utils.ObjectUtil;
+			
+			import spark.filters.GlowFilter;
+			
+			import widgets.EditEnhanced.EditWidgetEditorSkin;
+			import widgets.supportClasses.components.CopyFeatureDialog;
+			import widgets.supportClasses.components.CreateCircleDialog;
+			import widgets.supportClasses.components.CreatePointDialog;
+			import widgets.supportClasses.components.MoveDialog;
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.GraphicUtil;
+			import widgets.supportClasses.utils.LayerUtil;
+			import widgets.supportClasses.utils.MapUtil;
+			
+			
+			
+			/* WIDGET CONSTANTS
+			---------------------------------------------------------------------------------- */
+
+			private const ICON_URL:String = "assets/images/";
+
+ 
+			
+			/* WIDGET VARIABLES
+			---------------------------------------------------------------------------------- */
+
+			[Bindable]
+            private var oplList:Array;
+            [Bindable]
+            private var featureLayers:Array;
+            private var arrLayers:Array;
+            private var arrFinalLayers:Array;
+            private var mapLayers:ArrayCollection;
+
+            private var addFeatures:Boolean = true;
+            private var deleteFeatures:Boolean = true;
+			private var confirmDeletes:Boolean = true;
+			private var updateGeometry:Boolean = true;
+            private var updateAttributes:Boolean = true;
+
+			private var createPointXY:Boolean = true;
+			private var createCircleXYRadius:Boolean = true;
+			private var moveFeatureByXY:Boolean = true;
+			private var copyGeometry:Boolean = true;
+			private var explodeFeatures:Boolean = true;
+			private var showAttributes:Boolean = true;
+			
+			private var showFeatures:Boolean = true;
+			
+			private var dictionary:Dictionary = new Dictionary /*layer,renderer*/;
+            private var featureLayerToDynamicMapService:Dictionary = new Dictionary /*FeatureLayer,ArcGISDynamicMapServiceLayer*/;
+            private var hiddenFeatureLayerToSettingsName:Dictionary = new Dictionary /*FeatureLayer,String*/;
+            private var excludeLayers:Array;
+			private var graphicLayers:Array;
+			private var lastState:String;
+			private var lastSkinState:String = "";
+			
+			// Use dynamic layers flag for specifying whether dynamic layers should be checked for editable maps. 
+			private var checkDynamicLayers:Boolean;
+			
+            private var disablePanZoomNavigationWidget:Boolean;
+
+            private var attributesLabel:String;
+            [Bindable]
+            private var attachmentsLabel:String;
+            [Bindable]
+            private var relatedRecordsLabel:String;
+
+            [Bindable]
+            private var showAttributesText:String;
+            [Bindable]
+            private var noEditableLayersText:String;
+
+            private var visibleLayersChangeWatcher:ChangeWatcher;
+            private var activeFeatureChangeWatcher:ChangeWatcher;
+            private var layerToSettings:Dictionary = new Dictionary /*layer,settingsObject*/;
+            private var featureLayerToSelectionColor:Dictionary = new Dictionary /*FeatureLayer,SelectionColor*/;
+
+			// Edit feature Settings
+			private var editsession:String;
+			private var layerfilter:String;
+			private var templatefilters:Array;
+			private var editattributes:Array = [];
+			private var definitionextent:Extent;
+			
+			[Bindable]
+			private var keyfield:String = "";
+			[Bindable]
+			private var keyvalue:String = "";
+
+			// Notifcation Services Settings
+			[Bindable]
+			private var _notifyServices:ArrayCollection = new ArrayCollection();
+
+			// Current edit feature
+			private var _editGraphic:Graphic = null;
+			private var _selectedVertex:MapPoint = null;
+			
+			// Interactive measurement labels
+			[Bindable]
+			private var _segmentLengthLabel:String;
+			[Bindable]
+			private var _totalLengthLabel:String;
+
+			private var _areaPrecision:int;
+			private var _areaConversion:Number;
+			private var _areaUnitLabel:String;
+			
+			private var _distancePrecision:int;
+			private var _distanceConversion:Number;
+			private var _distanceUnitLabel:String;
+			
+			private var _areaLabel:String;
+			private var _lengthLabel:String;
+			private var _perimeterLabel:String;
+			private var _radiusLabel:String;
+			private var _widthLabel:String;
+			private var _heightLabel:String;
+
+			// Event handler flag			
+			private var _dispatchedMessage:Boolean = false;
+			
+			// Help Application URL location
+			[Bindable]
+			private var _helpLocation:String;
+
+			
+			
+			/* WIDGET EVENT HANDLERS
+			---------------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the widget component initialises.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function basewidget_initializeHandler():void
+            {
+                if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+                {
+                    this.percentWidth = this.percentHeight = 100;
+                    wTemplate.percentWidth = wTemplate.percentHeight = 100;
+                }
+                else
+                {
+                    wTemplate.width = wTemplate.minWidth = 310;
+                    wTemplate.height = wTemplate.minHeight = 310;
+                }
+            }
+
+			/**
+			 * Called when the widget config file has been loaded.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function basewidget_widgetConfigLoaded():void
+            {
+                // hide map infowindow if any               
+                map.infoWindow.hide(); 
+
+                if (configXML)
+                {
+                    if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+                    {
+                        geometryService.url = GeometryServiceSingleton.instance.url;
+                        geometryService.token = GeometryServiceSingleton.instance.token;
+                        geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+                    }
+                    else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+                    {
+                        geometryService.url = configXML.geometryservice;
+                    }
+
+                    editor.toolbarVisible = configXML.toolbarvisible == "true";
+
+                    const configToolbarCutVisible:Boolean = configXML.toolbarcutvisible == "true";
+                    editor.toolbarCutVisible = configToolbarCutVisible;
+
+                    const configToolbarMergeVisible:Boolean = configXML.toolbarmergevisible == "true";
+                    editor.toolbarMergeVisible = configToolbarMergeVisible;
+					
+					if (configToolbarMergeVisible) 
+					{
+						AppEvent.addListener(EditWidgetEditorSkin.MERGEFEATURES_BUTTON_CLICKED, editor_mergeFeaturesButtonClickHandler);
+					}
+
+                    const configToolbarReshapeVisible:Boolean = configXML.toolbarreshapevisible == "true";
+                    editor.toolbarReshapeVisible = configToolbarReshapeVisible;
+
+					// Copy features
+					if (configXML.toolbarcopyfeatures.length() > 0)
+					{
+						copyGeometry = configXML.toolbarcopyfeatures[0] == "true";
+					}
+					EditWidgetEditorSkin.copyFeaturesVisible = copyGeometry;					
+					
+					if (copyGeometry)
+					{
+						// Add handler for listen for the copy button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.COPY_BUTTON_CLICKED, editor_copyButtonClickHandler);
+					}
+					
+					// Create Point by XY
+					if (configXML.toolbarcreatepointxy.length() > 0)
+					{
+						createPointXY = configXML.toolbarcreatepointxy[0] == "true";
+					}
+					EditWidgetEditorSkin.createPointXYVisible = createPointXY;					
+					
+					if (createPointXY)
+					{
+						// Add handler for listen for the create point button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.POINTXY_BUTTON_CLICKED, editor_createPointXYButtonClickHandler);
+					}
+					
+					// Create Circle by XY & Radius
+					if (configXML.toolbarcreatecirclexyradius.length() > 0)
+					{
+						createCircleXYRadius = configXML.toolbarcreatecirclexyradius[0] == "true";
+					}
+					EditWidgetEditorSkin.createCircleXYRadiusVisible = createCircleXYRadius;					
+					
+					if (createCircleXYRadius)
+					{
+						// Add handler for listen for the create circle button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.CIRCLEXYRADIUS_BUTTON_CLICKED, editor_createCircleXYRadiusButtonClickHandler);
+					}
+					
+					// Move Feature by XY
+					if (configXML.toolbarmovefeaturebyXY.length() > 0)
+					{
+						moveFeatureByXY = configXML.toolbarmovefeaturebyXY[0] == "true";
+					}
+					EditWidgetEditorSkin.moveFeatureXYToolVisible = moveFeatureByXY;					
+					
+					if (moveFeatureByXY)
+					{
+						// Add handler for listen for the move feature by XY button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.MOVEFEATUREXY_BUTTON_CLICKED, editor_moveFeatureXYButtonClickHandler);
+					}
+					
+					// Explode Multipart Features
+					if (configXML.toolbarexplodemultipart.length() > 0)
+					{
+						explodeFeatures = configXML.toolbarexplodemultipart[0] == "true";
+					}
+					EditWidgetEditorSkin.explodeFeatureToolVisible = explodeFeatures;					
+					
+					if (explodeFeatures)
+					{
+						// Add handler for listen for the explode multipart features button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.EXPLODEFEATURE_BUTTON_CLICKED, editor_explodeFeatureButtonClickHandler);
+					}
+					
+					// Show Attributes 
+					if (configXML.toolbarshowattributes.length() > 0)
+					{
+						showAttributes = configXML.toolbarshowattributes[0] == "true";
+					}
+					EditWidgetEditorSkin.showAttributesVisible = showAttributes;					
+					
+					if (showAttributes)
+					{
+						// Add handler for listen for the sow attributes button to be clicked
+						AppEvent.addListener(EditWidgetEditorSkin.SHOWATTRIBUTES_BUTTON_CLICKED, editor_showAttributesButtonClickHandler);
+					}
+					
+                    if (configXML.createoptions.length() > 0)
+                    {
+                        createOptions.polygonDrawTools = new Array();
+                        createOptions.polylineDrawTools = new Array();
+
+                        if (configXML.createoptions.polygondrawtools.length() > 0)
+                        {
+                            const polygonDrawToolsList:Array = configXML.createoptions.polygondrawtools.split(",");
+                            for (var i:Number = 0; i < polygonDrawToolsList.length; i++)
+                            {
+                                createOptions.polygonDrawTools.push(polygonDrawToolsList[i]);
+                            }
+                        }
+
+                        if (configXML.createoptions.polylinedrawtools.length() > 0)
+                        {
+                            const polylineDrawToolsList:Array = configXML.createoptions.polylinedrawtools.split(",");
+                            for (var j:Number = 0; j < polylineDrawToolsList.length; j++)
+                            {
+                                createOptions.polylineDrawTools.push(polylineDrawToolsList[j]);
+                            }
+                        }
+                        editor.createOptions = createOptions;
+                    }
+					
+                    //excludeLayers
+                    excludeLayers = [];
+                    var layers:XMLList = configXML.excludelayer as XMLList;
+                    for (var n:Number = 0; n < layers.length(); n++)
+                    {
+                        excludeLayers.push(layers[n].toString());
+                    }
+
+					// Source Graphic Layers
+					graphicLayers = [];
+					var glayers:XMLList = configXML.graphiclayers.graphiclayer as XMLList;
+					for (var g:Number = 0; g < glayers.length(); g++)
+					{
+						var gLayerPropeties:Object = {};
+						gLayerPropeties.name = glayers[g].@name.toString();
+						gLayerPropeties.type = glayers[g].@type.toString();
+						graphicLayers.push(gLayerPropeties);
+					}
+					
+                    //deleteFeatures
+                    if (configXML.deletefeatures.length() > 0)
+                    {
+                        deleteFeatures = configXML.deletefeatures == "true";
+                    }
+                    editor.deleteEnabled = attachmentInspector.deleteEnabled = deleteFeatures;
+
+                    // addFeatures
+                    if (configXML.addfeatures.length() > 0)
+                    {
+                        addFeatures = configXML.addfeatures == "true";
+                    }
+                    editor.addEnabled = addFeatures;
+
+                    // updateAttributes
+                    if (configXML.updateattributes.length() > 0)
+                    {
+                        updateAttributes = configXML.updateattributes == "true";
+                    }
+                    editor.updateAttributesEnabled = updateAttributes;
+
+                    // updateGeometry
+                    if (configXML.updategeometry.length() > 0)
+                    {
+                        updateGeometry = configXML.updategeometry == "true";
+                    }
+                    editor.updateGeometryEnabled = updateGeometry;
+					
+					// Set the editable layer settings
+                    if (configXML.layersettings.length() > 0)
+                    {
+                        // layerSettings, overriding default settings                   
+                        configureLayerSettings(configXML.layersettings.layer);
+                    }
+                    else if (configXML.formfieldsorder.length() > 0)
+                    {
+                        // formFieldsOrder - applies to all layers
+                        editor.attributeInspector.formFieldsOrder = toAttributeInspectorFormFieldsOrder(configXML.formfieldsorder);
+                    }
+
+					// Check to see if dynamic layers should be checked to see if they are editable
+					checkDynamicLayers = configXML.checkForEditableDynamicLayers == 'true';
+					
+					// Configure URL edit settings
+					configureURLParameters();
+					 
+                    //labels
+                    configureLabels(configXML.labels);
+					
+					// Configure the notify services
+					if (configXML.notifyServices.notifyService.length() > 0)
+					{
+						const services:XMLList = configXML.notifyServices.notifyService;
+						configureNotifyServices(services);
+					}
+					
+					// Interactive Measurement settings
+					_areaPrecision = parseInt(configXML.interactivemeasurement.area.@precision[0]) || 1;
+					_areaConversion = parseFloat(configXML.interactivemeasurement.area.@conversion[0]) || 1;
+					_areaUnitLabel = configXML.interactivemeasurement.area.@unitlabel[0] || 'm²';
+					
+					_distancePrecision = configXML.interactivemeasurement.distance.@precision[0] || 1;
+					_distanceConversion = parseFloat(configXML.interactivemeasurement.distance.@conversion[0]) || 1;
+					_distanceUnitLabel = configXML.interactivemeasurement.distance.@unitlabel[0] || 'm';
+					
+					// Set help location
+					_helpLocation = configXML.helplocationurl;
+
+					if (_helpLocation)
+					{
+						const helpLabel:String = configXML.labels.helplabel || "Help";
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", helpLabel, showHelp, false);
+					}
+
+                }
+                map.addEventListener(MapEvent.LAYER_ADD, mapLayerAddHandler, false);
+                map.addEventListener(MapEvent.LAYER_REMOVE, mapLayerRemoveHandler, false);
+                map.addEventListener(MapEvent.LAYER_REORDER, mapLayerReorderHandler, false);
+                map.infoWindow.addEventListener(Event.CLOSE, infoWindowCloseHandler);
+
+                AppEvent.dispatch(AppEvent.DATA_OPT_LAYERS, null, getOplayers);
+                mapLayers = map.layers as ArrayCollection;
+                arrLayers = getLayers(mapLayers); // get all the layers on map except basemap layers;    
+                populateEditor(arrLayers);
+            }
+
+			/**
+			 * Called when the widget component creation has been completed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Event dispatced when the widget creation has been completed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function basewidget_creationCompleteHandler(event:FlexEvent):void
+			{
+				// do not show template swatch for RTL
+				editor.showTemplateSwatchOnCursor = FlexGlobals.topLevelApplication.layoutDirection != "rtl";
+				
+				// Add edit tool to add the vertext context menu items
+				editor.editTool.addEventListener(EditEvent.CONTEXT_MENU_SELECT, editTool_prepareContextMenu);
+				
+				// Set the attribute inspector listeners and skin class 
+				editor.attributeInspector.setStyle("skinClass", EditWidgetAttributeInspectorSkin);
+				editor.attributeInspector.addEventListener("attachmentGroupClicked", attachmentGroupClickedHandler);
+				editor.attributeInspector.addEventListener("relatedRecordsGroupClicked", relatedRecordsGroupClickedHandler);
+				editor.attributeInspector.addEventListener(AttributeInspectorEvent.SHOW_FEATURE, attributeInspector_showFeatureHandler);
+				
+				// Add handers to the inspectors to handle calls to show the attribute inspector 
+				attachmentInspector.addEventListener("attributeGroupClicked", attributeGroupClickedHandler);
+				relationshipInspector.addEventListener("attributeGroupClicked", attributeGroupClickedHandler);
+				
+				// Add listener for other widgets calling the draw events - used in ESRI widgets to turn off these tools
+				// so they don't interfere with one another.
+				AppEvent.addListener(AppEvent.DATA_PUBLISH, sharedDataUpdated);
+			}
+			
+			/**
+			 * Called when the widget component closes.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event dispatced when the widget has closed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function widgetClosedHandler(event:Event):void
+			{
+				// Deactivate all the edit tools
+				deactivateEditMode();
+			}
+			
+			/**
+			 * Called when the widget component opens.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event dispatced when the widget has opened.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function widgetOpenedHandler(event:Event):void
+			{				
+				if (lastState != null) 
+				{
+					// Activate the edit tools
+					activateEditMode();
+				}
+			}
+			
+			/**
+			 * Called when the widget component is minimised.  Clears the event handlers to prevent interference with other functions. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event dispatced when the widget has minimised.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function widgetMinimizedHandler(event:Event):void
+			{
+				lastState = "minimized";
+				
+				// Clear the featurelayer listners
+				FeatureLayers_removeListeners();
+			}
+			
+			/**
+			 * Activates the editing tools. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function activateEditMode():void
+			{
+				disablePanZoomNavigationWidget = true;
+				addSharedData("Edit_Widget", new ArrayCollection([ disablePanZoomNavigationWidget ])); // to be able to disable pan/zoomin/zoomout
+				
+				// hide the infowindow if already there from other widget
+				if (lastState == "closed") // reset only if the widget was opened after being closed
+				{
+					mapLayers = map.layers as ArrayCollection;
+					arrLayers = getLayers(mapLayers); // get all the layers on map except basemap layers;
+					populateEditor(arrLayers);
+				}
+				
+				// Add the edit layer listeners
+				FeatureLayers_addListeners();
+				
+				// Add the draw tool listeners
+				editor.drawTool.addEventListener(DrawEvent.DRAW_START, drawTool_drawStartHandler);
+				editor.drawTool.addEventListener(DrawEvent.DRAW_UPDATE, drawTool_drawUpdateHandler);
+				editor.drawTool.addEventListener(DrawEvent.DRAW_END, drawTool_drawEndHandler);
+				
+				editor.templatePicker.addEventListener(TemplatePickerEvent.SELECTED_TEMPLATE_CHANGE, templatePicker_selectedTemplateChangeHandler);
+			}
+			
+			/**
+			 * Deactivates the editing tools and puts the widget in waiting mode. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */			
+			private function deactivateEditMode():void
+			{
+				disablePanZoomNavigationWidget = false;
+				addSharedData("Edit_Widget", new ArrayCollection([ disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				
+				lastState = "closed";
+				
+				// clear feature layer selection
+				for each (var featureLayer:FeatureLayer in featureLayers)
+				{
+					if (featureLayerToSelectionColor[featureLayer]) // restore selection color
+					{
+						featureLayer.selectionColor = featureLayerToSelectionColor[featureLayer];
+					}
+					if (featureLayer.selectedFeatures.length > 0)
+					{
+						featureLayer.clearSelection();
+					}
+					if (featureLayer.name.indexOf("hiddenLayer_") != -1)
+					{
+						map.removeLayer(featureLayer);
+					}
+				}
+				
+				// Clear the featurelayer listners
+				FeatureLayers_removeListeners();
+				
+				// assign back the renderer info
+				for (var layer:Object in dictionary)
+				{
+					if (layer is ArcGISDynamicMapServiceLayer)
+					{
+						ArcGISDynamicMapServiceLayer(layer).layerInfoWindowRenderers = dictionary[layer];
+					}
+					else if (layer is ArcGISTiledMapServiceLayer)
+					{
+						ArcGISTiledMapServiceLayer(layer).layerInfoWindowRenderers = dictionary[layer];
+					}
+					if (layer is GraphicsLayer)
+					{
+						GraphicsLayer(layer).infoWindowRenderer = dictionary[layer];
+					}
+				}
+				deactivateEditor();
+				
+				// Clear the draw tool listeners
+				editor.drawTool.removeEventListener(DrawEvent.DRAW_START, drawTool_drawStartHandler);
+				editor.drawTool.removeEventListener(DrawEvent.DRAW_UPDATE, drawTool_drawUpdateHandler);
+				editor.drawTool.removeEventListener(DrawEvent.DRAW_END, drawTool_drawEndHandler);
+			}
+
+			
+			private function templatePicker_selectedTemplateChangeHandler(event:TemplatePickerEvent):void
+			{
+				if (event.selectedTemplate) 
+				{
+					// Dispatch a clear drawingtool event;
+					_dispatchedMessage = true; 
+					
+					addSharedData("Deactivate_DrawTool", new ArrayCollection([{ widget: "EditWidget" }]));
+				}
+			}
+			
+			
+			/* -------------------------------------------------------------------
+			ESRI Widget Code - used to make sure the works with other standard widgets 
+			---------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the event listen picks up data being published (listen set in init)
+			 */ 
+			private function sharedDataUpdated(event:AppEvent):void
+			{
+				var data:Object = event.data;
+				if (data.key == "Deactivate_DrawTool")
+				{
+					if (!_dispatchedMessage )
+					{
+						// Currently in edit mode - deactivate the tools and put in waiting mode
+						currentState = "deactivated";
+						deactivateEditMode();
+					} 
+					else 
+					{
+						_dispatchedMessage = false;
+					}
+				}
+			}
+			
+			
+			/* CONFIGURATION FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Builds the layer settings list from the contents of the supplied xmllist.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layers [XMLList]: </i>XML list containing the edit layer settings for the layers.  Usually from the configXML file.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function configureLayerSettings(layers:XMLList):void
+            {
+                for (var l:int = 0; l < layers.length(); l++)
+                {
+                    var layerXML:XML = layers[l] as XML;
+
+                    var layerName:String = layerXML.@name[0];
+                    var subLayers:XMLList = layerXML.sublayer; // for configuring sublayers in a dynamic map service
+                    if (subLayers.length() > 0)
+                    {
+                        for each (var subLayerXML:XML in subLayers)
+                        {
+                            var subLayerId:String = subLayerXML.@id[0];
+                            layerToSettings[layerName + "/" + subLayerId] = getLayerSettings(subLayerXML);
+                        }
+                    }
+                    else
+                    {
+                        layerToSettings[layerName] = getLayerSettings(layerXML);
+                    }
+                }
+            }
+
+			/**
+			 * Builds the layer settings object for a layer from the details of the xml object.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerXML [XML]: </i>XML object containing the edit layer settings for the layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getLayerSettings(layerXML:XML):Object
+            {
+				// Prepare a new layer settings object
+				var layerSettings:Object = {};
+
+				if (layerXML.@id[0])
+				{
+					var id:String = layerXML.@id;
+					layerSettings.id = id;
+				}
+
+				if (layerXML.@url[0])
+				{
+					var url:String = layerXML.@url;
+					layerSettings.url = url;
+				}
+
+				if (layerXML.@keyfield[0])
+				{
+					var keyfield:String = layerXML.@keyfield;
+					layerSettings.keyfield = keyfield;
+				}
+				
+				// Get field settings 
+                var layerFields:XMLList = layerXML.fields;
+                if (layerFields.length() > 0)
+                {
+                    var outFields:Array = [];
+                    var fields:XMLList = layerFields.field;
+                    for each (var fieldXML:XML in fields)
+                    {
+                        if (fieldXML.@name[0])
+                        {
+							// Create a field object
+							var fieldObject:Object = {};
+							
+							// Set the fieldname
+							fieldObject.name = fieldXML.@name;
+
+							// Set the display alias
+                            if (fieldXML.@alias[0])
+                            {
+                                fieldObject.alias = fieldXML.@alias;
+                            }
+							
+							// Set the tooltip
+                            if (fieldXML.@tooltip[0])
+                            {
+                                fieldObject.tooltip = fieldXML.@tooltip;
+                            }
+
+							// Set the editable
+							if (fieldXML.@editable[0])
+							{
+								fieldObject.editable = fieldXML.@editable == true;
+							}
+							else
+							{
+								fieldObject.editable = true;
+							}
+							
+							// Set the visibility state
+							if (fieldXML.@visible[0])
+							{						
+								fieldObject.visible = (fieldXML.@visible[0] == "true" || fieldXML.@visible[0] == "");
+							}
+							else
+							{
+								fieldObject.visible = true;
+							}
+
+							// Set the value action
+							if (fieldXML.@value[0] && fieldXML.@value[0] != "")
+							{
+								fieldObject.value = fieldXML.@value;
+							}
+							
+							// Add to the list 
+							outFields.push(fieldObject);
+                        }
+                    }
+                    layerSettings.outFields = outFields;
+                }
+				
+				// Set the length of a text field beyond which a multi-line text input field will be used
+                if (layerXML.singletomultilinethreshold.length() > 0)
+                {
+                    layerSettings.singleToMultilineThreshold = layerXML.singletomultilinethreshold;
+                }
+				
+				// Specify the order that the fields in the attribute uses 
+                if (layerXML.formfieldsorder.length() > 0)
+                {
+                    layerSettings.formFieldsOrder = toAttributeInspectorFormFieldsOrder(layerXML.formfieldsorder);
+                }
+				
+				// Show the object ID field in the attribute inspector
+                if (layerXML.showobjectid.length() > 0)
+                {
+                    layerSettings.showObjectID = layerXML.showobjectid;
+                }
+				
+                // Show the global ID field in the attribute inspector
+				if (layerXML.showglobalid.length() > 0)
+                {
+                    layerSettings.showGlobalID = layerXML.showglobalid;
+                }
+
+                return layerSettings;
+            }
+
+			/**
+			 * Returns the FormFieldOrder setting value based on the attribute value stored in the settings xml file.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>formFieldsOrder [String]: </i>Attribute setting value.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function toAttributeInspectorFormFieldsOrder(formFieldsOrder:String):String
+            {
+                switch (formFieldsOrder)
+                {
+                    case "alphabetical":
+                    {
+                        return AttributeInspector.ALPHABETICAL_ORDER;
+                    }
+                    case "fieldinspector":
+                    {
+                        return AttributeInspector.FIELD_INSPECTOR_ORDER;
+                    }
+                    case "fields":
+                    default:
+                    {
+                        return AttributeInspector.FIELDS_ORDER;
+                    }
+                }
+            }
+
+			/**
+			 * Updates the labels used in the widget from the settings in the configXML.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>labels [XMLList]: </i>XML list containing the label settings for the widget.  Usually from the configXML file.</li>
+			 * </ul>
+			 * </p>
+			 */
+           	private function configureLabels(labels:XMLList):void
+            {
+                attributesLabel = labels.attributeslabel[0] || getDefaultString("attributesLabel");
+                attachmentsLabel = labels.attachmentslabel[0] || getDefaultString("attachmentsLabel");
+                relatedRecordsLabel = labels.relatedrecordslabel[0] || getDefaultString("relatedRecordsLabel");
+                noEditableLayersText = labels.noeditablelayerstext[0] || getDefaultString("noEditableLayersText");
+
+				_areaLabel = labels.arealabel[0] || "Area:";
+				_lengthLabel = labels.lengthlabel[0] || "Length:";
+				_perimeterLabel = labels.perimeterlabel[0] || "Perimeter:";
+				_radiusLabel = labels.radiuslabel[0] || "Radius:";
+				_widthLabel = labels.widthlabel[0] || "Width:";
+				_heightLabel = labels.heightlabel[0] || "Height:";
+				_segmentLengthLabel = labels.segmentlengthlabel[0] || "Segment Length:";
+				
+                EditWidgetTemplatePickerSkin.featureLayerOutOfScaleText = labels.featurelayeroutofscaletext[0] || getDefaultString("featureLayerOutOfScaleText");
+
+                EditWidgetAttributeInspectorSkin.showAttachmentsText = labels.showattachmentstext[0] || getDefaultString("showAttachmentsText");
+                EditWidgetAttributeInspectorSkin.showRelatedRecordsText = labels.showrelatedrecordstext[0] || getDefaultString("showRelatedRecordsText");
+                EditWidgetAttributeInspectorSkin.deleteLabel = labels.deletelabel[0] || getDefaultString("deleteLabel");
+                EditWidgetAttributeInspectorSkin.saveLabel = labels.savelabel[0] || getDefaultString("okLabel");
+
+                EditWidgetAttachmentInspectorSkin.noAttachmentsText = labels.noattchmentstext[0] || getDefaultString("noAttachmentsText");
+                EditWidgetAttachmentInspectorSkin.chooseFileText = labels.choosefiletext[0] || getDefaultString("chooseFileText");
+                EditWidgetAttachmentInspectorSkin.attachmentSubmitLabel = labels.attachmentsubmitlabel[0] || getDefaultString("attachmentSubmitLabel");
+                EditWidgetAttachmentInspectorSkin.attachmentCancelLabel = labels.attachmentcancellabel[0] || getDefaultString("attachmentCancelLabel");
+                EditWidgetAttachmentInspectorSkin.showAttributesText = labels.showattributestext[0] || getDefaultString("showAttributesText");
+
+                EditWidgetRelationshipInspectorSkin.showAttributesText = labels.showattributestext[0] || getDefaultString("showAttributesText");
+            
+		   		// Custom tool tooltips
+				EditWidgetEditorSkin.CopyFeaturesButtonTooltip = labels.copylabel[0] || "Copy Features";    
+				EditWidgetEditorSkin.CreatePointFeatureByXYButtonTooltip = labels.createpointXYlabel[0] || "Create Point by XY";
+				EditWidgetEditorSkin.CreateCircleFeatureByXYRadiusButtonTooltip = labels.createcirclexyradiuslabel[0] || "Create Circle by XY & Radius";
+				EditWidgetEditorSkin.MoveFeaturesByXYButtonTooltip = labels.movefeaturesbyxylabel[0] || "Move Features by XY";
+				EditWidgetEditorSkin.CreateFeaturesOptionLabel = labels.createfeaturesoptionbuttonlabel[0] || "Create Features";
+				EditWidgetEditorSkin.ModifyFeaturesOptionLabel = labels.modifyfeaturesoptionbuttonlabel[0] || "Modify Features";
+				EditWidgetEditorSkin.TemplateSelectionLabel = labels.templateselectionlabel[0] || "Select template to create feature";
+				EditWidgetEditorSkin.ModifyToolsLabel = labels.modifytoolslabel[0] || "Select the feature to modify";
+				EditWidgetEditorSkin.ShowAttributeButtonTooltip = labels.showattributestext[0] || "Show Attributes";
+				
+				
+		   		// Copy dialog labels and tooltips
+				CopyFeatureDialog.Title = labels.copydialogtitle[0] || "Copy Features";
+				CopyFeatureDialog.SourceLayerLabel = labels.copydialogsourcelayerlabel[0] || "Source Layer:";
+				CopyFeatureDialog.SourceLayerDropdowTooltip = labels.copydialogsourcelayerdropdowntooltip[0] || "Select the data source to copy features from";
+				CopyFeatureDialog.FeaturesGridFeatureTypeHeaderText = labels.copydialogfeaturesgridfeaturetypeheadertext[0] || "Feature Type";
+				CopyFeatureDialog.FeaturesGridFeatureIDHeaderText = labels.copydialogfeaturesgridfeatureidheadertext[0] || "Feature";
+				CopyFeatureDialog.SelectAllFeaturesButtonLabel = labels.copydialogselectallfeaturesbuttonlabel[0] || "Select All";
+				CopyFeatureDialog.SelectNoneButtonLabel = labels.copydialogselectnonebuttonlabel[0] || "Select None";
+				CopyFeatureDialog.RecordCountLabel = labels.copydialogrecordcountlabel[0] || "Record Count:";
+				CopyFeatureDialog.CopyAttributesCheckboxLabel = labels.copydialogcopyattributescheckboxlabel[0] || "Copy Attributes:";
+				CopyFeatureDialog.CopyAttributesCheckboxTooltip = labels.copydialogcopyattributescheckboxtooltip[0] || "Check to copy all attributes from the data source features that match attributes in the target layer";
+				CopyFeatureDialog.CancelButtonLabel = labels.copydialogcancelbuttonlabel[0] || "Cancel";
+				CopyFeatureDialog.CancelButtonTooltip = labels.copydialogcancelbuttontooltip[0] || "Click to cancel copy action and close dialog";
+				CopyFeatureDialog.CreateCopyButtonLabel = labels.copydialogcreatecopybuttonlabel[0] || "Create Copy";
+				CopyFeatureDialog.CreateCopyButtonTooltip = labels.copydialogcreatecopybuttontooltip[0] || "Click to create a copy of the selected feature in the target layer";
+		   
+				// Create Point by XY labels and tooltips
+				CreatePointDialog.Title = labels.createpointdialogtitle[0] || "Create Point by XY";
+				CreatePointDialog.InstructionLabel = labels.createpointdialoginstructionlabel[0] || "Enter the point coordinates and press CREATE POINT.";
+				CreatePointDialog.XCoordinateInputLabel = labels.createpointdialogxcoordinateinputlabel[0] || "X Coordinate:";
+				CreatePointDialog.YCoordinateInputLabel = labels.createpointdialogycoordinateinputlabel[0] || "Y Coordinate:";
+				CreatePointDialog.CoordinateSystemWarningLabel = labels.createpointdialogcoordinatesystemwarninglabel[0] || "Note:  The XY coordinates you enter must be in the local map coodinate system currently being displayed.";
+				CreatePointDialog.RequiredFieldLabel = labels.createpointdialogrequiredfieldlabel[0] || "Required";
+				CreatePointDialog.InvalidCharLabel = labels.createpointdialoginvalidcharlabel[0] || "Invalid Character";
+				CreatePointDialog.CancelButtonLabel = labels.createpointdialogcancelbuttonlabel[0] || "Cancel";
+				CreatePointDialog.CancelButtonTooltip = labels.createpointdialogcancelbuttontooltip[0] || "Click to cancel the create point action and close dialog";
+				CreatePointDialog.CreatePointButtonLabel = labels.createpointdialogcreatepointbuttonlabel[0] || "Create Point";
+				CreatePointDialog.CreatePointButtonTooltip = labels.createpointdialogcreatepointbuttontooltip[0] || "Click to create a point feature and close dialog";
+			
+				// Create Circle by XY & Radius labels and tooltips
+				CreateCircleDialog.Title = labels.createcircledialogtitle[0] || "Create Circle by XY & Radius";
+				CreateCircleDialog.InstructionLabel = labels.createcircledialoginstructionlabel[0] || "Enter the centre point and radius of the circle and press CREATE CIRCLE.";
+				CreateCircleDialog.XCoordinateInputLabel = labels.createcircledialogxcoordinateinputlabel[0] || "X Coordinate:";
+				CreateCircleDialog.YCoordinateInputLabel = labels.createcircledialogycoordinateinputlabel[0] || "Y Coordinate:";
+				CreateCircleDialog.RadiusInputLabel = labels.createcircledialogradiusinputlabel[0] || "Radius:";
+				CreateCircleDialog.CoordinateSystemWarningLabel = labels.createcircledialogcoordinatesystemwarninglabel[0] || "Note:  The XY coordinates you enter must be in the local map coodinate system currently being displayed.";
+				CreateCircleDialog.RequiredFieldLabel = labels.createpointcirclerequiredfieldlabel[0] || "Required";
+				CreateCircleDialog.InvalidCharLabel = labels.createcircledialoginvalidcharlabel[0] || "Invalid Character";
+				CreateCircleDialog.NegativeRadiusLabel = labels.createcircledialognegativeradiuslabel[0] || "Radius values must be positive";
+				CreateCircleDialog.CancelButtonLabel = labels.createcircledialogcancelbuttonlabel[0] || "Cancel";
+				CreateCircleDialog.CancelButtonTooltip = labels.createcircledialogcancelbuttontooltip[0] || "Click to cancel the create circle action and close dialog";
+				CreateCircleDialog.CreateCircleButtonLabel = labels.createcircledialogcreatecirclebuttonlabel[0] || "Create Circle";
+				CreateCircleDialog.CreateCircleButtonTooltip = labels.createcircledialogcreatecirclebuttontooltip[0] || "Click to create a circle feature and close dialog";
+
+				// Move by XY labels and tooltips
+				MoveDialog.CancelButtonLabel = labels.movedialogcancelbuttonlabel[0] || "Cancel";
+				MoveDialog.CancelButtonTooltip = labels.movedialogcancelbuttontooltip[0] || "Click to cancel the move action and close dialog";
+				MoveDialog.MoveButtonLabel = labels.movedialogtmovebuttonlabel[0] || "Move";
+				MoveDialog.MoveButtonTooltip = labels.movedialogmovebuttontooltip[0] || "Click to move the feature and close dialog";
+				MoveDialog.MoveInstructionLabel = labels.movedialogtmoveinstructionlabel[0] || "Enter the X and Y coordinates to move this feature to and press MOVE.";
+				MoveDialog.OffsetInstructionLabel = labels.movedialogoffsetinstructionlabel[0] || "Enter the X and Y offsets to move this feature by and press MOVE.";
+				MoveDialog.MoveXYToggleButtonLabel = labels.movedialogmovexytogglebuttonlabel[0] || "Move to XY";
+				MoveDialog.MoveXYToggleButtonTooltip = labels.movedialogmovexytogglebuttontooltip[0] || "Click to toggle to 'Move to XY' mode";
+				MoveDialog.OffsetXYToggleButtonLabel = labels.movedialogoffsetxytogglebuttonlabel[0] || "Move by XY Offset";
+				MoveDialog.OffsetXYToggleButtonTooltip = labels.movedialogoffsetxytogglebuttontooltip[0] || "Click to toggle to 'Offset by XY' mode";
+				MoveDialog.RequiredFieldLabel = labels.movedialogrequiredfieldlabel[0] || "Required";
+				MoveDialog.XCoordinateInputLabel = labels.movedialogxcoordinateinputlabel[0] || "X Coordinate:";
+				MoveDialog.YCoordinateInputLabel = labels.movedialogycoordinateinputlabel[0] || "Y Coordinate:";
+				MoveDialog.XOffsetInputLabel = labels.movedialogxoffsetinputlabel[0] || "Offset X:";
+				MoveDialog.YOffsetInputLabel = labels.movedialogyoffsetinputlabel[0] || "Offset Y:";
+				MoveDialog.Title = labels.movedialogtitle[0] || "Move Feature";
+				
+			}
+
+			/**
+			 * Updates the notify service settings in the widget from the settings in the configXML.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>services [XMLList]: </i>XML list containing the notify service settings for the widget.  Usually from the configXML file.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function configureNotifyServices(services:XMLList):void
+			{
+				_notifyServices.removeAll();
+				for each (var service:XML in services)
+				{
+					var notify:Object = {
+						url: service.@url.toString(),
+							label: service.@label.toString(),
+							redirect: service.@redirectbrowser == "true",
+							responsetype: service.@responsetype.toString(),
+							message:service.@message.toString(),
+							parameters: []
+					};
+					
+					// Get parameters
+					for each (var param:XML in service.parameter)
+					{
+						var notifyparam:Object = {
+							name: param.@name.toString(),
+								source: param.@source.toString(),
+								value: param.@value.toString()
+						};
+						
+						notify.parameters.push(notifyparam);
+					}
+					_notifyServices.addItem(notify);
+				}
+			}
+			
+			/**
+			 * Loads any URL based parameters and configures the widget appropriately.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function configureURLParameters():void
+			{
+				for (var param:String in ViewerContainer.urlConfigParams)
+				{
+					var lparam:String = param.toLowerCase();
+					switch (lparam)
+					{
+						case "edit":
+							layerfilter = ViewerContainer.urlConfigParams[param]; 
+							break;
+						
+						case "editsession":
+							editsession = ViewerContainer.urlConfigParams[param]; 
+							break;
+						
+						case "templates":
+							templatefilters = String(ViewerContainer.urlConfigParams[param]).split(",");
+							if (templatefilters.length > 0)
+							{
+								EditWidgetTemplatePickerSkin.TemplateFilterList = templatefilters;
+							}
+						
+							break;
+						
+						case "attvalues":
+							// Get the key/value pairs
+							var pairs:Array = String(ViewerContainer.urlConfigParams[param]).split(",");
+							for each (var keypair:String in pairs)
+							{
+								var vals:Array = keypair.split("|");
+								var att:Object = { field:vals[0], value:vals[1] };
+								
+								editattributes.push(att);
+							}
+							
+							break;
+						
+						case "keyvalue":
+							keyvalue = ViewerContainer.urlConfigParams[param]; 
+							
+							// Make the key layers visible
+							var hasLayers:Boolean = activateKeyLayers();
+
+							if (hasLayers) 
+							{
+								// Set the widget into edit mode
+								activateEditMode();
+
+								// Show edit mode							
+								currentState = "normal";
+							}
+
+							break;
+						
+						default:
+							// not applicable to this widget
+							break;
+					}
+				}
+			}
+			
+			/**
+			 * Filters the editable feature layers down to those that match the layer filter settings.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function updateFilterSettings():void
+			{
+				if (layerfilter)
+				{
+					// Check for layer settings
+					var filtered:Array = [];
+					
+					// Check through layer settings
+					for each (var layerSettings:Object in layerToSettings)
+					{
+						// Check for any setting objects with this layerid
+						if 	(layerSettings.id == layerfilter) 
+						{
+							// Check for feature layers with these settings
+							for each(var layer:FeatureLayer in featureLayers)
+							{
+								if (layerSettings.url == layer.url)
+								{
+									filtered.push(layer);
+									//break;
+								}
+							}
+						}
+					}
+
+					featureLayers = filtered;
+				}
+				editor.featureLayers = featureLayers;
+				
+				
+				// Update the templates with the default settings
+				updateTemplates();
+			}
+			
+			/**
+			 * Sets visible any editable layers in the map that are associated with the keyvalue in the URL parameters.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */			
+			private function activateKeyLayers():Boolean
+			{
+				var hasLayers:Boolean = false;
+				if (keyvalue)
+				{
+					// Get the layer setting objects with a keyfield setting
+					for each (var layerSettings:Object in layerToSettings)
+					{
+						if (layerSettings.keyfield != null)
+						{
+							// Get the feature layer
+							for each (var layer:Layer in map.layers)
+							{
+								if (layer is FeatureLayer)
+								{
+									var featureLayer:FeatureLayer = layer as FeatureLayer;
+									if (featureLayer.url == layerSettings.url)
+									{
+										hasLayers = featureLayer.visible = true;
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+				return hasLayers;
+			}
+
+			/**
+			 * Updates the edit templates from the editable layers if fixed attributes have been assigned, suc as from the ATTVALUES parameter in the URL.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */			
+			private function updateTemplates():void
+			{
+				if (editattributes.length > 0)
+				{
+					for each (var t:Object in editor.templatePicker.templateCollection)
+					{
+						for each (var template:Template in t.templates) 
+						{
+							// Check if the template contains an attribute field that matchs the edit attribute
+							for each (var att:Object in editattributes)
+							{
+								if (hasField(template.featureTemplate.prototype, att.field))
+								{
+									template.featureTemplate.prototype.attributes[att.field] = att.value;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			/**
+			 * Function to determine if a graphic has an attribute with the given field name.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>Graphic to search.</li>
+			 * <li><i>fieldname [String]: </i>Name of the field to search for.</li>
+			 * </ul>
+			 * </p>
+			 */			
+			private function hasField(graphic:Graphic, fieldname:String):Boolean
+			{
+				var result:Boolean = false;
+				if (graphic && graphic.attributes.hasOwnProperty(fieldname))
+				{
+					result = true;
+				}
+				return result;
+			}
+			
+			/**
+			 * Returns the size of a dictionary object.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>myDictionary [Dictionary]: </i>Dictionary to be counted.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function countKeys(myDictionary:Dictionary):int 
+			{
+				var n:int = 0;
+				for (var key:* in myDictionary) {
+					n++;
+				}
+				return n;
+			}
+			
+			
+			
+			/* EDITOR POPULATION FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the Viewer manager returns a result from the request to get the current list of operational layers.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event objectc dispatced by the Viewer Manager.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getOplayers(event:AppEvent):void
+            {
+                oplList = event.data as Array;
+            }
+
+			/**
+			 * Returns an array of layers from the given collection that are not excluded.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layers [ArrayCollection]: </i>Colelction of layers from the map.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getLayers(layers:ArrayCollection):Array
+            {
+                // all the layers except basemaps                
+                var result:Array = [];
+                var includeLayer:Boolean;
+                var dynamicBaseMapLayers:Array = [];
+                for (var i:int = layers.length - 1; i >= 0; i--)
+                {
+                    includeLayer = true;
+                    var layer:Layer = layers.getItemAt(i) as Layer;
+                    for (var n:int = 0; n < configData.basemaps.length; )
+                    {
+                        if (configData.basemaps[n].label == layer.id)
+                        {
+                            if (layer is ArcGISDynamicMapServiceLayer)
+                            {
+                                dynamicBaseMapLayers.push(layer);
+                            }
+                            includeLayer = false;
+                            break;
+                        }
+                        else
+                        {
+                            n++;
+                        }
+                    }
+					
+                    if (includeLayer && !isLayerPartOfExcludeLayers(layer.name) && (layer is FeatureLayer || layer is ArcGISDynamicMapServiceLayer))
+                    {
+                        result.push(layer);
+                    }
+                }
+                for each (var dynamicBaseMapLayer:ArcGISDynamicMapServiceLayer in dynamicBaseMapLayers.reverse())
+                {
+                    if (!isLayerPartOfExcludeLayers(dynamicBaseMapLayer.name))
+                    {
+                        result.push(dynamicBaseMapLayer);
+                    }
+                }
+                return result;
+            }
+
+			/**
+			 * Starts the process to populate the editor component.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>array [Array]: </i>Array of map layers.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function populateEditor(array:Array):void
+            {
+                featureLayers = [];
+                arrFinalLayers = [];
+                if (array && array.length)
+                {
+                    var index:int = 0;
+                    getAllFeatureLayers(index, featureLayers);
+                }
+				
+				// Apply the feature layer listeners
+				FeatureLayers_addListeners();
+				
+				// Apply the feature layer filters
+				FeatureLayers_applyFilters();
+            }
+
+			/**
+			 * Starts the process to populate the editor component. Ignores all hidden feature layers such as those created for popups.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>index [int]: </i>Index of the layer in the current full layers array (arrLayers) from whose details the feature layers should be populated.</li>
+			 * <li><i>featureLayers [Array]: </i>Array of which the featurelayers will be appended to.</li>
+			 * </ul>
+			 * </p>
+			 */
+           private function getAllFeatureLayers(index:int, featureLayers:Array):void
+            {
+                if (index < arrLayers.length)
+                {
+                    var layer:Layer = arrLayers[index] as Layer;
+                    if (layer.loaded)
+                    {
+                        if ((layer is FeatureLayer && layer.name.indexOf("hiddenLayer_") == -1) && FeatureLayer(layer).isEditable && !FeatureLayer(layer).featureCollection)
+                        {
+                            layer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
+                            layer.addEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete, false, 1);
+                            featureLayers.push(layer);
+                            arrFinalLayers.push(layer);
+
+                            index++;
+                            getAllFeatureLayers(index, featureLayers);
+                        }
+                        else if (layer is ArcGISDynamicMapServiceLayer && layer.name.indexOf("hiddenLayer_") == -1 && checkDynamicLayers)
+                        {
+                            createFeatureLayersFromDynamicMapService(ArcGISDynamicMapServiceLayer(layer), index);
+                        }
+                        else
+                        {
+                            index++;
+                            getAllFeatureLayers(index, featureLayers);
+                        }
+                    }
+                    else if (layer.loadFault)
+                    {
+                        index++;
+                        getAllFeatureLayers(index, featureLayers);
+                    }
+                    else
+                    {
+                        // listen for load
+                        layer.addEventListener(LayerEvent.LOAD, layerLoadHandler);
+                    }
+                }
+                else
+                {
+                    deactivateEditor();
+                    if (featureLayers.length > 0)
+                    {
+                        noLayers.visible = noLayers.includeInLayout = false;
+                        //selectTemplateLabel.visible = selectTemplateLabel.includeInLayout = true;
+                        if (!editor.addEnabled || !atleastOneFeatureLayerHasCreateCapability(featureLayers))
+                        {
+                        	EditWidgetEditorSkin.TemplateSelectionLabel = getDefaultString("noCreateCapabilityLayersText");
+						}
+
+                        //store the renderer info for each layer on map
+                        storeInfoWindowRenderer();
+                        editor.map = map;
+                        updateSelectionColor(featureLayers);
+						updateFilterSettings();
+						//editor.featureLayers = featureLayers;
+
+						// infowindowLabel on the AttributeInspetor
+                        editor.attributeInspector.infoWindowLabel = attributesLabel;
+                    }
+                    else
+                    {                        
+						EditWidgetEditorSkin.TemplateSelectionLabel = "";
+
+						noLayers.visible = noLayers.includeInLayout = true;
+                        editor.toolbarVisible = false;
+                    }
+                }
+            }
+
+			/**
+			 * Populates the feature layers for a layer when it loads.  Called as a deferred action from the getAllFeatureLayers function.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LayerEvent]: </i>Event dispatched when the layer has finished loading.</li>
+			 * </ul>
+			 * </p>
+			 */
+		  	private function layerLoadHandler(event:LayerEvent):void
+            {
+                getAllFeatureLayers(arrLayers.indexOf(event.layer), featureLayers);
+            }
+
+			/**
+			 * Creates feature layers for layers in a dynamic map service that has feature layer functionality enabled and adds them to the map.  
+			 * Loads layer one at a time based on the current supplied index.  On complete gps to the next sub layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layer [ArcGISDynamicMapServiceLayer]: </i>Dynamic map service to be populated as feature layers.</li>
+			 * <li><i>index [int]: </i>Current sub layer index.</li>
+			 * <li><i>onMapLayerAdd [Boolean] (optional): </i></li>
+			 * </ul>
+			 * </p>
+			 */
+            private function createFeatureLayersFromDynamicMapService(layer:ArcGISDynamicMapServiceLayer, index:int, onMapLayerAdd:Boolean = false):void
+            {
+                // look at the url
+                var serviceURL:String = layer.url;
+                var gdbVersion:String = layer.gdbVersion;
+                var featureServiceURL:String = serviceURL.replace(/MapServer/i, "FeatureServer");
+
+                // get corresponding featurelayers
+                var jsonTask:JSONTask = new JSONTask;
+                var urlVars:URLVariables = new URLVariables();
+                urlVars.f = "json";
+                jsonTask.proxyURL = layer.proxyURL;
+                jsonTask.token = layer.token;
+                jsonTask.url = featureServiceURL;
+                jsonTask.execute(urlVars, new AsyncResponder(jsonTask_resultHandler, jsonTask_faultHandler, { layer: layer, count: index }));
+
+                function jsonTask_resultHandler(resultObject:Object, token:Object = null):void
+                {
+                    const layers:Array = resultObject.layers;
+                    if (layers && layers.length)
+                    {
+                        var arcGISDynamicMapServiceLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(token.layer);
+
+                        var atleastOneFeatureLayerAlreadyIncluded:Boolean;
+                        var candidateFeatureLayers:Array = [];
+                        for (var i:int = 0; i < layers.length; )
+                        {
+                            if (isFeatureLayerPartOfOpList(featureServiceURL + "/" + layers[i].id, gdbVersion))
+                            {
+                                atleastOneFeatureLayerAlreadyIncluded = true;
+                                break;
+                            }
+                            else
+                            {
+                                if (!isLayerPartOfExcludeLayers(arcGISDynamicMapServiceLayer.name + "/" + layers[i].id))
+                                {
+                                    candidateFeatureLayers.push(layers[i]);
+                                }
+                                i++;
+                            }
+                        }
+						
+                        if (!atleastOneFeatureLayerAlreadyIncluded && candidateFeatureLayers.length)
+                        {
+                            arcGISDynamicMapServiceLayer.removeEventListener(LayerEvent.IS_IN_SCALE_RANGE_CHANGE, layer_isInScaleRangeChangeHandler);
+                            arcGISDynamicMapServiceLayer.removeEventListener(FlexEvent.HIDE, layer_hideShowHandler);
+                            arcGISDynamicMapServiceLayer.removeEventListener(FlexEvent.SHOW, layer_hideShowHandler);
+
+                            arcGISDynamicMapServiceLayer.addEventListener(LayerEvent.IS_IN_SCALE_RANGE_CHANGE, layer_isInScaleRangeChangeHandler);
+                            arcGISDynamicMapServiceLayer.addEventListener(FlexEvent.HIDE, layer_hideShowHandler);
+                            arcGISDynamicMapServiceLayer.addEventListener(FlexEvent.SHOW, layer_hideShowHandler);
+
+                            var copyLayerInfos:Array = arcGISDynamicMapServiceLayer.layerInfos;
+                            if (!arcGISDynamicMapServiceLayer.visibleLayers)
+                            {
+                                var visLayers:Array = getActualVisibleLayers(MapServiceUtil.getVisibleSubLayers(copyLayerInfos), copyLayerInfos);
+                                arcGISDynamicMapServiceLayer.visibleLayers = new ArrayCollection(visLayers);
+                            }
+                            arcGISDynamicMapServiceLayer.visibleLayers.addEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
+                            visibleLayersChangeWatcher = ChangeWatcher.watch(arcGISDynamicMapServiceLayer, "visibleLayers", visibleLayersChange);
+                            
+							for each (var copyLayerInfo:LayerInfo in copyLayerInfos)
+                            {
+                                updateMinMaxScaleOnLayerInfos(copyLayerInfo, copyLayerInfos);
+                            }
+
+                            var arr:Array = [];
+                            var index1:int = 0;
+                            parseCandidateFeatureLayers(index1, candidateFeatureLayers);
+
+                            var fLayerObject:Object;
+                            function parseCandidateFeatureLayers(index1:int, candidateFeatureLayers:Array):void
+                            {
+                                if (index1 < candidateFeatureLayers.length)
+                                {
+                                    fLayerObject = candidateFeatureLayers[index1];
+                                    var featureLayerFromMap:FeatureLayer = getFeatureLayerFromMap(featureServiceURL + "/" + fLayerObject.id, gdbVersion);
+                                    if (!featureLayerFromMap)
+                                    {
+                                        var featureLayer:FeatureLayer = new FeatureLayer;
+                                        featureLayer.proxyURL = arcGISDynamicMapServiceLayer.proxyURL;
+                                        featureLayer.token = arcGISDynamicMapServiceLayer.token;
+                                        featureLayer.url = featureServiceURL + "/" + fLayerObject.id;
+                                        updateFeatureLayerMinMaxScale(featureLayer, fLayerObject.id, copyLayerInfos);
+                                        featureLayer.addEventListener(LayerEvent.LOAD, featureLayerLoadHandler);
+                                        featureLayer.addEventListener(LayerEvent.LOAD_ERROR, featureLayerLoadErrorHandler);
+                                    }
+                                    else
+                                    {
+                                        featureLayerFromMap.addEventListener(FlexEvent.HIDE, featureLayer_hideShowHandler);
+                                        featureLayerFromMap.addEventListener(FlexEvent.SHOW, featureLayer_hideShowHandler);
+                                        featureLayerToDynamicMapService[featureLayerFromMap] = arcGISDynamicMapServiceLayer;
+                                        if (!onMapLayerAdd)
+                                        {
+                                            featureLayers.push(featureLayerFromMap);
+                                        }
+                                        else
+                                        {
+                                            featureLayers.unshift(featureLayerFromMap);
+                                        }
+                                        index1++;
+                                        parseCandidateFeatureLayers(index1, candidateFeatureLayers);
+                                    }
+                                }
+                                else
+                                {
+                                    var indexOnMap:int = map.layerIds.indexOf(arcGISDynamicMapServiceLayer.id) + 1;
+                                    for each (var featLayer:FeatureLayer in arr.reverse())
+                                    {
+                                        map.addLayer(featLayer, indexOnMap);
+                                        indexOnMap++;
+                                    }
+									
+                                    arrFinalLayers.push(arcGISDynamicMapServiceLayer);
+                                    if (!onMapLayerAdd)
+                                    {
+                                        index = token.count + 1;
+                                        getAllFeatureLayers(index, featureLayers);
+                                    }
+                                    else
+                                    {
+                                        deactivateEditor();
+                                        updateSelectionColor(featureLayers);
+                                        //editor.featureLayers = featureLayers;
+                                        updateFilterSettings();
+										//store the renderer info for each layer on map
+                                        storeInfoWindowRenderer();
+                                    }
+                                }
+                            }
+
+                            function featureLayerLoadHandler(event:LayerEvent):void
+                            {
+                                var loadedFeatureLayer:FeatureLayer = event.layer as FeatureLayer;
+                                if (loadedFeatureLayer.isEditable)
+                                {
+                                    loadedFeatureLayer.outFields = [ '*' ];
+                                    loadedFeatureLayer.mode = FeatureLayer.MODE_SELECTION;
+                                    loadedFeatureLayer.gdbVersion = gdbVersion;
+                                    loadedFeatureLayer.name = "hiddenLayer_" + fLayerObject.name;
+                                    
+									if (gdbVersion)
+                                    {
+                                        loadedFeatureLayer.name += "-" + gdbVersion;
+                                    }
+                                    
+									if (arcGISDynamicMapServiceLayer.visible)
+                                    {
+                                        loadedFeatureLayer.visible = arcGISDynamicMapServiceLayer.visibleLayers ? isFeatureLayerVisible(fLayerObject.id, arcGISDynamicMapServiceLayer) : isFeatureLayerVisible(fLayerObject.id, arcGISDynamicMapServiceLayer, true);
+                                    }
+                                    else
+                                    {
+                                        loadedFeatureLayer.visible = false;
+                                    }
+
+                                    loadedFeatureLayer.removeEventListener(FlexEvent.HIDE, featureLayer_hideShowHandler);
+                                    loadedFeatureLayer.removeEventListener(FlexEvent.SHOW, featureLayer_hideShowHandler);
+                                    loadedFeatureLayer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
+
+                                    loadedFeatureLayer.addEventListener(FlexEvent.HIDE, featureLayer_hideShowHandler);
+                                    loadedFeatureLayer.addEventListener(FlexEvent.SHOW, featureLayer_hideShowHandler);
+                                    loadedFeatureLayer.addEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete, false, 1);
+
+                                    featureLayerToDynamicMapService[loadedFeatureLayer] = arcGISDynamicMapServiceLayer;
+
+                                    if (!onMapLayerAdd)
+                                    {
+                                        featureLayers.push(loadedFeatureLayer);
+                                    }
+                                    else
+                                    {
+                                        featureLayers.unshift(loadedFeatureLayer);
+                                    }
+                                    arr.push(loadedFeatureLayer);
+                                }
+                                index1++;
+                                parseCandidateFeatureLayers(index1, candidateFeatureLayers);
+                            }
+
+                            function featureLayerLoadErrorHandler(event:LayerEvent):void
+                            {
+                                index1++;
+                                parseCandidateFeatureLayers(index1, candidateFeatureLayers);
+                            }
+                        }
+                        else
+                        {
+                            index = token.count + 1;
+                            getAllFeatureLayers(index, featureLayers);
+                        }
+                    }
+                    else
+                    {
+                        index = token.count + 1;
+                        getAllFeatureLayers(index, featureLayers);
+                    }
+                }
+				
+                function jsonTask_faultHandler(fault:Fault, token:Object = null):void
+                {
+                    if (!onMapLayerAdd)
+                    {
+                        index = token.count + 1;
+                        getAllFeatureLayers(index, featureLayers);
+                    }
+                }
+            }
+
+			/**
+			 * Updates the min/max scale visibility for the given layer based on the details in the layer info.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>copyLayerInfo [LayerInfo]: </i>Layer info for the layer to update the min/max scale of.</li>
+			 * <li><i>copyLayerInfos [Array]: Collection of layerinfos.</i></li>
+			 * </ul>
+			 * </p>
+			 */
+            private function updateMinMaxScaleOnLayerInfos(copyLayerInfo:LayerInfo, copyLayerInfos:Array):void
+            {
+                if (copyLayerInfo.subLayerIds)
+                {
+                    for each (var childId:Number in copyLayerInfo.subLayerIds)
+                    {
+                        var childLayer:LayerInfo = findLayerById(childId, copyLayerInfos);
+                        if (childLayer)
+                        {
+                            if (copyLayerInfo.minScale > 0)
+                            {
+                                if (childLayer.minScale == 0 || (childLayer.minScale > 0 && childLayer.minScale > copyLayerInfo.minScale))
+                                {
+                                    childLayer.minScale = copyLayerInfo.minScale;
+                                }
+                            }
+                            if (copyLayerInfo.maxScale)
+                            {
+                                if (childLayer.maxScale == 0 || (childLayer.maxScale > 0 && childLayer.maxScale < copyLayerInfo.maxScale))
+                                {
+                                    childLayer.maxScale = copyLayerInfo.maxScale;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+			/**
+			 * Updates the min/max scale visibility for the given feature layer based on the details in the layer info for the layer wiith the given id.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayer [FeatureLayer]: </i>Feature layers.</li>
+			 * <li><i>layerId [Number]: </i>Layer id number for the layer in the layerinfos collection that contains the min & max scale settings.</li>
+			 * <li><i>copyLayerInfos [Array]: Collection of layerinfos.</i></li>
+			 * </ul>
+			 * </p>
+			 */
+            private function updateFeatureLayerMinMaxScale(featureLayer:FeatureLayer, layerId:Number, copyLayerInfos:Array):void
+            {
+                for each (var copyLayerInfo:LayerInfo in copyLayerInfos)
+                {
+                    if (copyLayerInfo.layerId == layerId)
+                    {
+                        featureLayer.minScale = copyLayerInfo.minScale;
+                        featureLayer.maxScale = copyLayerInfo.maxScale;
+                        break;
+                    }
+                }
+            }
+
+			/**
+			 * Updates the visibility of a layer in the operational layer list to true.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layer[Layer]: </i>Layer to update</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function changeOplListObjectVisibility(layer:Layer):void
+            {
+                for (var i:int = 0; i < oplList.length; )
+                {
+                    if (oplList[i].layer == layer)
+                    {
+                        oplList[i].visible = true;
+                        AppEvent.dispatch(AppEvent.MAP_LAYER_VISIBLE, oplList[i]);
+                        break;
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                }
+            }
+
+			
+			
+			/* MAP EVENT HANDLERS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when a new layer is added to the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when a layer is added to the map.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function mapLayerAddHandler(event:MapEvent):void
+            {
+                if (event.layer.name.indexOf("hiddenLayer_") == -1)
+                {
+                    if (event.layer is FeatureLayer)
+                    {
+                        event.layer.visible = true;
+                        changeOplListObjectVisibility(event.layer);
+                        event.layer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
+                        event.layer.addEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete, false, 1);
+
+                        //store the renderer info for each layer on map                        
+                        storeInfoWindowRenderer();
+
+                        arrFinalLayers.unshift(event.layer);
+                        featureLayers.unshift(event.layer);
+                        deactivateEditor();
+                        editor.map = map;
+                        updateSelectionColor(featureLayers);
+                        
+						updateFilterSettings();
+						//editor.featureLayers = featureLayers;
+                    }
+                    else if (event.layer is ArcGISDynamicMapServiceLayer && checkDynamicLayers)
+                    {
+                        event.layer.visible = true;
+                        createFeatureLayersFromDynamicMapService(ArcGISDynamicMapServiceLayer(event.layer), 0, true);
+                    }
+                }
+            }
+
+			/**
+			 * Called when a layer is removed from the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when a layer is removed from the map.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function mapLayerRemoveHandler(event:MapEvent):void
+            {
+                var index:int = arrFinalLayers.indexOf(event.layer);
+                if (index != -1)
+                {
+                    if (event.layer is ArcGISDynamicMapServiceLayer)
+                    {
+                        for each (var fl:FeatureLayer in featureLayers)
+                        {
+                            if (fl.name.indexOf("hiddenLayer_") != -1 && featureLayerToDynamicMapService[fl] == event.layer)
+                            {
+                                map.removeLayer(fl);
+                                featureLayers.splice(featureLayers.indexOf(fl), 1);
+                            }
+                        }
+                    }
+                    else if (event.layer is FeatureLayer)
+                    {
+                        for each (var fl1:FeatureLayer in featureLayers)
+                        {
+                            if (fl1 == event.layer)
+                            {
+                                featureLayers.splice(featureLayers.indexOf(fl1), 1);
+                            }
+                        }
+                    }
+                    delete arrFinalLayers[index];
+                    deactivateEditor();
+                    editor.map = map;
+					updateFilterSettings();
+                    //editor.featureLayers = featureLayers;
+                }
+            }
+
+			/**
+			 * Called when layers in the map are reordered.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when the order of layers is changed.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function mapLayerReorderHandler(event:MapEvent):void
+            {
+                var layer:Layer = event.layer;
+                var index:int = event.index;
+
+                var i:int;
+                var currentFeatureLayerIndex:int;
+                var newLayerIds:Array = getNewLayerIds(map.layerIds);
+                if (index <= (newLayerIds.length - arrFinalLayers.length))
+                {
+                    if (layer is FeatureLayer && featureLayers.indexOf(layer) != -1)
+                    {
+                        moveFeatureLayerToTheBottom(FeatureLayer(layer));
+                    }
+                    else if (layer is ArcGISDynamicMapServiceLayer)
+                    {
+                        var arr:Array = [];
+                        for each (var fl:FeatureLayer in featureLayers)
+                        {
+                            if (fl.name.indexOf("hiddenLayer_") != -1 && featureLayerToDynamicMapService[fl] == layer)
+                            {
+                                arr.push(fl);
+                            }
+                        }
+                        if (arr.length)
+                        {
+                            for each (var fl1:FeatureLayer in arr)
+                            {
+                                moveFeatureLayerToTheBottom(fl1);
+                            }
+                        }
+                    }
+                }
+                else if ((newLayerIds.length - arrFinalLayers.length < index) && (index < newLayerIds.length))
+                {
+                    if (layer is FeatureLayer && featureLayers.indexOf(layer) != -1)
+                    {
+                        moveFeatureLayer(FeatureLayer(layer));
+                    }
+                    else if (layer is ArcGISDynamicMapServiceLayer)
+                    {
+                        var arr1:Array = [];
+                        for each (var fLayer:FeatureLayer in featureLayers)
+                        {
+                            if (fLayer.name.indexOf("hiddenLayer_") != -1 && featureLayerToDynamicMapService[fLayer] == layer)
+                            {
+                                arr1.push(fLayer);
+                            }
+                        }
+                        if (arr1.length)
+                        {
+                            for each (var fLayer1:FeatureLayer in arr1)
+                            {
+                                moveFeatureLayer(fLayer1);
+                            }
+                        }
+                    }
+                }
+                deactivateEditor();
+                editor.map = map;
+                //editor.featureLayers = featureLayers;
+				updateFilterSettings();
+				
+                function moveFeatureLayer(layer:FeatureLayer):void
+                {
+                    currentFeatureLayerIndex = featureLayers.indexOf(layer);
+                    var newFeatureLayerIndex:Number = newLayerIds.length - index - 1;
+                    if (newFeatureLayerIndex < currentFeatureLayerIndex)
+                    {
+                        for (i = currentFeatureLayerIndex; newFeatureLayerIndex <= i; i--)
+                        {
+                            if (i == newFeatureLayerIndex)
+                            {
+                                featureLayers[newFeatureLayerIndex] = layer;
+                            }
+                            else
+                            {
+                                featureLayers[i] = featureLayers[i - 1];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (i = currentFeatureLayerIndex; i <= newFeatureLayerIndex; i++)
+                        {
+                            if (i == newFeatureLayerIndex)
+                            {
+                                featureLayers[newFeatureLayerIndex] = layer;
+                            }
+                            else
+                            {
+                                featureLayers[i] = featureLayers[i + 1];
+                            }
+                        }
+                    }
+                }
+
+                function moveFeatureLayerToTheBottom(layer:FeatureLayer):void
+                {
+                    currentFeatureLayerIndex = featureLayers.indexOf(layer);
+                    for (i = currentFeatureLayerIndex; i < featureLayers.length; i++)
+                    {
+                        if (i == featureLayers.length - 1)
+                        {
+                            featureLayers[featureLayers.length - 1] = layer;
+                        }
+                        else
+                        {
+                            featureLayers[i] = featureLayers[i + 1];
+                        }
+                    }
+                }
+            }
+
+			/**
+			 * Adds handlers to dynamic map service to check for layer/sublayer visibility changes.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised to update the handler.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function visibleLayersChange(event:Event = null):void
+			{
+				var dynamicMapServiceLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(event.target);
+				if (dynamicMapServiceLayer.visibleLayers)
+				{
+					dynamicMapServiceLayer.visibleLayers.removeEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
+					dynamicMapServiceLayer.visibleLayers.addEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
+				}
+				if (dynamicMapServiceLayer.visible)
+				{
+					updateFeatureLayersVisibility(dynamicMapServiceLayer, dynamicMapServiceLayer.visibleLayers ? false : true);
+				}
+			}
+			
+			/**
+			 * Handles when a dynamic map service layer's visibility in the map changes.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CollectionEvent]: </i>Event raised by the layer's visilibility changes.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function visibleLayersChangeHandler(event:CollectionEvent):void
+			{
+				const mapLayers:ArrayCollection = ArrayCollection(map.layers);
+				for (var i:int = 0; i < mapLayers.length; )
+				{
+					if (mapLayers.getItemAt(i) is ArcGISDynamicMapServiceLayer &&
+						ArcGISDynamicMapServiceLayer(mapLayers.getItemAt(i)).visible &&
+						ArcGISDynamicMapServiceLayer(mapLayers.getItemAt(i)).visibleLayers === event.target)
+					{
+						updateFeatureLayersVisibility(ArcGISDynamicMapServiceLayer(mapLayers.getItemAt(i)));
+						break;
+					}
+					else
+					{
+						i++;
+					}
+				}
+			}
+
+			/**
+			 * Handles when a layer's in scale range check fires.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LayerEvent]: </i>Event raised by the inscalerange function.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function layer_isInScaleRangeChangeHandler(event:LayerEvent):void
+			{
+				updateFeatureLayersVisibility(ArcGISDynamicMapServiceLayer(event.target));
+			}
+			
+			
+			
+			/* MAP FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Function to get the current list of operational layers from the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerIds [Array]: </i>List of layerids to be compared.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getNewLayerIds(layerIds:Array):Array
+            {
+                var result:Array = [];
+                for (var i:int = 0; i < layerIds.length; i++)
+                {
+                    var layer:Layer = ArrayCollection(map.layers).getItemAt(i) as Layer;
+                    if (layer.name.indexOf("hiddenLayer_") != -1 || (layer is GraphicsLayer && !(layer is FeatureLayer)))
+                    {
+                        continue
+                    }
+                    result.push(layerIds[i]);
+                }
+                return result;
+            }
+
+			/**
+			 * Extracts and stores the info window renderers from the layers while the the widget is in edit mode. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function storeInfoWindowRenderer():void
+            {
+                for each (var layer:Layer in map.layers)
+                {
+                    if (layer is ArcGISDynamicMapServiceLayer && ArcGISDynamicMapServiceLayer(layer).layerInfoWindowRenderers)
+                    {
+                        dictionary[layer] = ArcGISDynamicMapServiceLayer(layer).layerInfoWindowRenderers;
+                        ArcGISDynamicMapServiceLayer(layer).layerInfoWindowRenderers = null; // set it to null, as widget overtakes now
+                    }
+                    else if (layer is ArcGISTiledMapServiceLayer && ArcGISTiledMapServiceLayer(layer).layerInfoWindowRenderers)
+                    {
+                        dictionary[layer] = ArcGISTiledMapServiceLayer(layer).layerInfoWindowRenderers;
+                        ArcGISTiledMapServiceLayer(layer).layerInfoWindowRenderers = null; // set it to null, as widget overtakes now
+                    }
+                    else if (layer is GraphicsLayer && GraphicsLayer(layer).infoWindowRenderer)
+                    {
+                        dictionary[layer] = GraphicsLayer(layer).infoWindowRenderer;
+                        GraphicsLayer(layer).infoWindowRenderer = null; // set it to null, as widget overtakes now
+                    }
+                }
+            }
+
+			/**
+			 * Function to determine if the layer with the given name is contained in the excluded layer list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layername [String]: </i>Name of the layer to be checked.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function isLayerPartOfExcludeLayers(layerName:String):Boolean
+            {
+                var result:Boolean;
+
+                // loop through all the excludeLayers
+                for (var n:int = 0; n < excludeLayers.length; )
+                {
+                    if (layerName == excludeLayers[n])
+                    {
+                        result = true;
+                        break;
+                    }
+                    else
+                    {
+                        n++;
+                    }
+                }
+
+                return result;
+            }
+
+			/**
+			 * Function to determine if the feature layer with the given url is a member of the viewers operational layer list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayerURL [String]: </i>Url for the layer to be checked.</li>
+			 * <li><i>gdbVersion [String]: </i>Version id for the layer to be checked.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function isFeatureLayerPartOfOpList(featureLayerURL:String, gdbVersion:String):Boolean
+            {
+                var result:Boolean;
+
+                // loop through all the map layers
+                for each (var layerObj:Object in configData.opLayers)
+                {
+                    var layer:Layer = layerObj.layer;
+                    if (layer is FeatureLayer
+                        && FeatureLayer(layer).url == featureLayerURL
+                        && FeatureLayer(layer).gdbVersion == gdbVersion)
+                    {
+                        result = true;
+                        break;
+                    }
+                }
+
+                return result;
+            }
+
+			/**
+			 * Function to retrieve the feature layer from the map with the given url.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayerURL [String]: </i>Url for the layer to be found.</li>
+			 * <li><i>gdbVersion [String]: </i>Version id for the layer to be found.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getFeatureLayerFromMap(featureLayerURL:String, gdbVersion:String):FeatureLayer
+            {
+                var result:FeatureLayer;
+
+                // loop through all the map layers
+                for (var n:int = 0; n < mapLayers.length; )
+                {
+                    if (mapLayers.getItemAt(n) is FeatureLayer
+                        && FeatureLayer(mapLayers.getItemAt(n)).url == featureLayerURL
+                        && FeatureLayer(mapLayers.getItemAt(n)).gdbVersion == gdbVersion)
+                    {
+                        result = mapLayers.getItemAt(n) as FeatureLayer;
+                        break;
+                    }
+                    else
+                    {
+                        n++;
+                    }
+                }
+
+                return result;
+            }
+
+			/**
+			 * Function to update a feature layer created from a dynamic layers's visibility state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layer [ArcGISDynamicMapServiceLayer]: </i>Layer to have its visibility updated.</li>
+			 * <li><i>goBackToDefaultVisibility [Boolean] (optional): </i>Flag for whether to go back to the default visibility state for that layer.</li>
+			 * </ul>
+			 * </p>
+			 */            
+			private function updateFeatureLayersVisibility(layer:ArcGISDynamicMapServiceLayer, goBackToDefaultVisibility:Boolean = false):void
+            {
+                for each (var featureLayer:FeatureLayer in featureLayers)
+                {
+                    if (featureLayer.name.indexOf("hiddenLayer_") != -1 && featureLayerToDynamicMapService[featureLayer] === layer) // layers from a map service
+                    {
+                        var featureLayerId:String = featureLayer.url.substring(featureLayer.url.lastIndexOf("/") + 1, featureLayer.url.length);
+                        featureLayer.visible = layer.visible ? isFeatureLayerVisible(featureLayerId, layer, goBackToDefaultVisibility) : false;
+                    }
+                }
+            }
+
+			/**
+			 * Function to get whether a feature layer created from a dynamic layers is currently visible.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerId [String]: </i>ayer Id for the details to be checked.</li>
+			 * <li><i>dynamicMapServiceLayer [ArcGISDynamicMapServiceLayer]: </i>Layer to have its visibility checked.</li>
+			 * <li><i>checkDefaultVisibility [Boolean] (optional): </i>Flag for whether to get the default visibility state for that layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function isFeatureLayerVisible(layerId:String, dynamicMapServiceLayer:ArcGISDynamicMapServiceLayer, checkDefaultVisibility:Boolean = false):Boolean
+            {
+                var result:Boolean;
+
+                if (!checkDefaultVisibility && dynamicMapServiceLayer.visibleLayers)
+                {
+                    var actualVisibleLayers:Array = getActualVisibleLayers(dynamicMapServiceLayer.visibleLayers.toArray(), dynamicMapServiceLayer.layerInfos);
+                    result = actualVisibleLayers.indexOf(Number(layerId)) != -1;
+                }
+                else
+                {
+                    var layerInfos:Array = dynamicMapServiceLayer.layerInfos;
+                    if (layerInfos)
+                    {
+                        for (var i:int = 0; i < layerInfos.length; )
+                        {
+                            if (layerInfos[i].layerId == layerId)
+                            {
+                                if (layerInfos[i].parentLayerId != -1)
+                                {
+                                    // find the parent and check its default visibility
+                                    var parentLayerInfo:LayerInfo = findLayerById(layerInfos[i].parentLayerId, layerInfos);
+                                    result = parentLayerInfo.defaultVisibility;
+                                }
+                                else
+                                {
+                                    result = layerInfos[i].defaultVisibility;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                i++;
+                            }
+                        }
+                    }
+                }
+
+                return result;
+            }
+
+			/**
+			 * Function to retrieve the layerinfo records for any visible layers within the supplied collection of layerids.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerIds [Array]: </i>Collection of layerIds to be searched.</li>
+			 * <li><i>layerInfos [Array]: </i>LayerInfo's collection to be searched.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function getActualVisibleLayers(layerIds:Array, layerInfos:Array):Array
+            {
+                var result:Array = [];
+
+                layerIds = layerIds ? layerIds.concat() : null;
+                var layerInfo:LayerInfo;
+                var layerIdIndex:int;
+
+                if (layerIds)
+                {
+                    // replace group layers with their sub layers
+                    for each (layerInfo in layerInfos)
+                    {
+                        layerIdIndex = layerIds.indexOf(layerInfo.layerId);
+                        if (layerInfo.subLayerIds && layerIdIndex != -1)
+                        {
+                            layerIds.splice(layerIdIndex, 1); // remove the group layer id
+                            for each (var subLayerId:Number in layerInfo.subLayerIds)
+                            {
+                                layerIds.push(subLayerId); // add subLayerId
+                            }
+                        }
+                    }
+
+                    for each (layerInfo in layerInfos.reverse())
+                    {
+                        if (layerIds.indexOf(layerInfo.layerId) != -1 && layerIds.indexOf(layerInfo.parentLayerId) == -1 && layerInfo.parentLayerId != -1)
+                        {
+                            layerIds.push(layerInfo.parentLayerId);
+                        }
+                    }
+
+                    result = layerIds;
+                }
+
+                return result;
+            }
+
+			/**
+			 * Function to retrieve the specific layerinfo record for the given id from the layer infos collection.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>id [Number]: </i>Layer Id for the details to be returned.</li>
+			 * <li><i>layerInfos [Array]: </i>LayerInfo's collection to be searched.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function findLayerById(id:Number, layerInfos:Array):LayerInfo
+            {
+                for each (var layerInfo:LayerInfo in layerInfos)
+                {
+                    if (id == layerInfo.layerId)
+                    {
+                        return layerInfo;
+                    }
+                }
+                return null;
+            }
+
+			/** 
+			 * Checks to see if any of the layers in the provided collection has edit capability. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayers [Array]: </i>Array of feature layers to be checked.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function atleastOneFeatureLayerHasCreateCapability(featureLayers:Array):Boolean
+            {
+                var result:Boolean;
+                for each (var featureLayer:FeatureLayer in featureLayers)
+                {
+                    if (isCreateAllowed(featureLayer))
+                    {
+                        result = true;
+                        break;
+                    }
+                }
+                return result;
+            }
+
+			
+			
+			/* EDITOR FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/** 
+			 * Toggles the widget between edit mode and standby mode. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event rasied by the edit mode toggle button.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editStateButton_clickHandler(event:MouseEvent):void
+			{
+				if (currentState == "deactivated")
+				{
+					// Currently not in edit mode - activate the edit tools
+					currentState = "normal";
+					activateEditMode();
+				}
+				else
+				{
+					// Currently in edit mode - deactivate the tools and put in waiting mode
+					currentState = "deactivated";
+					deactivateEditMode();
+				}
+			}
+	
+			/** 
+			 * Function to check whether the given layer has feature edit capability. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayer [FeatureLayer]: </i>Feature layer to be checked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function isCreateAllowed(featureLayer:FeatureLayer):Boolean
+            {
+                var result:Boolean;
+
+                if (featureLayer.layerDetails is FeatureLayerDetails)
+                {
+                    result = (featureLayer.layerDetails as FeatureLayerDetails).isCreateAllowed;
+                }
+                else if (featureLayer.tableDetails is FeatureTableDetails)
+                {
+                    result = (featureLayer.tableDetails as FeatureTableDetails).isCreateAllowed;
+                }
+
+                return result;
+            }
+
+			/** 
+			 * Deactivates the editor tools
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function deactivateEditor():void
+            {
+                map.infoWindow.hide();
+                editor.templatePicker.clearSelection();
+
+                editor.featureLayers = null;
+                editor.map = null;
+                editor.drawTool.deactivate();
+                editor.editTool.deactivate();
+            }
+
+			
+			
+			/* LAYER HANDLERS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the feature selection completion event completes - fixes Time bug
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FeatureLayerEvent]: </i>Event dispatched when the selection action completes on a feature layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+            private function featureLayer_selectionComplete(event:FeatureLayerEvent):void
+            {
+				var feature:Graphic;
+				
+				// Fix the date fields
+				for each (var field:Field in event.target.layerDetails.fields)
+                {
+                    if (field.type == Field.TYPE_DATE)
+                    {
+                        for each (feature in event.features)
+                        {
+                            var date:Date = new Date(feature.attributes[field.name]);
+                            if (date.milliseconds == 999)
+                            {
+                                date.milliseconds++; //Add 1ms to date values ending in 999 to workaround REST date bug
+                                feature.attributes[field.name] = date.time;
+                            }
+                        }
+                    }
+                }
+				
+				var layer:FeatureLayer = event.featureLayer;
+				
+				// Apply popup options
+				for each (feature in layer.graphicProvider)
+				{
+					// Check if is selected and has a context menu
+					if (event.features.indexOf(feature) >= 0 && !feature.contextMenu)
+					{
+						var cmi:ContextMenuItem = new ContextMenuItem("Move Feature",true);
+						cmi.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, cm_Move_SelectHandler);
+						
+						var cm:ContextMenu = new ContextMenu();
+						cm.hideBuiltInItems();
+						cm.customItems = [cmi];
+						feature.contextMenu = cm;
+					}
+				}
+            }
+
+			/** 
+			 * Called when a feature layer's visibility changes
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FeatureLayerEvent]: </i>Event dispatched when the layer's visibility changes.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function featureLayer_hideShowHandler(event:FlexEvent):void
+			{
+				var featureLayer:FeatureLayer = event.target as FeatureLayer;
+				var featureLayerId:Number = Number(featureLayer.url.substring(featureLayer.url.lastIndexOf("/") + 1, featureLayer.url.length));
+				var dynamicMapServiceLayer:ArcGISDynamicMapServiceLayer = featureLayerToDynamicMapService[featureLayer];
+				if (featureLayer.visible)
+				{
+					dynamicMapServiceLayer.visible = true;
+					if (dynamicMapServiceLayer.visibleLayers)
+					{
+						dynamicMapServiceLayer.visibleLayers.addItem(featureLayerId);
+					}
+				}
+				else
+				{
+					if (dynamicMapServiceLayer.visibleLayers && dynamicMapServiceLayer.visibleLayers.getItemIndex(featureLayerId) != -1)
+					{
+						dynamicMapServiceLayer.visibleLayers.removeItemAt(dynamicMapServiceLayer.visibleLayers.getItemIndex(featureLayerId));
+					}
+				}
+			}
+			
+			/** 
+			 * Called when a layer's visibility changes
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Event dispatched when the layer's visibility changes.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function layer_hideShowHandler(event:FlexEvent):void
+			{
+				updateFeatureLayersVisibility(ArcGISDynamicMapServiceLayer(event.target));
+			}
+			
+			
+			
+			/* INFO WINDOW FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/** 
+			 * Called when the info window is closed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event dispatched when the info window closes.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function infoWindowCloseHandler(event:Event):void
+            {
+                map.infoWindow.content = editor.attributeInspector;
+                if (attachmentInspector)
+                {
+                    attachmentInspector.clear();
+                }
+            }
+
+			/** 
+			 * Opens the attribute window if there are selected features.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function showAttributesWindow():void
+			{
+				var pt:MapPoint;
+				
+				if (!map.infoWindow.visible && editor.attributeInspector.activeFeature != null)
+				{
+					// Make sure info window contents are synced to edit feature
+					map.infoWindow.content = editor.attributeInspector;
+					map.infoWindow.label = attributesLabel;
+					
+					// Center inspector on feature
+					var gra:Graphic = editor.attributeInspector.activeFeature;
+					
+					// Check geometry type
+					switch (gra.geometry.type) 
+					{
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						case Geometry.MULTIPOINT:
+						{
+							pt = gra.geometry.extent.center;
+							break;
+						}
+							
+						case Geometry.MAPPOINT:
+						{
+							pt = gra.geometry as MapPoint;
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							var pLine:Polyline = gra.geometry as Polyline;
+							pt = pLine.getPoint(0,0);
+							break;	
+						}
+					}
+					
+					// Show the ino window
+					map.infoWindow.show(pt);
+				}
+			}
+			
+			
+			
+			/* VERTEX HANDLERS AND FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called just before the context menu is displayed when using the editor edit tool.  Updates the options in the context menu depding on what tool is active.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [EditEvent]: </i>Event dispatched prior to the context menu being shown.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function editTool_prepareContextMenu(event:EditEvent):void
+			{
+				// Check for the context menu
+				var cm:ContextMenu = event.contextMenu;
+				if (cm)
+				{
+					// Update the edit graphic reference
+					_editGraphic = event.graphic;
+					
+					// Update the selected vertex reference
+					_selectedVertex = null;
+					switch(event.graphic.geometry.type)
+					{
+						case Geometry.MAPPOINT:
+							// Do nothing							
+							break;
+						
+						case Geometry.MULTIPOINT:
+							var multi:Multipoint = event.graphic.geometry as Multipoint;
+							_selectedVertex = multi.getPoint(event.pointIndex);
+							break;
+						
+						case Geometry.POLYLINE:
+							var line:Polyline = event.graphic.geometry as Polyline;
+							_selectedVertex = line.getPoint(event.pathIndex, event.pointIndex);
+							break;
+						
+						case Geometry.POLYGON:
+							var poly:Polygon = event.graphic.geometry as Polygon;
+							_selectedVertex = poly.getPoint(event.ringIndex, event.pointIndex);
+							break;
+						
+					}
+					
+					// Build the context menu
+					cm.hideBuiltInItems();
+					var cmi:ContextMenuItem = new ContextMenuItem("Move Vertex",true);
+					cmi.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, cm_MoveVertex_SelectHandler);
+					cm.customItems.push(cmi);
+				}				
+			}
+			
+			/** 
+			 * Called when the user clicks the Move option on a graphic's vertex context menu.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [ContextMenuEvent]: </i>Event dispatched when the 'Move' custom item is clickec in the context menu.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function cm_MoveVertex_SelectHandler(event:ContextMenuEvent):void
+			{
+				// Create a modal move dialog
+				var dialog:MoveDialog = MoveDialog(PopUpManager.createPopUp(map, MoveDialog, true));
+				
+				// Add handlers for dialog being cancelled, closed or move button pressed 
+				dialog.butCancel.addEventListener(MouseEvent.CLICK, MoveVertex_CancelHandler);
+				dialog.butMove.addEventListener(MouseEvent.CLICK, MoveVertex_MoveHandler);
+				dialog.addEventListener(CloseEvent.CLOSE, MoveVertex_CloseHandler);
+				
+				// Show the move dialog				
+				PopUpManager.centerPopUp(dialog);
+			}
+			
+			/** 
+			 * Called when a move dialog is closed
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CloseEvent]: </i>Event dispatched when the Move dialog is closed without pressing the Move button.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function MoveVertex_CloseHandler(event:CloseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.currentTarget);
+				MoveVertex_Cancel(dialog);
+			}
+			
+			/** 
+			 * Called when a move dialog cancel button is clicked
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the cancel button on the Move dialog is pressed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function MoveVertex_CancelHandler(event:MouseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.target.parentDocument);
+				MoveVertex_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Clears the handlers on a move dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>dialog [MoveDialog]: </i>The Move dialog currently being displayed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function MoveVertex_Cancel(dialog:MoveDialog):void
+			{
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, MoveVertex_CancelHandler);
+				dialog.butMove.removeEventListener(MouseEvent.CLICK, MoveVertex_MoveHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, MoveVertex_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+			}
+			
+			/** 
+			 * Called when a move dialog cancel button is clicked
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the move button on the Move dialog is pressed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function MoveVertex_MoveHandler(event:MouseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.target.parentDocument);
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, MoveVertex_CancelHandler);
+				dialog.butMove.removeEventListener(MouseEvent.CLICK, MoveVertex_MoveHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, MoveVertex_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+				
+				var method:String = dialog.currentState;
+				var x:Number = Number(dialog.txtXCoordinate.text);
+				var y:Number = Number(dialog.txtYCoordinate.text);
+				
+				var updates:Array = [];
+				var newPt:MapPoint;
+				
+				if (method == "moveToXY")
+				{
+					newPt = new MapPoint(x, y, _editGraphic.geometry.spatialReference );
+				} 
+				else 
+				{
+					var oldPt:MapPoint = _selectedVertex;
+					newPt = GeometryUtil.moveGeometryXYOffset(oldPt as Geometry,x,y) as MapPoint;
+				}
+				
+				if (_editGraphic && _selectedVertex)
+				{
+					switch(_editGraphic.geometry.type)
+					{
+						case Geometry.POLYLINE:
+						{
+							_editGraphic.geometry = GeometryUtil.updatePolylineVertex(_editGraphic.geometry as Polyline, 
+								_selectedVertex, newPt);
+							break;
+						}
+							
+						case Geometry.POLYGON:
+						{
+							_editGraphic.geometry = GeometryUtil.updatePolygonVertex(_editGraphic.geometry as Polygon, 
+								_selectedVertex, newPt);
+							break;
+						}
+					}
+					updates.push(_editGraphic);
+				}
+				
+				// Check if any updates were made and update the layer if so.
+				if (updates.length > 0)
+				{
+					showApplyEdits("Updating Features...");
+					var layer:FeatureLayer = _editGraphic.graphicsLayer as FeatureLayer;
+					layer.applyEdits(null, updates, null, true,
+						new AsyncResponder(editsComplete, editsFault, layer ));
+				}
+			}
+			
+			
+
+			/* ATTRIBUTE AND ATTACHMENT INSPECTOR HANDLERS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Shows the attribute inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised to show the attribute inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+			private function attributeGroupClickedHandler(event:Event):void
+            {
+                map.infoWindow.content = editor.attributeInspector;
+            }
+
+			/**
+			 * Shows the attachmentt inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised to show the attachment inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+            private function attachmentGroupClickedHandler(event:Event):void
+            {
+                map.infoWindow.content = attachmentInspector;
+
+                // queues an operation(showAttachments) to be performed for the next screen refresh, rather than in the current update.
+                // Without the callLater() method, you might try to access a property of a component
+                // that is not yet available.
+                callLater(showAttachments);
+
+                function showAttachments():void
+                {
+                    attachmentInspector.showAttachments(editor.attributeInspector.activeFeature, editor.attributeInspector.activeFeature.graphicsLayer as FeatureLayer);
+                }
+            }
+
+			/**
+			 * Shows the relationship inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised to show the relationship inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+            private function relatedRecordsGroupClickedHandler(event:Event):void
+            {
+                map.infoWindow.content = relationshipInspector;
+                relationshipInspector.graphic = editor.attributeInspector.activeFeature;
+            }
+
+			/**
+			 * Called when an attachement inspector has initialised.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Initialisation event raised by the Attachment Inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+            private function attachmentInspector_initializeHandler(event:FlexEvent):void
+            {
+                super.initializationComplete();
+                attachmentInspector.addEventListener(AttachmentMouseEvent.ATTACHMENT_DOUBLE_CLICK, attachmentDoubleClickHandler);
+            }
+
+			/**
+			 * Called when an attachment record is double clicked in the attachment inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AttachmentMouseEvent]: </i>Event raised by the Attachment Inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+            private function attachmentDoubleClickHandler(event:AttachmentMouseEvent):void
+            {
+                navigateToURL(new URLRequest(event.attachmentInfo.url));
+            }
+
+			/**
+			 * Called when the show attribute inspector is called.  Raised by the attachment inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by the Attribute Inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */        
+			private function attributeGroup_clickHandler(event:MouseEvent):void
+            {
+                map.infoWindow.content = editor.attributeInspector;
+            }
+
+			/**
+			 * Called when the show feature event is raised.  Prepares the attribute inspector.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AttributeInspectorEvent]: </i>Event raised by the Attribute Inspector.</li>
+			 * </ul>
+			 * </p>			 
+			 */          
+			private function attributeInspector_showFeatureHandler(event:AttributeInspectorEvent):void
+            {
+                attachmentInspector.addEnabled = editor.attributeInspector.updateEnabled;
+                attachmentInspector.deleteEnabled = editor.attributeInspector.deleteButtonVisible;
+                const featureLayer:FeatureLayer = event.featureLayer;
+                var settingsKey:String = featureLayer.name;
+                if (featureLayer.name.indexOf("hiddenLayer_") != -1)
+                {
+                    settingsKey = hiddenFeatureLayerToSettingsName[featureLayer];
+                    if (!settingsKey)
+                    {
+                        settingsKey = featureLayerToDynamicMapService[featureLayer].name +
+                            "/" + featureLayer.url.substring(featureLayer.url.lastIndexOf("/") + 1, featureLayer.url.length);
+                        hiddenFeatureLayerToSettingsName[featureLayer] = settingsKey;
+                    }
+                }
+				
+                var settingsObject:Object = layerToSettings[settingsKey];
+                if (settingsObject)
+                {
+                    var outFields:Array = settingsObject.outFields as Array;
+                    if (outFields && outFields.length)
+                    {
+                        var attributeInspectorFieldInspectors:Array = [];
+                        var fieldInspector:FieldInspector;
+                        for each (var fieldObject:Object in outFields)
+                        {
+                            fieldInspector = new FieldInspector;
+                            fieldInspector.featureLayer = featureLayer;
+                            fieldInspector.visible = fieldObject.visible;
+                            fieldInspector.fieldName = fieldObject.name;
+                            fieldInspector.label = fieldObject.alias;
+                            fieldInspector.toolTip = fieldObject.tooltip;
+							fieldInspector.enabled = fieldObject.editable;
+
+                            attributeInspectorFieldInspectors.push(fieldInspector);
+                        }
+						
+                        for each (var field:Field in featureLayer.layerDetails.fields)
+                        {
+                            if (outFields.indexOf(field.name) == -1)
+                            {
+                                fieldInspector = new FieldInspector;
+                                fieldInspector.featureLayer = featureLayer;
+                                fieldInspector.visible = false;
+                                fieldInspector.fieldName = field.name;
+
+                                attributeInspectorFieldInspectors.push(fieldInspector);
+                            }
+                        }
+                        editor.attributeInspector.fieldInspectors = attributeInspectorFieldInspectors;
+                        editor.attributeInspector.formFieldsOrder = AttributeInspector.FIELD_INSPECTOR_ORDER;
+                    }
+                    else
+                    {
+                        var formFieldsOrder:String = settingsObject.formFieldsOrder;
+                        if (formFieldsOrder)
+                        {
+                            editor.attributeInspector.formFieldsOrder = formFieldsOrder;
+                        }
+                    }
+					
+                    var singleToMultilineThreshold:Number = settingsObject.singleToMultilineThreshold;
+                    if (singleToMultilineThreshold && !isNaN(singleToMultilineThreshold))
+                    {
+                        editor.attributeInspector.singleToMultilineThreshold = singleToMultilineThreshold;
+                    }
+					
+                    var showObjectID:String = settingsObject.showObjectID;
+                    if (showObjectID)
+                    {
+                        editor.attributeInspector.showObjectID = showObjectID == "true";
+                    }
+					
+                    var showGlobalID:String = settingsObject.showGlobalID;
+                    if (showGlobalID)
+                    {
+                        editor.attributeInspector.showGlobalID = showGlobalID == "true";
+                    }
+                }
+            }
+
+			/**
+			 * Updates the selection colour on the editable feature layers.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureLayers [Array]: </i>Array of current feature layers used by the editor.</li>
+			 * </ul>
+			 * </p>			 
+			 */           
+			private function updateSelectionColor(featureLayers:Array):void
+            {
+                if (!editor.toolbarVisible)
+                {
+                    for each (var featureLayer:FeatureLayer in featureLayers)
+                    {
+                        if (!featureLayerToSelectionColor[featureLayer] &&
+                            featureLayer.layerDetails &&
+                            (featureLayer.layerDetails.geometryType == Geometry.POLYGON || featureLayer.layerDetails.geometryType == Geometry.POLYLINE))
+                        {
+                            featureLayerToSelectionColor[featureLayer] = featureLayer.selectionColor;
+                            featureLayer.selectionColor = NaN;
+                        }
+                    }
+                }
+            }
+
+			
+ 
+			/* COPY FEATURE FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the copy button on the editor skin is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Copy Feature button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function editor_copyButtonClickHandler(event:AppEvent):void
+			{
+				// Create a modal dialog
+				var dialog:CopyFeatureDialog = 
+					CopyFeatureDialog(PopUpManager.createPopUp(map, CopyFeatureDialog, false));
+				
+				// Set the map property
+				dialog.map = map;
+				dialog.templatePicker = editor.templatePicker;
+				dialog.graphicLayerNames = graphicLayers;
+				
+				// Add handlers for dialog being cancelled, closed or move button pressed 
+				dialog.butCancel.addEventListener(MouseEvent.CLICK,copyFeature_CancelHandler);
+				dialog.butCopy.addEventListener(MouseEvent.CLICK, copyFeature_CopyHandler);
+				dialog.addEventListener(CloseEvent.CLOSE,copyFeature_CloseHandler);
+				
+				// Show the copy dialog
+				PopUpManager.centerPopUp(dialog);	
+				dialog.x = map.width - dialog.width - 10;
+				dialog.y = 100;
+			}			
+			
+			/** 
+			 * Called when the user clicks the cancel button on the Copy Feature dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Cancel button on the Copy Featre Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function copyFeature_CancelHandler(event:MouseEvent):void
+			{
+				var dialog:CopyFeatureDialog = CopyFeatureDialog(event.target.parentDocument);
+				copyFeature_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Clears the handlers on a Copy Feature dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>dialog [CopyFeatureDialog]: </i>Copy Feature Dialog which has been popup.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function copyFeature_Cancel(dialog:CopyFeatureDialog):void
+			{
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK,copyFeature_CancelHandler);
+				dialog.butCopy.removeEventListener(MouseEvent.CLICK, copyFeature_CopyHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE,copyFeature_CloseHandler);
+				
+				PopUpManager.removePopUp(dialog);
+			}
+			
+			/** 
+			 * Called when the user closes the Copy Feature dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CloseEvent]: </i>Called when the copy feature dialog is closed before the Copy Feature button is pressed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function copyFeature_CloseHandler(event:CloseEvent):void
+			{
+				var dialog:CopyFeatureDialog = CopyFeatureDialog(event.target);
+				copyFeature_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Called when the user clicks the copy button on the Copy Feature dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Copy Feature button on the Copy Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function copyFeature_CopyHandler(event:MouseEvent):void
+			{
+				// Release the handlers working with the dialog
+				var dialog:CopyFeatureDialog = CopyFeatureDialog(event.target.parentDocument);
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK,copyFeature_CancelHandler);
+				dialog.butCopy.removeEventListener(MouseEvent.CLICK, copyFeature_CopyHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE,copyFeature_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+				
+				// Get the current template
+				var template:Template = dialog.target;
+				if (template)
+				{
+					// Get the object id field name
+					var objectField:String = template.featureLayer.layerDetails.objectIdField;
+					
+					//Get the template typeID field
+					var typeIDField:String = template.featureLayer.layerDetails.typeIdField;
+					
+					// Create array to store new records in
+					var adds:Array = [];
+					
+					// Position attributes for popup window 
+					var x:Number;
+					var y:Number;
+					
+					var cnt:int = 0;
+					
+					// Get the selected records
+					for each (var data:Object in dialog.selFeatures.selectedItems)
+					{
+						// Get the record data
+						var graphic:Graphic = data.graphic;
+						
+						// Create a new record graphics based on the template prototype
+						var record:Graphic =  ObjectUtil.copy(template.featureTemplate.prototype) as Graphic;
+						record.geometry = ObjectUtil.copy(graphic.geometry) as Geometry;
+						
+						if (cnt == 0)
+						{
+							x = GeometryUtil.getX(record.geometry);
+							y = GeometryUtil.getY(record.geometry);
+							cnt += 1;
+						}
+						
+						// Check if the attributes are to be copied
+						if (dialog.chkCopyAttributes.selected)
+						{
+							// Iterate through the attributes (ignore objectid, etc)							
+							for (var field:String in graphic.attributes)
+							{
+								//var fieldFound:Boolean = false;
+								for (var recField:String in record.attributes)
+								{
+									if (recField == field && field != objectField && field != typeIDField)
+									{
+										if (graphic.attributes[field] != null)
+										{
+											record.attributes[field] = graphic.attributes[field];
+										}
+										break;
+									}
+								}
+							}
+						}
+						
+						// Add new record to the adds array
+						adds.push(record);
+					}
+					
+					if (adds.length > 0)
+					{
+						showApplyEdits("Copying Selected Features...");
+						template.featureLayer.applyEdits(adds, null, null, true,
+							new AsyncResponder(createsComplete, editsFault, 
+								{template:template, mappoint:new MapPoint(x, y, map.spatialReference)}));
+					}
+				}
+			}
+			
+			
+			
+			/* CREATE POINT BY XY FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the custom generate point button on the editor toolbar (custom but on the editor skin)
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Generate Point button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_createPointXYButtonClickHandler(event:AppEvent):void
+			{
+				// Create a modal dialog
+				var dialog:CreatePointDialog = 
+					CreatePointDialog(PopUpManager.createPopUp(map, CreatePointDialog, false));
+				
+				// Set the map property
+				dialog.map = map;
+				
+				// Add handlers for dialog being cancelled, closed or move button pressed 
+				dialog.butCancel.addEventListener(MouseEvent.CLICK, createPointXY_CancelHandler);
+				dialog.butGenerate.addEventListener(MouseEvent.CLICK, createPointXY_GenerateHandler);
+				dialog.addEventListener(CloseEvent.CLOSE, createPointXY_CloseHandler);
+				
+				// Show the copy dialog
+				PopUpManager.centerPopUp(dialog);	
+				dialog.x = map.width - dialog.width - 10;
+				dialog.y = 100;
+			}			
+
+			/** 
+			 * Called when the user clicks the cancel button on the Create Point dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Cancel button on the Point Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createPointXY_CancelHandler(event:MouseEvent):void
+			{
+				var dialog:CreatePointDialog = CreatePointDialog(event.target.parentDocument);
+				pointXY_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Clears the handlers on a Create Point dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>dialog [CreatePointDialog]: </i>Create Point Dialog which has been popup.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function pointXY_Cancel(dialog:CreatePointDialog):void
+			{
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, createPointXY_CancelHandler);
+				dialog.butGenerate.removeEventListener(MouseEvent.CLICK, createPointXY_GenerateHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, createPointXY_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+			}
+			
+			/** 
+			 * Called when the user closes the Create Point dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Point Dialog is closed with pression the Generate Point button.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createPointXY_CloseHandler(event:CloseEvent):void
+			{
+				var dialog:CreatePointDialog = CreatePointDialog(event.target);
+				pointXY_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Called when the user clicks the generate button on the Create Point dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Generate Point button on the Point Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createPointXY_GenerateHandler(event:MouseEvent):void
+			{
+				// Release the handlers working with the dialog
+				var dialog:CreatePointDialog = CreatePointDialog(event.target.parentDocument);
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, createPointXY_CancelHandler);
+				dialog.butGenerate.removeEventListener(MouseEvent.CLICK, createPointXY_GenerateHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, createPointXY_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+				
+				// Get the current template
+				var template:Template = editor.templatePicker.selectedTemplate;
+				if (template)
+				{
+					// Get the x, y, and radius values
+					var x:Number = Number(dialog.txtXCoordinate.text);
+					var y:Number = Number(dialog.txtYCoordinate.text);
+					
+					// Check if feature is a polygon or polyline
+					if (template.featureLayer.layerDetails.geometryType == Geometry.MAPPOINT)
+					{
+						// Generate the circle
+						var geom:Geometry = new MapPoint(x, y, map.spatialReference);
+						var newAtttrs:* = ObjectUtil.copy(template.featureTemplate.prototype.attributes);
+						var newGraphic:Graphic = new Graphic(geom, null, newAtttrs);
+						
+						showApplyEdits("Creating Point Feature...");
+						template.featureLayer.applyEdits([ newGraphic ], null, null, true,
+							new AsyncResponder(createsComplete, editsFault, {template:template, mappoint:new MapPoint(x,y,map.spatialReference)}));
+					} else {
+						Alert.show("The current selected template does not support point features.  Please change to a point based template and try again.",
+							"Create Point by XY",Alert.OK,map);
+					}
+				}
+			}
+
+			
+			
+			/* CREATE CIRCLE BY XY & RADIUS FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the custom generate circle button on the editor toolbar (custom but on the editor skin).   Creates and displays the Circle Dailog.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Generate Circle button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_createCircleXYRadiusButtonClickHandler(event:AppEvent):void
+			{
+				// Create a modal dialog
+				var dialog:CreateCircleDialog = 
+					CreateCircleDialog(PopUpManager.createPopUp(map, CreateCircleDialog, false));
+				
+				// Set the map property
+				dialog.map = map;
+				
+				// Add handlers for dialog being cancelled, closed or move button pressed 
+				dialog.butCancel.addEventListener(MouseEvent.CLICK, createCircleXYRadius_CancelHandler);
+				dialog.butGenerate.addEventListener(MouseEvent.CLICK, createCircleXYRadius_GenerateHandler);
+				dialog.addEventListener(CloseEvent.CLOSE, createCircleXYRadius_CloseHandler);
+				
+				// Show the copy dialog
+				PopUpManager.centerPopUp(dialog);	
+				dialog.x = map.width - dialog.width - 10;
+				dialog.y = 100;
+			}			
+
+			/** 
+			 * Called when the user clicks the cancel button on the Create Circle dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Cancel button on the Circle Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createCircleXYRadius_CancelHandler(event:MouseEvent):void
+			{
+				var dialog:CreateCircleDialog = CreateCircleDialog(event.target.parentDocument);
+				createCircleXYRadius_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Clears the handlers on a create circle dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>dialog [CreateCircleDialog]: </i>Create Circle Dialog which has been popup.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createCircleXYRadius_Cancel(dialog:CreateCircleDialog):void
+			{
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, createCircleXYRadius_CancelHandler);
+				dialog.butGenerate.removeEventListener(MouseEvent.CLICK, createCircleXYRadius_GenerateHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, createCircleXYRadius_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+			}
+			
+			/** 
+			 * Called when the user closes the Create Circle dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CloseEvent]: </i>Called when the Circle Dialog is closed without the generate circle button being pressed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createCircleXYRadius_CloseHandler(event:CloseEvent):void
+			{
+				var dialog:CreateCircleDialog = CreateCircleDialog(event.target);
+				createCircleXYRadius_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Called when the user clicks the generate button on the create circle dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Generate Circle button on the Circle Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createCircleXYRadius_GenerateHandler(event:MouseEvent):void
+			{
+				// Release the handlers working with the dialog
+				var dialog:CreateCircleDialog = CreateCircleDialog(event.target.parentDocument);
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, createCircleXYRadius_CancelHandler);
+				dialog.butGenerate.removeEventListener(MouseEvent.CLICK, createCircleXYRadius_GenerateHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, createCircleXYRadius_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+				
+				// Get the current template
+				var template:Template = editor.templatePicker.selectedTemplate;
+				if (template)
+				{
+					// Get the x, y, and radius values
+					var x:Number = Number(dialog.txtXCoordinate.text);
+					var y:Number = Number(dialog.txtYCoordinate.text);
+					var radius:Number = Number(dialog.txtRadius.text);
+					
+					// Check if feature is a polygon or polyline
+					var isPoly:Boolean = true;
+					if (template.featureLayer.layerDetails.geometryType != Geometry.POLYGON)
+					{
+						isPoly = false;
+					}
+					
+					// Generate the circle
+					var geom:Geometry = GeometryUtil.createCircle(x, y, radius, map.spatialReference, 100, isPoly);
+					var newAtttrs:* = ObjectUtil.copy(template.featureTemplate.prototype.attributes);
+					var newGraphic:Graphic = new Graphic(geom, null, newAtttrs);
+					
+					showApplyEdits("Creating Circle Feature...");
+					template.featureLayer.applyEdits([ newGraphic ], null, null, true,
+						new AsyncResponder(createsComplete, editsFault, {template:template, mappoint:new MapPoint(x, y, map.spatialReference)}));
+				}
+			}
+			
+			
+			
+			/* MOVE FEATURE BY XY FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Starts the move feature by XY action by creating and displaying a modal move dialog. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function moveFeatureByXY_Start():void
+			{
+				// Create a modal dialog
+				var dialog:MoveDialog = 
+					MoveDialog(PopUpManager.createPopUp(map, MoveDialog, false));
+				
+				// Set the map property
+				dialog.map = map;
+				
+				// Add handlers for dialog being cancelled, closed or move button pressed 
+				dialog.butCancel.addEventListener(MouseEvent.CLICK, moveByXY_CancelHandler);
+				dialog.butMove.addEventListener(MouseEvent.CLICK, moveByXY_MoveHandler);
+				dialog.addEventListener(CloseEvent.CLOSE, moveByXY_CloseHandler);
+				
+				// Show the copy dialog
+				PopUpManager.centerPopUp(dialog);	
+				dialog.x = map.width - dialog.width - 10;
+				dialog.y = 100;
+			}
+			
+			/**
+			 * Called when the user clicks the custom move feature by XY option on the feature context menu.   
+			 * Creates and displays the Move Dialog.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Move Feature by XY button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function cm_Move_SelectHandler(event:ContextMenuEvent):void
+			{
+				moveFeatureByXY_Start();
+			}
+			
+			/**
+			 * Called when the user clicks the custom move feature by XY button on the editor toolbar (custom but on the editor skin).   
+			 * Creates and displays the Move Dialog.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Move Feature by XY button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_moveFeatureXYButtonClickHandler(event:AppEvent):void
+			{
+				moveFeatureByXY_Start();
+			}	
+
+			/** 
+			 * Called when a move dialog is closed
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CloseEvent]: </i>Called when the Move Dialog is closed without the move button being pressed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function moveByXY_CloseHandler(event:CloseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.currentTarget);
+				moveByXY_Cancel(dialog);
+			}
+
+			/** 
+			 * Called when a move dialog cancel button is clicked
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Cancel button on the Move Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function moveByXY_CancelHandler(event:MouseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.target.parentDocument);
+				moveByXY_Cancel(dialog); 
+			}
+			
+			/** 
+			 * Clears the handlers on a move dialog
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>dialog [MoveDialog]: </i>Move Dialog which has been popup.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function moveByXY_Cancel(dialog:MoveDialog):void
+			{
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, moveByXY_CancelHandler);
+				dialog.butMove.removeEventListener(MouseEvent.CLICK, moveByXY_MoveHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, moveByXY_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+			}
+			
+			/** 
+			 * Called when a move dialog cancel button is clicked
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Move button on the Move Dialog is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function moveByXY_MoveHandler(event:MouseEvent):void
+			{
+				var dialog:MoveDialog = MoveDialog(event.target.parentDocument);
+				dialog.butCancel.removeEventListener(MouseEvent.CLICK, moveByXY_CancelHandler);
+				dialog.butMove.removeEventListener(MouseEvent.CLICK, moveByXY_MoveHandler);
+				dialog.removeEventListener(CloseEvent.CLOSE, moveByXY_CloseHandler);
+				PopUpManager.removePopUp(dialog);
+				
+				var method:String = dialog.currentState;
+				var x:Number = Number(dialog.txtXCoordinate.text);
+				var y:Number = Number(dialog.txtYCoordinate.text);
+				
+				for each (var layer:FeatureLayer in editor.featureLayers)
+				{
+					var updates:Array = [];
+					
+					var cnt:int = layer.selectedFeatures.length;
+					if (cnt > 0)
+					{
+						// Move the item
+						for each (var feature:Graphic in layer.selectedFeatures)
+						{
+							var geometry:Geometry = feature.geometry;
+							if (method == "moveToXY")
+							{
+								// Call the moveTo helper
+								feature.geometry = GeometryUtil.moveGeometryToXY(geometry,x,y);
+							} 
+							else 
+							{
+								// Call the offset helper
+								feature.geometry = GeometryUtil.moveGeometryXYOffset(geometry,x,y);
+							}
+							
+							updates.push(feature);
+						}
+					}
+					
+					// Check if any updates were made and update the layer if so.
+					if (updates.length > 0)
+					{
+						showApplyEdits("Updating Features...");
+						layer.applyEdits(null, updates, null, true, 
+							new AsyncResponder(editsComplete, editsFault, layer ));
+					}
+				}
+			}
+			
+			
+			
+			/* EXPLODE MULTIPART FEATURE FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the user clicks the custom explode multipart button on the editor toolbar (custom but on the editor skin)
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Explode Multipart Feature button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_explodeFeatureButtonClickHandler(event:AppEvent):void
+			{
+				var graphic:Graphic;
+				var geometry:Geometry;
+				var firstPart:Geometry;
+				
+				// Iterate through the layers to get the selected features
+				for each (var layer:FeatureLayer in editor.featureLayers)
+				{
+					var cnt:int = layer.selectedFeatures.length;
+					if (cnt > 0)
+					{
+						var objectIDField:String = layer.layerDetails.objectIdField;
+						
+						var adds:Array = [];
+						
+						// Check if the feature is a multipart
+						for each (graphic in layer.selectedFeatures)
+						{
+							geometry = graphic.geometry;
+							
+							if(GeometryUtil.isMultiPart(geometry))
+							{
+								var parts:Array = GeometryUtil.ExplodeMultiPart(graphic.geometry);
+								for each (geometry in parts)
+								{
+									// Duplicate the current record
+									var newGraphic:Graphic = GraphicUtil.CopyGraphic(graphic);
+									
+									// Reset the object id
+									newGraphic.attributes[objectIDField] = null;
+									
+									// Clear the global id if it has one
+									if (newGraphic.attributes["GlobalID"] != null)
+									{
+										newGraphic.attributes["GlobalID"] = null
+									}
+									
+									// Set the new geometry
+									newGraphic.geometry = geometry;
+									
+									// Add the new graphics to the adds list
+									adds.push(newGraphic);
+								}									
+							}
+							else
+							{
+								adds.push(GraphicUtil.CopyGraphic(graphic));								
+							}
+						}
+						
+						// Show working mesage
+						showApplyEdits("Exploding Features...");
+						
+						// Clear the current selection and add in the new parts
+						confirmDeletes = false;
+						
+						layer.applyEdits(adds, null, layer.selectedFeatures, true, 
+							new AsyncResponder(editsComplete, editsFault, layer ));
+						
+						// Remove the original feature from the layer 
+						//layer.applyEdits(null, null, layer.selectedFeatures);
+
+						// Add the newly exploded features to the map
+						//layer.applyEdits(adds, null, null, ); 
+					}
+				}
+			}	
+			
+			
+			
+			/* SHOW ATTRIBUTES FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the custom show attributes button on the editor toolbar (custom but on the editor skin)
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Show Attributes button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_showAttributesButtonClickHandler(event:AppEvent):void
+			{
+				showAttributesWindow();
+			}
+
+			
+			
+			/* MERGE FEATURES FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the merge features button on the editor toolbar (custom but on the editor skin)
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Called when the Merge Features button on the Editor Skin is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function editor_mergeFeaturesButtonClickHandler(event:AppEvent):void
+			{
+				confirmDeletes = false;
+			}
+			
+			
+			
+			/* EDIT ACTION FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/**
+			 * Adds listener functions to the editable feature layers to handle selection and edit events.  
+			 * The listeners include actions for confirming some actions, and applying specific layer attributes.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function FeatureLayers_addListeners():void
+			{
+				for each(var layer:FeatureLayer in featureLayers)
+				{
+					// Add selection complete handler
+					layer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
+					layer.addEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete, false, 1);                               
+					
+					// Add selection clear handler
+					layer.removeEventListener(FeatureLayerEvent.SELECTION_CLEAR, featureLayer_clearSelectionComplete);
+					layer.addEventListener(FeatureLayerEvent.SELECTION_CLEAR, featureLayer_clearSelectionComplete, false, 1);                               
+					
+					// Add listener for startEdits - used to update area, length, xy, etc
+					layer.removeEventListener(FeatureLayerEvent.EDITS_STARTING, featureLayer_editsStart);
+					layer.addEventListener(FeatureLayerEvent.EDITS_STARTING, featureLayer_editsStart, false, 1);                               									
+					
+					// Add listener for endEdits - used to update area, length, xy, etc
+					layer.removeEventListener(FeatureLayerEvent.EDITS_COMPLETE, featureLayer_editsComplete);
+					layer.addEventListener(FeatureLayerEvent.EDITS_COMPLETE, featureLayer_editsComplete, false, 1);                               
+				}
+			}
+			
+			/**
+			 * Clears the editable feature layer listeners.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function FeatureLayers_removeListeners():void
+			{
+				for each(var layer:FeatureLayer in featureLayers)
+				{
+					// Remove selection complete handler
+					layer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
+					
+					// Remove selection clear handler
+					layer.removeEventListener(FeatureLayerEvent.SELECTION_CLEAR, featureLayer_clearSelectionComplete);
+					
+					// remove listener for startEdits - used to update area, length, xy, etc
+					layer.removeEventListener(FeatureLayerEvent.EDITS_STARTING, featureLayer_editsStart);
+					
+					// Remove listener for endEdits - used to update area, length, xy, etc
+					layer.removeEventListener(FeatureLayerEvent.EDITS_COMPLETE, featureLayer_editsComplete);
+				}
+			}
+			
+			/**
+			 * Applies defintion query filters to the editbale layers if a key value attribute has been specified.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function FeatureLayers_applyFilters():void
+			{
+				// Set up any filters on the layer
+				if (countKeys(layerToSettings) > 0 && keyvalue != null && keyvalue != "")
+				{
+					// Set a definition query on each layer
+					for each (var layer:FeatureLayer in featureLayers)
+					{
+						// Get the edit settings
+						for each (var layerSettings:Object in layerToSettings)
+						{
+							if (layer.url == layerSettings.url)
+							{
+								// Check the keyfield and get the field type
+								for each (var fld:Field in layer.layerDetails.fields)
+								{
+									if (fld.name == layerSettings.keyfield)
+									{
+										var layDef:String = layerSettings.keyfield + "=";
+										
+										switch(fld.type)
+										{
+											case Field.TYPE_INTEGER:
+											case Field.TYPE_DOUBLE:
+											case Field.TYPE_SMALL_INTEGER:
+											case Field.TYPE_SINGLE:
+											{
+												layDef += keyvalue;
+												break;
+											}											
+												
+											default:
+											{
+												layDef += "'" + keyvalue + "'";
+												break;
+											}
+										}
+										layer.definitionExpression = layDef;
+										
+										// Zoom to show the extent of the features if this is the first time the widget has been opened
+										if (showFeatures)
+										{
+											var query:Query = new Query();
+											query.where = layDef;
+											layer.selectFeatures(query,FeatureLayer.SELECTION_NEW,
+												new AsyncResponder(ZoomSelect_Results, ZoomSelect_Fault, layer));
+										}
+										
+										break;
+									}
+								}
+							}
+						}
+					}
+					
+					// Clear the show features flag if this is the first time the widget has been opened so that it will not perform a zoom again this session
+					if (showFeatures)
+					{
+						showFeatures = false;
+					}
+				}
+			}
+			
+			/** 
+			 * Called when the current selection of editable items is cleared
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FeatureLayerEvent]: </i>Event dispatched when a feature in an editable layer is selected.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function featureLayer_clearSelectionComplete(event:FeatureLayerEvent):void
+			{
+				var feature:Graphic;
+				var layer:FeatureLayer = event.featureLayer;
+				
+				// Remove the popup options
+				for each (feature in layer.graphicProvider)
+				{
+					feature.contextMenu = null;
+				}
+			}
+			
+			/**
+			 * Called prior to edits being sent to server.  Set prepared attribyte values, checks if deletes need to be comfirmed. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FeatureLayerEvent]: </i>Event dispatched when the process to commit an edit starts.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function featureLayer_editsStart(event:FeatureLayerEvent):void
+			{
+				// Get the editable layer and associated settings
+				var layer:FeatureLayer = event.featureLayer;
+				var fld:Object;
+				var field:Field;
+				var att:Object;
+				var editSettings:Object = layerToSettings[layer.name];  
+				
+				var date:Date = new Date();
+				
+				// Check for deletes edit type
+				if (event.deletes && event.deletes.length > 0)
+				{
+					if (confirmDeletes)
+					{
+						// Clone this event, then cancel it so we can get user confirmation and apply edits later
+						const eventClone:FeatureLayerEvent = event.clone() as FeatureLayerEvent;
+						
+						// Cancel event
+						event.preventDefault();
+						
+						// Confirm deletes
+						const msg:String = "Are you sure you want to delete these features?";
+						const title:String = (event.deletes.length > 1) ? "Confirm Deletes from " + event.featureLayer.name : "Confirm Delete from " + event.featureLayer.name;
+						Alert.show(msg, title, 3, map, confirmHandler);
+						
+						function confirmHandler(closeEvent:CloseEvent):void
+						{
+							if(closeEvent.detail == Alert.YES)
+							{
+								// Apply edits without confirmation
+								confirmDeletes = false;
+								eventClone.featureLayer.applyEdits(null, null, eventClone.deletes);
+							}
+						}
+					}
+					else
+					{
+						// Reset confirmation flag
+						confirmDeletes = true;
+					}
+				}
+				
+				// Check for adding new feature edit type
+				if (event.adds && event.adds.length > 0)
+				{
+					// Check feature types
+					for each (var add:Graphic in event.adds)
+					{
+						// Validate polygon geometry is not self intersection
+						if (add.geometry.type == Geometry.POLYGON)
+						{
+							if (GeometryUtil.polygonSelfIntersecting(add.geometry as Polygon))
+							{
+								// Cancel the edit and alert an issue
+								event.stopImmediatePropagation();
+								
+								// Show user an error warning message
+								Alert.show("The shape you are editing is self intersecting (i.e. crosses over its own boundary). You will need to remove this self insection before the feature can be saved.","Save Edits", Alert.OK, this.map);
+							}
+						}
+						
+						// Update the layer based on the edit settings
+						if (editSettings)
+						{
+							// Check to update the key field
+							if (keyvalue != "")
+							{
+								if (LayerUtil.hasField(event.featureLayer.layerDetails, editSettings.keyfield))
+								{
+									field = LayerUtil.getField(event.featureLayer.layerDetails, editSettings.keyfield);
+									switch (field.type)
+									{
+										case Field.TYPE_DOUBLE:
+										case Field.TYPE_SINGLE:
+										{
+											add.attributes[editSettings.keyfield] = Number(keyvalue);
+											break;
+										}
+											
+										case Field.TYPE_INTEGER:
+										case Field.TYPE_SMALL_INTEGER:
+										{
+											add.attributes[editSettings.keyfield] = int(keyvalue);
+											break;
+										}	
+											
+										case Field.TYPE_GUID:
+										{
+											// Check if key value contains the curly brackets - required for edits but not for searches
+											if (keyvalue.indexOf("}") == -1)
+											{
+												add.attributes[editSettings.keyfield] = "{" + keyvalue + "}";
+											}
+											else
+											{
+												add.attributes[editSettings.keyfield] = keyvalue;
+											}
+											break;
+										}	
+											
+										default:
+										{
+											add.attributes[editSettings.keyfield] = keyvalue;
+										}
+									}
+								}
+							}
+							
+							// Update the auto-calculating fields
+							for each (fld in editSettings.fields)
+							{
+								if (LayerUtil.hasField(layer.layerDetails, fld.name))
+								{
+									switch(fld.value)
+									{
+										case "POINTX":
+										{
+											add.attributes[fld.name] = GeometryUtil.getX(add.geometry);
+											break;
+										}
+										
+										case "POINTY":
+										{
+											add.attributes[fld.name] = GeometryUtil.getY(add.geometry);
+											break;
+										}
+										
+										case "DATE":
+										case "DATE_CAPTURE":	
+										{
+											add.attributes[fld.name] = date;
+											break;
+										}
+
+										case "SCALE":
+										case "SCALE_CAPTURE":
+										{
+											if (fld.value.search("_CAPTURE") == -1)
+											{
+												add.attributes[fld.name] = map.scale;
+											}
+											break;
+										}
+
+										/*
+										case "USER":
+										case "USER_CAPTURE":
+										{
+											if (_currentUser != "")
+											{
+												add.attributes[fld.name] = _currentUser;	
+											}
+											break;
+										}
+										*/
+										default: 
+										{
+											// Do nothing	
+										}
+									}
+								}
+							}
+						}
+						
+						// Update attributes based on any parameters
+						for each (att in editattributes)
+						{
+							// Get the associated field in the layer
+							if (LayerUtil.hasField(layer.layerDetails, att.field))
+							{
+								field = LayerUtil.getField(layer.layerDetails, att.field);
+								switch (field.type)
+								{
+									case Field.TYPE_DOUBLE:
+									case Field.TYPE_SINGLE:
+									{
+										add.attributes[field.name] = Number(att.value);
+										break;
+									}
+										
+									case Field.TYPE_INTEGER:
+									case Field.TYPE_SMALL_INTEGER:
+									{
+										add.attributes[field.name] = int(att.value);
+										break;
+									}	
+										
+									default:
+									{
+										add.attributes[field.name] = att.value;
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				// Check for updates edit type
+				if (event.updates && event.updates.length > 0)
+				{
+					// Check feature types
+					for each (var upd:Graphic in event.updates)
+					{
+						// Validate polygon geometry is not self intersection
+						if (upd.geometry.type == Geometry.POLYGON)
+						{
+							if (GeometryUtil.polygonSelfIntersecting(upd.geometry as Polygon))
+							{
+								// Cancel the edit and alert an issue
+								event.stopImmediatePropagation();
+								
+								// Show user an error warning message
+								Alert.show("The shape you are editing is self intersecting (i.e. crosses over its own boundary). You will need to remove this self insection before the feature can be saved.","Save Edits", Alert.OK, this.map);
+							}
+						}
+						
+						if (editSettings)
+						{
+							// Update the auto-calculating fields
+							for each (fld in editSettings.fields)
+							{
+								if (LayerUtil.hasField(layer.layerDetails, fld.name))
+								{
+									switch(fld.value)
+									{
+										case "SCALE":
+										case "SCALE_CAPTURE":
+										{
+											if (fld.value.search("_CAPTURE") == -1)
+											{
+												upd.attributes[fld.name] = map.scale;
+											}
+											break;
+										}
+											/*
+										case "USER":
+										case "USER_CAPTURE":
+										{
+											if (_currentUser != "" && fld.value.search("_CAPTURE") == -1)
+											{
+												upd.attributes[fld.name] = _currentUser;	
+											}
+											break;
+										}
+										*/
+										case "POINTX":
+										{
+											upd.attributes[fld.name] = GeometryUtil.getX(upd.geometry);
+											break;
+										}
+											
+										case "POINTY":
+										{
+											upd.attributes[fld.name] = GeometryUtil.getY(upd.geometry);
+											break;
+										}
+											
+										case "DATE":
+										case "DATE_CAPTURE":	
+										{
+											if (fld.value.search("_CAPTURE") == -1)
+											{ 
+												upd.attributes[fld.name] = date;
+											}
+											break;
+										}
+											
+										default: 
+										{
+											// Do nothing	
+										}
+									}
+								}
+							}					
+						}
+						
+						// Update attributes based on any parameters
+						for each (att in editattributes)
+						{
+							// Get the associated field in the layer
+							if (LayerUtil.hasField(layer.layerDetails,att.field))
+							{
+								field = LayerUtil.getField(layer.layerDetails,att.field);
+								switch (field.type)
+								{
+									case Field.TYPE_DOUBLE:
+									case Field.TYPE_SINGLE:
+									{
+										upd.attributes[field.name] = Number(att.value);
+										break;
+									}
+										
+									case Field.TYPE_INTEGER:
+									case Field.TYPE_SMALL_INTEGER:
+									{
+										upd.attributes[field.name] = int(att.value);
+										break;
+									}	
+										
+									default:
+									{
+										upd.attributes[field.name] = att.value;
+									}
+								}
+							}
+						}
+					}
+				}				
+			}
+			
+			/** 
+			 * Called when edits are finished.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FeatureLayerEvent]: </i>Event dispatced when the edit process on an edit layer is complete.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function featureLayer_editsComplete(event:FeatureLayerEvent):void
+			{
+				var index:int = editor.attributeInspector.activeFeatureIndex;
+				if (event.updates && event.updates.length > 0)
+				{
+					editor.attributeInspector.refresh();			
+					editor.attributeInspector.activeFeatureIndex = index;
+				}
+			}
+			
+			/** 
+			 * Called when a feature in a layer is modified (moved, scaled, rotated, etc)
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>results [FeatureEditResults]: </i>Results object containing the details of the records that were added, updated or removed.</li>
+			 * <li><i>token [Object]: </i>Object attached to the end if any.  Not used in this function but required by RPC function.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function editsComplete(results:FeatureEditResults, token:Object = null):void
+			{
+				showFinishEdits("Features Updated.");
+				editor.editTool.deactivate();
+			}
+
+			/** 
+			 * Called when a new feature is created and added to a layer via one of the create dialogs.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>results [FeatureEditResults]: </i>Results object containing the details of the records that were added, updated or removed.</li>
+			 * <li><i>token [Object]: </i>Object attached to the end if any.  Not used in this function but required by RPC function.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function createsComplete(results:FeatureEditResults, token:Object = null):void
+			{
+				// Show the completion message
+				showFinishEdits("New Features Created.");
+				editor.editTool.deactivate();
+				
+				// Get the template and layer details
+				var template:Template = token.template;
+				var layer:FeatureLayer = template.featureLayer;
+				var objectIDField:String = layer.layerDetails.objectIdField;
+				var layDef:String = objectIDField + " in (";
+				
+				// If the layer is valid and add results were returned
+				if (layer && results.addResults.length > 0)
+				{
+					// Iterate through the add results
+					for each (var res:FeatureEditResult in results.addResults)
+					{
+						// Add to the layer definition string)
+						layDef += res.objectId.toString() + ",";
+					}
+					layDef = layDef.substr(0,layDef.length - 1) + ")";
+					  
+					var query:Query = new Query();
+					query.where = layDef; 
+					layer.selectFeatures(query, FeatureLayer.SELECTION_NEW);
+				}
+			}
+			
+			/** 
+			 * Called if an edit function (creating a new feature or modifying existing ones) raises an error result. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Event dispatced when the widget creation has been completed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function editsFault(event:Fault, token:Object = null):void
+			{
+				Alert.show(event.toString(),"Edit Records");
+			}
+
+			/** 
+			 * Called by the select features object to zoom to the feature on screen
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>featureSet [Object]: </i>Results returned from a query against the editable layers.</li>
+			 * <li><i>token [Object]: </i>Pass through toke object. </li>
+			 * </ul>
+			 * </p>
+			 */  
+			private function ZoomSelect_Results(featureSet:Object, token:Object = null):void
+			{
+				// Check if there are returned features
+				if (featureSet.length > 0)
+				{
+					var graphic:Graphic;
+					var pt:MapPoint;
+					var ext:Extent;
+					var edits:Array = [];
+					
+					// Iterate through the graphics to extract the extent
+					for each (graphic in featureSet)
+					{
+						// Prepare a zoom buffer distance 
+						var buffer:Number = 500;
+						
+						// Check if graphic is a point (no extent)
+						if (graphic.geometry.type == Geometry.MAPPOINT)
+						{
+							// Geometry is a point - generate an extent based on the zoom buffer distance
+							pt = graphic.geometry as MapPoint;
+							ext = new Extent(pt.x - buffer, pt.y - buffer, pt.x + buffer, pt.y + buffer, map.spatialReference);						
+						} 
+						else
+						{
+							// Geometry has an extent
+							ext = graphic.geometry.extent;						
+						}
+						
+						// Check if a previous definition extent exists
+						if (definitionextent)
+						{
+							// Use the union of the two extents 
+							definitionextent = definitionextent.union(ext);
+						}
+						else
+						{
+							// Use the graphic extent
+							definitionextent = ext;
+						}
+						
+						// Push the graphic to the edits array to activate the edit tool
+						edits.push(graphic);
+					}
+					
+					// Update the map extent
+					definitionextent = definitionextent.expand(1.1);
+					map.zoomTo(definitionextent);
+					
+					// Refresh the map layer
+					var layer:FeatureLayer = token as FeatureLayer;
+					layer.refresh();
+					
+					// Clear the current selected template
+					editor.templatePicker.clearSelection();
+					
+					// Activate the edit tool for the editable graphics
+					editor.editTool.activate(EditTool.MOVE|EditTool.EDIT_VERTICES, edits);
+					
+					// Show the attribute window on the next screen refresh
+					callLater(showAttributesWindow);
+				}
+			}
+			
+			/** 
+			 * Called if the selection event fails.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event dispatced when the selection event fails.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function ZoomSelect_Fault(event:Event):void
+			{
+				Alert.show("Something didn't work");
+			}
+			
+			
+			
+			/* NOTIFY SERVICE FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/**
+			 * Returns the FormFieldOrder setting value based on the attribute value stored in the settings xml file.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatced when one of the notify service buttons is clicked.</li>
+			 * </ul>
+			 * </p>
+			 */			
+			protected function notifyButtons_clickHandler(event:MouseEvent):void
+			{
+				// Disable the click option to prevent a double click from being initiated
+				(event.currentTarget as ButtonBar).enabled = false;
+				
+				// Change the state to show the working image				
+				this.currentState = "commitcancel";
+				
+				// Get the selected button
+				var service:Object = notifyButtons.selectedItem;
+				
+				var url:String = service.url;
+				var window:String = "_blank"; 
+				if (service.redirect)
+				{
+					window = "_self";
+				}
+				
+				// Check for parameters
+				for each (var param:Object in service.parameters)
+				{
+					switch (param.source)
+					{
+						case "url": 
+						{
+							// Get the parameter id value from a url parameter
+							for (var att:String in ViewerContainer.urlConfigParams)
+							{
+								if (att == param.value)
+								{
+									url = url.replace("{" + param.name + "}", ViewerContainer.urlConfigParams[att]);
+									break;
+								}
+							}
+							
+							break;
+						}
+							
+						case "attribute":
+						{
+							if (ViewerContainer.urlConfigParams.ATTVALUES != null)
+							{
+								// Get the key/value pairs
+								var pairs:Array = String(ViewerContainer.urlConfigParams.ATTVALUES).split(",");
+								
+								for each (var keypair:String in pairs)
+								{
+									var vals:Array = keypair.split("|");
+									var field:String = vals[0];
+									var value:String = vals[1];
+									
+									if (field == param.value)
+									{
+										url = url.replace("{" + param.name + "}",value);
+									}
+								}
+							}
+							break;
+						}
+					}
+				}
+				
+				switch (service.responsetype)
+				{
+					case "confirm":
+					{
+						Alert.show(service.message,service.label,Alert.OK|Alert.CANCEL,map,alertClickHandler,null,Alert.OK);		
+						
+						break;
+					}
+						
+					default:
+					{
+						// Excute the navigation event
+						navigateToURL(new URLRequest(url), window);
+
+						if (window == "_blank")
+						{
+							// Re-enable the notify buttons and rest the state
+							notifyButtons.enabled = true;
+							
+							// Change the state tos how the working image				
+							currentState = "normal";
+						}
+					}
+				}
+				
+				// Reset the button bar
+				notifyButtons.selectedIndex = -1;
+				notifyButtons.invalidateDisplayList();
+				validateNow();
+				
+				// Event handler function for displaying the selected Alert button.
+				function alertClickHandler(evt:CloseEvent):void {
+					if (evt.detail == Alert.OK) {
+						// Excute the navigation event
+						navigateToURL(new URLRequest(url), window);
+						
+						if (window == "_blank")
+						{
+							// Re-enable the notify buttons and rest the state
+							notifyButtons.enabled = true;
+							
+							// Change the state tos how the working image				
+							currentState = "normal";
+						}
+					}
+					else 
+					{
+						// Re-enable the notify buttons and rest the state
+						notifyButtons.enabled = true;
+						
+						// Change the state tos how the working image				
+						currentState = "normal";
+					}
+				}
+			}
+
+			
+			
+			/* WORKING STATE FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Shows the working message on the editor window
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [String]: </i>Text message to display in the editor window.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function showApplyEdits(message:String = ""):void
+			{
+				lastSkinState = editor.skin.currentState;
+				
+				var e:EditWidgetEditorSkin = editor.skin as EditWidgetEditorSkin;
+				e.operationStartLabel.text = message;
+				e.currentState = "applyingEdits";
+			}
+			
+			/** 
+			 * Shows the work complete message on the editor window, then hides it.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [String]: </i>Message to display in the editor window before it is hidden.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function showFinishEdits(message:String = ""):void
+			{
+				var e:EditWidgetEditorSkin = editor.skin as EditWidgetEditorSkin;
+				e.operationCompleteLabel.text = message;
+				e.operationCompleteLabel.visible = e.operationCompleteLabel.includeInLayout = true;
+				editor.skin.currentState = lastSkinState;
+				e.fade.play([e.operationCompleteLabel]);
+			}
+						
+			
+
+			/* INTERACTIVE MEASUREMENT FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called at the beginning of a draw action.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [DrawEvent]: </i>Event dispatched when draw tool starts a draw action.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function drawTool_drawStartHandler(event:DrawEvent):void
+			{
+				// Add a label to display the results
+				var label:Label = new Label();
+				label.name = "measurementLabel";
+				map.staticLayer.addElement(label);
+				label.x = map.mouseX + 15;
+				label.y = map.mouseY - 50;
+				
+				label.setStyle("color", 0x000000);
+				label.setStyle("fontWeight", FontWeight.BOLD);
+				
+				// Add glowfilter
+				var glow:GlowFilter = new GlowFilter(0xFFFFFF, 0.7, 6, 6, 4, 1);
+				label.filters = [glow];
+			}
+			
+			/** 
+			 * Called as the mouse moves when the draw tool is activated.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [DrawEvent]: </i>Event dispatched by the draw tool as the mouse moves.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function drawTool_drawUpdateHandler(event:DrawEvent):void
+			{
+				var geometry:Geometry = event.graphic.geometry;
+				
+				var labelText:String = "";
+				var pt:MapPoint;
+				
+				switch(geometry.type) {
+					
+					case Geometry.MULTIPOINT:
+						var mpt:Multipoint = geometry as Multipoint;
+						labelText = mpt.points.length.toString();
+						
+						break;
+					
+					case Geometry.MAPPOINT:
+						// Do nothing
+						
+						break;
+					
+					case Geometry.POLYLINE:
+						var lin:Polyline = geometry as Polyline;
+						numberFormatter.fractionalDigits = _distancePrecision;
+						labelText = _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(lin) * _distanceConversion) + _distanceUnitLabel  + "\n" + 
+						_totalLengthLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(lin) * _distanceConversion) + _distanceUnitLabel;
+						break;
+					
+					case Geometry.POLYGON:
+						var pol:Polygon = geometry as Polygon;
+						
+						//(editor.skin as EditWidgetEditorSkin).drawDropDownList.selectedItem.drawId
+						switch ((editor.skin as EditWidgetEditorSkin).drawDropDownList.selectedItem.drawId)
+						{
+							case "circle":
+								// Calculate the area
+								numberFormatter.fractionalDigits = _areaPrecision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * _areaConversion) + _areaUnitLabel + "\n";
+						
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = _distancePrecision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * _distanceConversion) + _distanceUnitLabel + "\n";
+						
+								// Calculate the radius
+								labelText += _radiusLabel + numberFormatter.format(GeometryUtil.getCircleRadius(pol) * _distanceConversion) + _distanceUnitLabel;
+						
+								break;
+						
+							default:
+								// Calculate the area
+								numberFormatter.fractionalDigits = _areaPrecision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * _areaConversion) + _areaUnitLabel + "\n";
+								
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = _distancePrecision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * _areaConversion) + _distanceUnitLabel + "\n";
+								
+								// Calculate the last segment length 
+								labelText += _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(pol) * _distanceConversion) + _distanceUnitLabel;
+						}
+						break;
+					
+					case Geometry.EXTENT:
+						var ext:Extent = geometry as Extent;
+						// Calculate the area
+						numberFormatter.fractionalDigits = _areaPrecision;
+						labelText += _areaLabel + numberFormatter.format((ext.height * ext.width) * _areaConversion) + _areaUnitLabel + "\n";
+						
+						// Calculate the perimeter
+						numberFormatter.fractionalDigits = _distancePrecision;
+						labelText += _perimeterLabel + numberFormatter.format((ext.height * 2 + ext.width * 2) * _distanceConversion) + _distanceUnitLabel + "\n";
+						
+						// Calculate the height and width
+						labelText += _widthLabel + numberFormatter.format(ext.width * _distanceConversion) + _distanceUnitLabel + " " +
+						_heightLabel + numberFormatter.format(ext.height * _distanceConversion) + _distanceUnitLabel;
+						
+						break;
+				}
+				
+				
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					label.text = labelText;
+					label.x = map.mouseX + 15;
+					label.y = map.mouseY - 50;
+				}
+			}			
+			
+			/** 
+			 * Called at the end of of a draw action.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [DrawEvent]: </i>Event dispatched by the draw tool as the mouse moves.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function drawTool_drawEndHandler(event:DrawEvent):void
+			{
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					map.staticLayer.removeElement(label);
+				}
+			}
+			
+			
+			/* HELP FUNCTIONALITY
+			---------------------------------------------------------------------------------- */
+
+			/** 
+			 * Called when the help button on the widget menu is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showHelp():void 
+			{
+				navigateToURL(new URLRequest(_helpLocation), "_blank");
+			}
+
+		]]>
+    </fx:Script>
+
+	<viewer:states>
+		<s:State name="normal" />
+		<s:State name="commitcancel" />
+		<s:State name="deactivated" />
+	</viewer:states>
+	
+    <fx:Declarations>
+        <esri:GeometryService id="geometryService" url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"/>
+        <esri:CreateOptions id="createOptions"/>
+        <esri:AttachmentInspector id="attachmentInspector"
+                                  width="{Math.max(map.infoWindowContent.width, 300)}" height="{Math.max(map.infoWindowContent.height, 300)}"
+                                  infoWindowLabel="{attachmentsLabel}"
+                                  initialize="attachmentInspector_initializeHandler(event)"
+                                  skinClass="widgets.EditEnhanced.EditWidgetAttachmentInspectorSkin"/>
+        <esri:RelationshipInspector id="relationshipInspector"
+                                    width="{Math.max(map.infoWindowContent.width, 300)}" height="{Math.max(map.infoWindowContent.height, 300)}"
+                                    editEnabled="true"
+                                    infoWindowLabel="{relatedRecordsLabel}"
+                                    skinClass="widgets.EditEnhanced.EditWidgetRelationshipInspectorSkin"/>
+    
+		<!--- Number formater for drawing measurements -->
+		<s:NumberFormatter id="numberFormatter" fractionalDigits="2" useGrouping="true" />
+		
+		<!--- Fade Effect -->
+		<!--- @private -->
+		<s:Fade id="fade"
+				alphaFrom="1"
+				alphaTo="0"
+				duration="1500" />
+	</fx:Declarations>
+
+    <viewer:WidgetTemplate id="wTemplate"
+                           closed="widgetClosedHandler(event)"
+                           minimized="widgetMinimizedHandler(event)"
+                           open="widgetOpenedHandler(event)">
+        <viewer:layout>
+            <s:VerticalLayout paddingLeft="5" paddingTop="10"/>
+        </viewer:layout>
+
+		<!--- Edit Mode -->
+		<s:HGroup id="editState" width="100%" gap="10" horizontalAlign="center" paddingBottom="5" verticalAlign="middle" 
+				  visible="true" visible.commitcancel="false"
+				  includeInLayout="true" includeInLayout.commitcancel="false" >
+			<s:Label id="editStateLabel" text="Edit State" height="40" verticalAlign="middle" /> 
+			<s:Button id="editStateButton" width="100%" height="40"
+					  label.deactivated="Start Editing" 
+					  label.normal="Stop Editing" 
+					  color.deactivated="0x000000" 
+					  color.normal="0xffffff" 
+					  chromeColor.deactivated="0x00ff00" 
+					  chromeColor.normal="0xff0000" 
+					  click.deactivated="editStateButton_clickHandler(event)"  
+					  click.normal="editStateButton_clickHandler(event)" 
+					  buttonMode="true"
+					  useHandCursor="true" />
+		</s:HGroup> 
+		
+		<!--- Editing Tools -->
+		<s:VGroup width="100%" height="100%" 
+				  visible="true" visible.commitcancel="false" visible.deactivated="false"
+				  includeInLayout="true" includeInLayout.commitcancel="false" includeInLayout.deactivated="false" >
+
+        <s:Label id="noLayers"
+                 width="100%"
+                 includeInLayout="false"
+                 text="{noEditableLayersText}"
+                 visible="false"/>
+        <esri:Editor id="editor"
+                     width="100%" height="100%"
+                     geometryService="{geometryService}" />
+
+		</s:VGroup>
+		
+		<s:ButtonBar id="notifyButtons" 
+					 dataProvider="{_notifyServices}" 
+					 labelField="label" 
+					 click="notifyButtons_clickHandler(event)" 
+					 visible="{_notifyServices.length &gt; 0}" 
+					 visible.commitcancel="false"
+					 includeInLayout="{_notifyServices.length &gt; 0}" 
+					 includeInLayout.commitcancel="false"
+					 width="100%" 
+					 buttonMode="true"
+					 useHandCursor="true" />
+		
+		<!--- Working Message Area -->
+		<s:VGroup width="100%" height="100%" 
+				  visible="false" visible.commitcancel="true" 
+				  includeInLayout="false" includeInLayout.commitcancel="true" >
+			
+			<s:HGroup id="hgrpWorking" gap="5" width="100%" height="100%" 
+					  horizontalAlign="center" verticalAlign="middle" >
+				<mx:Image id="swfMessage"
+						  source="assets/images/loader.swf"
+						  visible="true" height="50" width="50"/>
+				<s:Label id="txtMessage"
+						 text="Working"/>
+			</s:HGroup>
+			
+		</s:VGroup>
+	</viewer:WidgetTemplate>
+</viewer:BaseWidget>

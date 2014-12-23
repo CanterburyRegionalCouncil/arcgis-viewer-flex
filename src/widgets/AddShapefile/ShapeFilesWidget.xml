@@ -1,0 +1,51 @@
+<?xml version="1.0" ?>
+<configuration>
+	<labelbydefault>false</labelbydefault>
+	<defaultlabelplacement>middle</defaultlabelplacement>
+	<autozoom>true</autozoom>
+	<symbols>
+		<simplefillsymbol color="0x4dfe45" alpha="0.6" style="solid">
+			<outline color="0x088802" alpha="0.8" width="1" style="solid"/>
+		</simplefillsymbol>
+		<simplemarkersymbol style="circle" size="15" color="0x4dfe45" alpha="0.6" angle="0">
+			<outline color="0x088802" alpha="0.8" width="1" style="solid"/>
+		</simplemarkersymbol>
+		<simplelinesymbol color="0x088802" alpha="0.8" width="2" style="solid"/>
+		<TextSymbol color="0x000000" size="12" bold="false" italics="false" underline="false" font="Verdana"/>
+	</symbols>
+	<spatialreferences>
+		<spatialreference wkt='PROJCS["NZGD_2000_New_Zealand_Transverse_Mercator",GEOGCS["GCS_NZGD_2000",DATUM["D_NZGD_2000",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",1600000.0],PARAMETER["False_Northing",10000000.0],PARAMETER["Central_Meridian",173.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]' wkid="2193" />
+	</spatialreferences>
+	<labels>
+		<textplacementmiddle>Middle</textplacementmiddle>
+		<textplacementabove>Above</textplacementabove>
+		<textplacementbelow>Below</textplacementbelow>
+		<textplacementend>End</textplacementend>
+		<textplacementstart>Start</textplacementstart>
+		<textboldlabel>B</textboldlabel>
+		<textboldtooltip>Bold</textboldtooltip>
+		<textitaliclabel>I</textitaliclabel>
+		<textitalictooltip>Italics</textitalictooltip>
+		<textunderlinelabel>U</textunderlinelabel>
+		<textunderlinetooltip>Underline</textunderlinetooltip>
+		<instructions>To load a shapefile the files must be zipped.&#13;&#13;At a minimum there must be 2 files in the zip, 1 .shp, 1 .dbf, and an optional .prj file.&#13;&#13;Click the button below to upload a shapefile from your computer.&#13;&#13;To change symbology and other preferences click on the wrench icon above.</instructions>
+		<loadbutton>Load Local Shapefile...</loadbutton>
+		<addbutton>Load Shapefile</addbutton>
+		<optionsbutton>Preferences</optionsbutton>
+		<readingmessage>Reading shapefile</readingmessage>
+		<reprojectingmessage>Reprojecting</reprojectingmessage>
+		<numberoffeaturesmessage>Number of Features:</numberoffeaturesmessage>
+		<addedmessage>Added Shapefiles:</addedmessage>
+		<addlabels>Add Labels from the first text field in the shapefile</addlabels>
+		<labelplacement>Label placement</labelplacement>
+		<includeoutline>Include Outline</includeoutline>
+		<!-- This is the text that is appended to the beginning of the zipfile name to indicate the shapefiles labels in the TOC -->
+		<labelstexttoadd>Labels</labelstexttoadd>
+		
+		<!-- Help label settings -->
+		<helplabel>Help</helplabel>
+	</labels>
+	
+	<!-- Help Location Settings -->
+	<helplocationurl>http://somewebsite.com/HGelpTopic</helplocationurl>
+</configuration>

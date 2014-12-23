@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<configuration>
+    <!-- Image location for -->
+    <imageurl>assets/images/globe.png</imageurl>
+    
+    <!-- If the Workspace widget is to run in CentralRepository storage mode, this URL specifies the location of the webservices used. -->
+	<CentralStorageEndpoint>http://localhost/maps.GISmo3.Internal/Services/WebServicePortal.asmx</CentralStorageEndpoint>
+	<CentralStorageServiceName>WebServicePortal</CentralStorageServiceName>
+	<CentralStorageServicePort>WebServicePortalSoap</CentralStorageServicePort>
+    
+    <!-- URLHandlerPreloadDelay: (default = 1000) used by WorkspaceURLHandler as a short delay (in milliseconds) to wait before running the Main Workspace widget -->
+    <URLHandlerPreloadDelay>1000</URLHandlerPreloadDelay>
+
+	<!-- Basemaps - Used to determine possible layers to be tagged as basemaps when converting to workspaces to webmaps -->
+	<basemap>http://arcgis.ecan.govt.nz/arcgis/rest/services/Imagery/MapServer</basemap>
+	<basemap>http://arcgis.ecan.govt.nz/arcgis/rest/services/Topoimagery/MapServer</basemap>
+	<basemap>http://arcgis.ecan.govt.nz/arcgis/rest/services/Public/No_Background/MapServer</basemap>
+
+	<basemap>http://arcgisprod03/arcgis/rest/services/Imagery/MapServer</basemap>
+	<basemap>http://arcgisprod03/arcgis/rest/services/Topoimagery/MapServer</basemap>
+	<basemap>http://arcgisprod03/arcgis/rest/services/Public/No_Background/MapServer</basemap>
+
+	<basemap>http://arcgisprod02/arcgis/rest/services/Imagery/MapServer</basemap>
+	<basemap>http://arcgisprod02/arcgis/rest/services/Topoimagery/MapServer</basemap>
+	<basemap>http://arcgisprod02/arcgis/rest/services/Public/No_Background/MapServer</basemap>
+
+	<basemap>http://silt/arcgis/rest/services/Imagery/MapServer</basemap>
+	<basemap>http://silt/arcgis/rest/services/Topoimagery/MapServer</basemap>
+	<basemap>http://silt/arcgis/rest/services/Public/No_Background/MapServer</basemap>
+	
+	<basemap>http://gis.ecan.govt.nz/arcgis/rest/services/Imagery/MapServer</basemap>
+	<basemap>http://gis.ecan.govt.nz/arcgis/rest/services/Topoimagery/MapServer</basemap>
+	<basemap>http://gis.ecan.govt.nz/arcgis/rest/services/SimpleBasemap/MapServer</basemap>
+
+    <!-- Label details for the widget -->
+	<labels>
+		<!-- UI Button Labels -->	    
+	    <openbutton>Open</openbutton>
+	    <emailbutton>Email</emailbutton>
+	    <deletebutton>Delete</deletebutton>
+	    <savebutton>Save</savebutton>
+	    <newbutton>New...</newbutton>
+	    
+	    <!-- Workspace Detail Save/Edit Labels -->
+	    <newtitle>Name:</newtitle>
+	    <newdescription>Description:</newdescription>
+	    <includegroup>Include:</includegroup>
+	    <includegraphics>Drawn Graphics</includegraphics>
+	    <includemaplayers>Map Layers</includemaplayers>
+	    <newsavebutton>Save</newsavebutton>
+	    <newcancelbutton>Cancel</newcancelbutton>
+	    
+		<!-- Overwrite Workspace Options -->	    
+	    <saveconfirmationtext>Are you sure you want to replace this workspace?</saveconfirmationtext>
+	    <saveconfirmationtitle>Confirm</saveconfirmationtitle>
+	    
+		<!-- Delete Workspace Options -->	    
+	    <deleteconfirmationtext>Are you sure you want to delete this workspace?</deleteconfirmationtext>
+	    <deleteconfirmationtitle>Confirm</deleteconfirmationtitle>
+		
+		<!-- Clear Existing Features Option -->
+		<clearfeatureslabel>Clear</clearfeatureslabel>
+		<clearfeaturestootip>When ticked, any layers currently in the map that are not also within a workspace that is being loaded will be removed.</clearfeaturestootip>
+		
+		<!-- Filtering Options -->
+		<filterlisttext>Filter Workspaces</filterlisttext>
+		<filterlistprompt>Enter keywords</filterlistprompt>
+		<filterlistclear>Clear</filterlistclear>
+
+		<!-- Messages -->
+	    <loadingworkspaceslabel>Loading Workspaces...</loadingworkspaceslabel>
+		<openingworkspacelabel>Opening workspace...</openingworkspacelabel>
+	</labels>
+		
+	<!-- Help Location Settings -->
+	<helplocationurl>http://ecan.govt.nz</helplocationurl>
+</configuration>

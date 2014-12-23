@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" 
+		 width="400" height="300">
+
+	<fx:Metadata>
+		[Event(name="queryChanged", type="mx.events.FlexEvent")] 
+		[Event(name="queryCleared", type="mx.events.FlexEvent")] 
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.controls.textClasses.TextRange;
+			import mx.events.FlexEvent;
+			
+			import widgets.supportClasses.PagingQueryTask;
+			
+
+			/* QUERY BUILDER VARIABLES
+			-------------------------------------------------------------------------- */
+
+			[Bindable]
+			private var _layerNameLabel:String = "Layer";
+			[Bindable]
+			private var _layerUrl:String = "";
+			[Bindable] 
+			private var _queryFields:ArrayCollection = new ArrayCollection();
+			[Bindable] 
+			private var _pagingQueryTask:PagingQueryTask = new PagingQueryTask;
+			
+			// Labels
+
+			
+
+			/* QUERY BUILDER PROPERTIES
+			-------------------------------------------------------------------------- */
+
+			// Search Layer properties
+			
+			/**
+			 * Display name of the feature layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Display name of the layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerName():String
+			{
+				return _layerNameLabel;	
+			}
+			
+			public function set layerName(value:String):void
+			{
+				_layerNameLabel = value;	
+			}
+			
+
+			/**
+			 * URL path of the feature layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Full URL of the layer's REST service end point.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerURL():String
+			{
+				return _layerUrl;	
+			}
+			
+			public function set layerURL(value:String):void
+			{
+				_layerUrl = value;	
+			}
+
+			
+			/**
+			 * List of field details associated with the layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Array]: </i>List of the layers field details.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerFields():Array
+			{
+				return _queryFields.toArray();	
+			}
+			
+			public function set layerFields(value:Array):void
+			{
+				_queryFields = new ArrayCollection(value);	
+			}
+
+			
+			// Query String
+			
+			/**
+			 * Current Query String Property.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Full URL of the layer's REST service end point.</li>
+			 * </ul>
+			 * </p>
+			 */
+			[Bindable]
+			public function get queryText():String
+			{
+				return this.queryFilter.text;	
+			}
+			
+			public function set queryText(value:String):void
+			{
+				this.queryFilter.text = value;	
+			}
+			
+			
+			
+			
+			
+			/* QUERY BUILDER FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when one of the operator buttons is clicked by the user.
+			 */
+			private function operatorClick(event:Event):void
+			{
+				var str:String = event.currentTarget.label;
+				str = str.toUpperCase();
+				updateText(str);
+			}
+			
+			/**
+			 * Handler for when an item in the field list is doubled clicked
+			 */
+			private function fieldListDoubleClick(event:Event):void
+			{	
+				retreiveFieldValues(event);
+				updateText(event.currentTarget.selectedItem.name);
+			}
+			
+			/**
+			 * Handler for when an item in the values list is doubled clicked
+			 */			
+			private function valListDoublClick(event:Event):void
+			{	
+				updateText(event.currentTarget.value);
+			}
+			
+			/**
+			 * Update the text displayed in the query filter expression box
+			 */
+			private function updateText(val:String):void
+			{
+				if (!val)
+				{
+					return;
+				}
+				
+				var beginIx:int = queryFilter.selectionBeginIndex;
+				var endIx:int = queryFilter.selectionEndIndex;
+				
+				var tr1:TextRange = new TextRange(queryFilter, false, beginIx, endIx);
+				tr1.text = val;
+				
+				//dont add leading or trailing space to wildcard characters
+				if (val == '%' || val == '_' )
+				{
+					moveCursor(beginIx + tr1.text.length);
+					return;
+				}
+				
+				//only add leading space if cursor is not at the start of the text
+				if (beginIx > 0 )
+				{
+					//Check to see if there is a space before and after the selected text
+					//If not add one.
+					var trSpace:TextRange = new TextRange(queryFilter, false, beginIx -1, beginIx);
+					if (trSpace.text != " ")
+					{
+						tr1.text = " " +  val;
+					}
+				}
+				// add a trailing space	
+				trSpace = new TextRange(queryFilter, false, endIx, endIx + 1);
+				if (trSpace.text != " ")
+				{
+					tr1.text += " ";
+				}
+				moveCursor(beginIx + tr1.text.length);
+				
+				this.dispatchEvent(new FlexEvent("queryChanged"));				
+			}
+			
+			private function moveCursor(endIx:int):void
+			{
+				//move the cursor to the end of the selected text and reset the focus
+				queryFilter.setSelection(endIx, endIx); 
+				queryFilter.setFocus();
+			}  
+			
+			private function pagingQueryTask_complete(event:Event):void
+			{
+				this.cursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * Label function used for labelling the fields in the pick list.
+			 */
+			private function targetLayerFieldsLabelFunc(item:Object):String 
+			{
+				return item.alias;
+			}
+			
+			/**
+			 * Retrieves sample values from the target layer for the selected field.
+			 */
+			private function retreiveFieldValues(event:Event):void
+			{	
+				this.cursorManager.setBusyCursor();
+				var fld:Object = fieldsLst.selectedItem as Object;
+				
+				_pagingQueryTask = new PagingQueryTask(_layerUrl, 
+					fieldsLst.selectedItem.name,
+					fld.type);
+				_pagingQueryTask.addEventListener("pagingComplete", pagingQueryTask_complete);
+				_pagingQueryTask.execute();
+			}
+			
+			protected function queryFilter_changeHandler(event:Event):void
+			{
+				this.dispatchEvent(new FlexEvent("queryChanged"));
+			}
+			
+			protected function queryFilter_textInputHandler(event:TextEvent):void
+			{
+				this.dispatchEvent(new FlexEvent("queryChanged"));
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	
+	
+	<!--- Field Selection selection -->
+	<s:Label text="Fields:" width="100%"/>
+	
+	<s:List id="fieldsLst" width="100%"
+			height="85"
+			fontSize="10"
+			dataProvider="{_queryFields}"
+			doubleClick="fieldListDoubleClick(event)" 
+			doubleClickEnabled="true"
+			labelFunction="targetLayerFieldsLabelFunc" /> 
+	
+	<s:HGroup height="140" width="100%" 
+			  paddingTop="5" paddingBottom="5">	
+		<s:VGroup height="100%">
+			<s:Label text="Operators:"/>
+			<s:HGroup>
+				<s:VGroup>
+					<s:Button id="equal" label="=" 
+							  width="35" fontSize="10" 
+							  click="operatorClick(event)"/>
+					<s:Button id="less" label="&lt;" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="greater" label="&gt;" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="under" label="_" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+				</s:VGroup>
+				<s:VGroup>
+					<s:Button id="different" label="&lt;&gt;"
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="lessorqual" label="&lt;=" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="greaterorequal" label="&gt;=" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="perc" label="%" 
+							  width="35" fontSize="10"
+							  click="operatorClick(event)"/>
+				</s:VGroup>
+				<s:VGroup>
+					<s:Button id="like" label="Like" 
+							  width="40" fontSize="10" 
+							  click="operatorClick(event)"/>
+					<s:Button id="and" label="and" 
+							  width="40" fontSize="10"
+							  click="operatorClick(event)"/>
+					<s:Button id="or" label="or" 
+							  width="40" fontSize="10"  
+							  click="operatorClick(event)"/>		
+				</s:VGroup>    	    	
+			</s:HGroup>		            
+		</s:VGroup>
+		<s:VGroup height="100%" width="100%">
+			<s:Label text="Values:" width="50"/> 
+			<mx:List
+				id="valuesLst" 
+				width="100%" height="100%"
+				fontSize="10"
+				dataProvider="{_pagingQueryTask.uniqueValues}"
+				doubleClick="valListDoublClick(event)" 
+				doubleClickEnabled="true"/>	
+			<s:Button id="getUniqueBtn"  label="Get Unique Values " fontSize="10" 
+					  click="retreiveFieldValues(event)"
+					  enabled="{fieldsLst.selectedIndex >= 0}"
+					  visible="{!_pagingQueryTask.isQuerying}" 
+					  includeInLayout="{!_pagingQueryTask.isQuerying}"/>
+			<s:Label id="uniqueIDStatus"
+					 text="{'Processing: ' + _pagingQueryTask.featuresProcessed + 
+					 ' of ' + _pagingQueryTask.featuresTotal + ' \n(Esc to Cancel)'}"
+					 width="100%"
+					 visible="{_pagingQueryTask.isQuerying}" 
+					 includeInLayout="{_pagingQueryTask.isQuerying}"/> 
+		</s:VGroup>		   	  		      
+	</s:HGroup>
+	
+	<s:Label text="SELECT * FROM {_layerNameLabel} WHERE:"
+			 fontSize="10" fontWeight="normal"
+			 width="100%" height="12"/>
+	<mx:TextArea id="queryFilter" 
+				 height="100%" width="100%"
+				 selectable="true" borderColor="{getStyle('borderColor')}"
+				 change="queryFilter_changeHandler(event)"  
+				 textInput="queryFilter_textInputHandler(event)"/>
+	<s:HGroup width="100%" verticalAlign="middle" horizontalAlign="center">
+		<s:Button id="clearFilter" label="Clear"
+				  click="{queryFilter.text = ''; queryFilter.setFocus();}" 
+				  enabled="{queryFilter.text.length &gt; 0}"/>
+	</s:HGroup>
+</s:Group>

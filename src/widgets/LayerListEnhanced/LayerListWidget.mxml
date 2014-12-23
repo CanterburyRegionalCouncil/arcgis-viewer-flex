@@ -1,0 +1,1415 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright © 2008 - 2009 ESRI
+//
+// All rights reserved under the copyright laws of the United States.
+// You may freely redistribute and use this software, with or
+// without modification, provided you include the original copyright
+// and use restrictions.  See use restrictions in the file:
+// <install location>/FlexViewer/License.txt
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:esri=			"http://www.esri.com/2008/ags"
+				   xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=		"com.esri.viewer.*" 
+				   xmlns:toccomp=		"widgets.supportClasses.components.*" 
+				   xmlns:layeralpha=	"widgets.LayerListEnhanced.components.*"
+				   xmlns:skins=			"widgets.LayerListEnhanced.skins.*"
+				   widgetConfigLoaded=	"init()" 
+				   initialize=			"basewidget_initializeHandler(event)" >
+
+	<!--- Widget States Block -->
+	<viewer:states>
+		<s:State name="layersTOC" />
+		<s:State name="addServices" />
+		<s:State name="removeServices" />
+		<s:State name="loadServices" />
+	</viewer:states>
+
+	<viewer:transitions>
+		<s:Transition toState="*" autoReverse="true">
+			<s:Fade targets="{[layersTOC,addServices,removeServices,loadServices]}" />
+		</s:Transition>
+	</viewer:transitions>
+	
+	<fx:Style>
+		@namespace esri "http://www.esri.com/2008/ags";
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace viewer "com.esri.viewer.*";
+		@namespace toccomp "com.nzgc.viewer.components.toc.*";
+		@namespace layeralpha "widgets.MapServices.components.*";
+		
+		.DataGrid 
+		{
+			backgroundAlpha: 0.75;
+			backgroundColor: #000000;
+			alternatingItemColors: #CCCCCC, #999999;
+			headerColors: #666666, #999999;
+			rollOverColor: #FFCC66;
+		}
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Map;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.ArcIMSMapServiceLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.KMLLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.WMSLayer;
+			import com.esri.ags.layers.supportClasses.LayerDetails;
+			import com.esri.ags.tasks.JSONTask;
+			import com.esri.ags.virtualearth.VETiledLayer;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			import com.esri.viewer.components.toc.tocClasses.*;
+			import com.esri.viewer.managers.LayerCreator;
+			import com.esri.viewer.utils.LayerObjectUtil;
+			
+			import mx.collections.*;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.rpc.AsyncResponder;
+			
+			import spark.effects.Animate;
+			import spark.effects.AnimateFilter;
+			import spark.effects.animation.*;
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			import spark.events.TextOperationEvent;
+			import spark.filters.*;
+			
+			import widgets.LayerListEnhanced.components.MapLayer;
+
+
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+			
+			// TOC Variables
+			private var _includeLegendItems:Boolean = true; // include legend items in the TOC
+			
+			// Labels
+			[Bindable]
+			private var _visibilityLabel:String;
+			[Bindable]
+			private var _transparencylabel:String;
+			[Bindable]
+			private var _addServiceLabel:String;
+			[Bindable]
+			private var _loadServiceLabel:String;
+			[Bindable]
+			private var _removeServiceLabel:String;
+			[Bindable]
+			private var _legendLabel:String;
+			[Bindable]
+			private var _zoomLabel:String;
+			[Bindable]
+			private var _keywordSearchLabel:String;
+			
+			// Tool tips
+			[Bindable]
+			private var _zoomTip:String;
+			[Bindable]
+			private var _addServiceTip:String;
+			[Bindable]
+			private var _loadServiceTip:String;
+			[Bindable]
+			private var _removeServiceTip:String;
+			[Bindable]
+			private var _keywordSearchTip:String;
+			
+			[Bindable]
+			private var _respectCurrentMapScale:Boolean = true;
+			
+			// Additional map service settings 
+			[Bindable]
+			private var _configServices:Array = new Array;
+			[Bindable]
+			private var _filteredServices:Array = new Array;
+			
+			// Help URL
+			private var _helpLocation:String;
+			
+			[Bindable]
+			private var _msgVisible:Boolean = false;
+
+			private var _layerCount:int = -1;
+			
+			
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+
+			// Path Constants
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/LayerListEnhanced/assets/images/";
+
+			[Embed(source="widgets/LayerListEnhanced/assets/images/i_layers.png")]
+			private var layerGroupIcon:Class;			
+
+			[Embed(source="widgets/LayerListEnhanced/assets/images/Layer32.png")]
+			private var layerIcon:Class;			
+
+			[Embed(source="widgets/LayerListEnhanced/assets/images/kml_icon.gif")]
+			private var kmlIcon:Class;			
+			
+			/* WIDGET EVENT HANDLERS
+			-------------------------------------------------------------------------- */
+
+			/** 
+			 * Called when the widget component initialises.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Event raised by the component initialises.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function basewidget_initializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}			
+			
+			/** 
+			 * Called when the widget config file has been loaded.  Initilaises the widget functionality.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function init():void
+			{
+				var servicesList:XMLList;
+				
+				if (configXML)
+				{
+					// Show zoom extent button
+					var showExtentButton:Boolean = configXML.showZoomExtent[0] == "true";
+					zoomExtentContainer.visible = zoomExtentContainer.includeInLayout = showExtentButton;
+					
+					/* LABELS
+					---------------------------------------------------- */
+					_visibilityLabel = configXML.labels.visibilitylabel || "Layer Visibility";
+					_transparencylabel = configXML.labels.contransparencylabel || "Slide to change transperency of layer";
+					_addServiceLabel = configXML.labels.addservicelabel || "Add Map Service(s)";
+					_loadServiceLabel = configXML.labels.loadservicelabel || "Add Layer From Web";
+					_legendLabel = configXML.labels.legendlabel || "Map Legend";
+					_removeServiceLabel = configXML.labels.removeservicelabel || "Remove Map Service(s)";
+					_zoomLabel = configXML.labels.zoomlabel || "Zoom to Selected";
+					_keywordSearchLabel = configXML.labels.keywordsearchlabel || "Enter Keyword:";
+					
+					/* TOOL TIPS
+					---------------------------------------------------- */
+					_zoomTip = configXML.tooltips.zoomtip || "Click to zoom to highlighted layer";
+					_addServiceTip = configXML.tooltips.addservicetip || "Click to add checked map services";
+					_loadServiceTip = configXML.tooltips.loadservicetip || "Click to add layer from web";
+					_removeServiceTip = configXML.tooltips.removeservicetip || "Click to remove checked map services";
+					_keywordSearchTip = configXML.tooltips.keywordsearchtip || "Show All";
+					
+					/* INITIALISE TOC
+					---------------------------------------------------- */
+					var expandLayerItems:Boolean = configXML.expandlayeritems == "true";
+					if (configXML.includelegenditems.length())
+					{
+						_includeLegendItems = configXML.includelegenditems == "true";
+					}
+					
+					if (configData && configData.opLayers.length > 0) // do not initialize TOC if there are no operational layers
+					{
+						initTOC(expandLayerItems);
+					}
+					
+					/* LOAD HELP LOCATION
+					---------------------------------------------------- */
+					_helpLocation = configXML.helplocationurl;
+					
+					
+					/* LOAD ADDITIONAL LOCATION
+					---------------------------------------------------- */
+					
+					// Load the list of additional mapservices from config file
+					servicesList = configXML..layer;
+				}
+				
+				// Load settings for the additional map services that can bee added into the map.
+
+				// Load the add data grid - added 28/03/2011 by Ryan Elley (ECan)
+				addServicesDataGrid.dataProvider = getAddServicesList();				
+				
+				// Set the default layerID number
+				_layerCount = (this.map.layers as ArrayCollection).length + 1;
+				
+				// Load remove datagrid
+				removeServicesDataGrid.dataProvider = getServicesList();
+
+				// Add title bar icons
+				wTemplate.addTitlebarButton(ICON_URL + "i_layers.png", _visibilityLabel, showStateVisibility);
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "addlayer.png", _addServiceLabel, showAddService);
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "loadlayer.png", _loadServiceLabel, showLoadService);
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "removelayer.png", _removeServiceLabel, showRemoveService);
+				
+				if (_helpLocation) 
+				{
+					wTemplate.addTitlebarButton(ICON_URL + "i_help.png", "Help", showHelp, false);
+				}
+			}
+			
+			
+			
+			/* TOC FUNCTIONS
+			------------------------------------------------------------ */
+			
+			/**
+			 * Initialise the TOC component.  Sets whether the TOC should be shown fully expanded.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>expandLayerItems [Boolean]: </i>Sets the layer item nodes in the TOC tree expanded.  True=Expand the TOC tree</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function initTOC(expandLayerItems:Boolean = false):void
+			{
+				toc.map = map;
+				toc.isMapServiceOnly = false; //gotta get this from the config file
+				toc.excludeLayers = getExcludeLayers();
+				toc.basemapLayers = getBasemapLayers();
+				toc.excludeGraphicsLayers = true;
+				toc.includeLegendItems = _includeLegendItems;
+				toc.expandLayerItems = expandLayerItems;
+				
+				// Added 29/05/2013 by Ryan Elley (ECan)
+				toc.includeLayerItems = true;
+				var glayers:XMLList = configXML.graphiclayers.graphiclayer as XMLList;
+				if (glayers.length() > 0)
+				{
+					if (toc.includeLayers == null)
+					{
+						toc.includeLayers = new ArrayCollection();
+					}
+
+					for (var i:int = 0; i < glayers.length(); i++)
+					{
+						var layerXML:XML = glayers[i];
+						(toc.includeLayers as ArrayCollection).addItem(layerXML.toString());
+					}
+				}
+				
+				
+			}
+			
+			/**
+			 * Get the list of layers that should be excluded from the TOC.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getExcludeLayers():ArrayCollection
+			{
+				var result:ArrayCollection = getBasemapLayers();
+				
+				if (configXML)
+				{
+					// exclude these layers
+					var layers:XMLList = configXML.excludelayer as XMLList;
+					for (var j:Number = 0; j < layers.length(); j++)
+					{
+						result.addItem(layers[j].toString());
+					}
+				}
+				
+				return result;
+			}
+			
+			/**
+			 * Get the list of basemap layers, so that they can be excluded from the TOC.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getBasemapLayers():ArrayCollection
+			{
+				var result:ArrayCollection = new ArrayCollection();
+				
+				if (configData && configData.basemaps)
+				{
+					for (var i:int = 0; i < configData.basemaps.length; i++)
+					{
+						result.addItem(configData.basemaps[i].label);
+					}
+				}
+				
+				return result;
+			}
+			
+
+			
+			/* MAP FUNCTIONS
+			------------------------------------------------------------ */
+
+			/* 
+				Added by Ryan Elley (ECan) 19/12/2011 - Added to fix problem of graphic and feature layers not being picked
+				up and set to transparencey slider when a toc item is clicked
+			*/
+			/**
+			 * Returns the layer from the map with the given id or name.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerName [String]: </i>Name of the layer to be searched for.  Should match the name as it appears in the layer's name or ID property.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getLayer(layerName:String):Layer
+			{
+				var resultlayer:Layer;
+				
+				for each (var layer:Layer in map.layers)
+				{
+					if (layer.id == layerName || layer.name == layerName)
+					{
+						resultlayer = layer;
+						break;
+					}
+				}
+				
+				return resultlayer;
+			}
+			
+			/**
+			 * Returns the list of loaded layers from the map.  Excludes graphic layers.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getLayers():Array
+			{
+				var basemapCount:Number = configData.basemaps.length;
+				var layerList:Array = [];
+				for (var i:Number = map.layerIds.length -1; i >= basemapCount; i--)
+				{
+					var layer:Layer = map.getLayer(map.layerIds[i]);
+					
+					/* 	Change by Ryan Elley (ECan) 19/12/2011 - Feature layers were being incorrectly identified as 
+						graphics layers and being filtered out of results. Original code = if (!(layer is GraphicsLayer)) */
+					if (!(layer is GraphicsLayer) || (layer is FeatureLayer))
+						layerList.push(layer);
+				}
+				return layerList;
+			}
+			
+			/**
+			 * Returns a list of details for the currently loaded map services. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>excludeHidden [Boolean] (optional): </i>Exclude any of the hidden layers such as those used for popups from the list.  Hidden layers are excluded by default.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getServicesList(excludeHidden:Boolean = true):Array
+			{
+				var serviceNameList:Array = new Array;
+				var layersList:Array = getLayers();
+				for (var b:Number = 0; b < layersList.length; b++) 
+				{
+					if ((excludeHidden && (layersList[b].name as String).indexOf("hiddenLayer_") == -1) || !excludeHidden)
+					{
+						var serviceName:Object = 
+							{
+								layer: layersList[b],
+								label: layersList[b].name,
+									url: layersList[b].url,
+									remove: false
+							}
+						serviceNameList.push(serviceName);
+					}
+				}
+				return serviceNameList;
+			}
+			
+			/** 
+			 * Tests for the presence of a layer with the given settings
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerName [String]: </i>Name of the layer to be searched for.  Should match the name as it appears in the layer's name or ID property.</li>
+			 * <li><i>layerURL [String]: </i>URL end point of the layer to be searched for.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function isLayerInMap(layerName:String, layerURL:String):Boolean
+			{
+				var found:Boolean = false;
+				var layersList:Array = getLayers();
+				for (var b:Number = 0; b < layersList.length; b++) {
+					if ((layersList[b].name == layerName || layersList[b].id == layerName) && layersList[b].url == layerURL)
+					{
+						found = true;
+						break;
+					}
+				}
+				return found;
+			}
+
+			/** 
+			 * Returns a collection of the base map names from the main config file
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function getBasemaps():ArrayCollection
+			{
+				var baseMaps:ArrayCollection = new ArrayCollection();
+				for (var i:Number = 0; i < configData.basemaps.length; i++)
+				{
+					baseMaps.addItem(configData.basemaps[i].label);
+				}
+				return baseMaps;
+			}	
+
+			
+			
+			/* LAYER FUNCTIONS
+			------------------------------------------------------------ */
+
+			/** 
+			 * Zooms the map to the iniial extent of the layer/map service
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function zoomToInitialExtent():void
+			{	
+				if (toc.selectedItem == null)
+				{
+					Alert.show("Please select (highlight) a layer to zoom.");
+				}
+				else
+				{
+					// Set the map extent to either the map service initial extent or the extent of the layer
+					if (toc.selectedItem is TocMapLayerItem)
+					{
+						if (map.spatialReference.wkid == toc.selectedItem.layer.spatialReference.wkid)
+						{
+							// This is the map service layer so just set the extent
+							map.extent = toc.selectedItem.layer.initialExtent;
+						}
+						else
+							Alert.show("The Coordinate System of the layer does not match the base map","Unable to Zoom");
+						
+					}
+					else // This is a layer of the map service so get the details
+					{
+						var parentItem:Object;					
+						parentItem = toc.selectedItem.parent;
+						
+						// We have to find the map service to get the layer details
+						for (var d:Number = 0; d <= toc.selectedItem.layerInfo.id; d++)
+						{
+							if (parentItem is TocMapLayerItem)
+							{
+								if (map.spatialReference.wkid == parentItem.layer.spatialReference.wkid)
+								{	
+									parentItem.layer.getDetails(toc.selectedItem.layerInfo.id
+										, new AsyncResponder(
+											function resultHandler(result:LayerDetails, token:Object = null):void
+											{
+												// Set the map extent to the retrieved layer extent
+												map.extent = result.extent;
+											},
+											function faultHandler(error:Object, token:Object = null):void
+											{
+												Alert.show(String(error));
+											}
+										));
+								}
+								else
+									Alert.show("The Coordinate System of the layer does not match the base map","Unable to Zoom");
+								
+								break;
+							}
+							parentItem = parentItem.parent;
+						}					
+					}
+				}
+			}
+			
+			
+			
+			/* ADD LAYER FUNCTIONS
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Adds the selected layers to the map in the add Layers datagrid to the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function addAdditionalLayers():void
+			{
+				// Get the list of add services
+				var addLayerIndexArray:Array = new Array;
+				var gridSize:Number = addServicesDataGrid.dataProvider.length;
+				
+				// Loop through all of the services in the Add Services grid
+				for (var j:Number = 0; j < gridSize; j++) 
+				{
+					// If the Add checkbox is checked we need to add layer
+					if (addServicesDataGrid.dataProvider[j].add)
+					{
+						if (addServicesDataGrid.dataProvider[j].layer == null) 
+						{
+							/*
+							// Original Code from MapServices Widget
+							
+							// Create and add layer based on type
+							switch (addServicesDataGrid.dataProvider[j].type.toLowerCase())
+							{
+								case "tiled":
+								{
+									var tiledlayer:ArcGISTiledMapServiceLayer = new ArcGISTiledMapServiceLayer(addServicesDataGrid.dataProvider[j].url);
+									tiledlayer.id = addServicesDataGrid.dataProvider[j].label;
+									tiledlayer.name = addServicesDataGrid.dataProvider[j].label;
+									tiledlayer.visible = addServicesDataGrid.dataProvider[j].visible;
+									tiledlayer.alpha = addServicesDataGrid.dataProvider[j].alpha;
+									
+									// Consortium UseProxy Mod START part 2 of 2
+									// Reason: by default the sample viewer ignores use proxy setting on map service
+									if(addServicesDataGrid.dataProvider[j].useProxy) ///END
+									{
+										if (addServicesDataGrid.dataProvider[j].proxy)
+										{
+											tiledlayer.proxyURL = addServicesDataGrid.dataProvider[j].proxy;
+										}
+										else
+										{
+											tiledlayer.proxyURL = configData.proxyUrl;
+										}
+									}
+									
+									// Add layer to map
+									map.addLayer(tiledlayer);
+									break;
+								}
+									
+								case "dynamic":
+								{
+									var dynlayer:ArcGISDynamicMapServiceLayer = new ArcGISDynamicMapServiceLayer(addServicesDataGrid.dataProvider[j].url);
+									dynlayer.id = addServicesDataGrid.dataProvider[j].label;
+									dynlayer.name = addServicesDataGrid.dataProvider[j].label;
+									// Consortium UseProxy Mod START part 2 of 2
+									// Reason: by default the sample viewer ignores use proxy setting on map service
+									if(addServicesDataGrid.dataProvider[j].useProxy) ///END
+									{
+										if (addServicesDataGrid.dataProvider[j].proxy)
+										{
+											dynlayer.proxyURL = addServicesDataGrid.dataProvider[j].proxy;
+										}
+										else
+										{
+											dynlayer.proxyURL = configData.proxyUrl;
+										}
+									}
+									dynlayer.visible = addServicesDataGrid.dataProvider[j].visible; 
+									dynlayer.alpha = addServicesDataGrid.dataProvider[j].alpha;	
+									
+									// Add layer to map
+									map.addLayer(dynlayer);
+									break;
+								}
+									
+								case "feature":
+								{
+									var featLayer:FeatureLayer = new FeatureLayer(addServicesDataGrid.dataProvider[j].url);
+									featLayer.id = addServicesDataGrid.dataProvider[j].label;
+									featLayer.name = addServicesDataGrid.dataProvider[j].label;
+
+									// Consortium UseProxy Mod START part 2 of 2
+									// Reason: by default the sample viewer ignores use proxy setting on map service
+									if(addServicesDataGrid.dataProvider[j].useProxy) ///END
+									{	
+										if (addServicesDataGrid.dataProvider[j].proxy)
+										{
+											featLayer.proxyURL = addServicesDataGrid.dataProvider[j].proxy;
+										}
+										else
+										{
+											featLayer.proxyURL = configData.proxyUrl;
+										}
+									}
+									featLayer.visible = addServicesDataGrid.dataProvider[j].visible; 
+									featLayer.alpha = addServicesDataGrid.dataProvider[j].alpha;	
+									featLayer.mode = FeatureLayer.MODE_ON_DEMAND;
+									
+									// Add layer to map
+									map.addLayer(featLayer);
+									break;
+								}
+							}
+							*/
+							
+							// Create a layer object for populating
+							var maplayer:MapLayer = addServicesDataGrid.dataProvider[j] as MapLayer;
+							
+							var layerObj:Object = LayerObjectUtil.getLayerObject(maplayer.layerXML, _layerCount, true, configData.bingKey, null, configData.proxyUrl);
+							_layerCount ++;
+
+							var layer:Layer = layerObj.layer ? layerObj.layer : LayerCreator.createLayerFromLayerObject(layerObj);
+							maplayer.layer = layer;
+							
+							map.addLayer(layer);
+						}
+						else // A layer object already exists so just add it
+						{
+							map.addLayer(addServicesDataGrid.dataProvider[j].layer);
+						}
+					}
+				}	
+
+				// Update the Remove Services grid
+				removeServicesDataGrid.dataProvider = getServicesList();
+				
+				// Reset the Add Services provider
+				addServicesDataGrid.dataProvider = getAddServicesList();
+
+				// Switch to layers view
+				currentState = "layersTOC";
+				wTemplate.selectedTitlebarButtonIndex = 0; // used to indicate selected titlebar button when automatically switching state
+			}
+			
+			/** 
+			 * Builds the current list of services that the user can select from to add to the map
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function getAddServicesList():Array
+			{
+				// Prepare the service list 
+				var serviceNameList:Array = new Array;
+
+				// Load the list of additional mapservices from config file
+				var servicesList:XMLList = configXML..layer;
+				
+				// Load settings for the additional map services that can bee added into the map.
+				// Grab all of the map services from the MapServicesWidget.xml file that have not already been loaded
+				for (var i:Number = 0; i < servicesList.length(); i++) 
+				{
+					// Get the name, type amd URL of layer					
+					var msLabel:String = servicesList[i].@label;
+					var msType:String = servicesList[i].@type;
+					var msURL:String = servicesList[i].@url;
+					var msIcon:Class;
+					var msIconTip:String;
+					
+					// Set the layer type icon
+					switch (msType)
+					{
+						case "kml":
+							msIcon = kmlIcon;
+							msIconTip = "KML Layer";
+							break;
+						
+						case "feature":
+							msIcon = layerIcon;
+							msIconTip = "Single Layer";
+							break;
+						
+						default:
+							msIcon = layerGroupIcon;							
+							msIconTip = "Layer Group";
+							break;
+					}
+					
+					// Check if this layer is already present in the map
+					if (!isLayerInMap(msLabel, msURL))
+					{
+						// Retrieve the layer settings and add to the list
+						var msKeywords:String = servicesList[i].@keywords;
+						
+						var msDescription:String = servicesList[i].@description;
+						
+						var mapservice:MapLayer = new MapLayer(servicesList[i], msLabel, msType, msIcon, msIconTip, 
+							msKeywords, msDescription, null, false, configData.proxyUrl);
+						serviceNameList.push(mapservice);
+					}
+				}
+				
+				return serviceNameList;				
+			}
+
+			/** 
+			 * Called when the user chages the text in filter input box
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [TextOperationEvent]: </i>Event dispatched when the key is pressed in a filterInput control.</li>
+			 * </ul>
+			 * </p>
+			 */  
+			protected function filterInput_changeHandler(event:TextOperationEvent):void
+			{
+				getSearch(filterInput.text);
+			}
+			
+			/** 
+			 * Search on keyword field and build new list - removes items from list that don't match search
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>keyword [String]: </i>Word to search for in the configured map services list.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function getSearch(keyword:String):void 
+			{
+				var searchText:String = keyword.toLowerCase();
+				
+				// Clear the filtered list
+				_filteredServices = new Array();
+
+				// Get the layer list
+				_configServices = getAddServicesList();
+				
+				// Iterate through the layers looking for keywords and layer deacriptions that contain the keyword text
+				for (var i:Number = 0; i < _configServices.length; i++)
+				{
+					var service:MapLayer = _configServices[i] as MapLayer;
+					var layerkeywords:String = service.keywords.toLowerCase();
+					var layerdescription:String = service.description.toLowerCase();
+					var layerlabel:String = service.label.toLowerCase();
+					
+					// if keyword exists, add to filtered services
+					if(layerkeywords.search(searchText) != -1 || layerdescription.search(searchText) != -1 ||
+						layerlabel.search(searchText) != -1)
+					{
+						_filteredServices.push(service);
+					}		
+				}
+				addServicesDataGrid.dataProvider = _filteredServices; // set grid to search services
+			}			
+			
+			
+			
+			/* REMOVE LAYER FUNCTIONS
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Removes the checked layers/map services in the remove layers data grid from the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function removeCurrentLayers():void
+			{
+				// Loop through the Remove Services grid
+				for (var k:Number = 0; k < removeServicesDataGrid.dataProvider.length; k++) {
+					// Remove layer indicated for removal
+					if (removeServicesDataGrid.dataProvider[k].remove)
+					{						
+						map.removeLayer(removeServicesDataGrid.dataProvider[k].layer);
+					}
+				}	
+				
+				// Update the Remove Services grid
+				removeServicesDataGrid.dataProvider = getServicesList();
+				
+				// Reset the Add Services provider
+				addServicesDataGrid.dataProvider = getAddServicesList();
+				
+				// Switch to layers view
+				currentState = "layersTOC";
+				wTemplate.selectedTitlebarButtonIndex = 0; // used to indicate selected titlebar button when automatically switching state
+			}
+			
+
+			
+			/* WIDGET UI FUNCTIONS
+			------------------------------------------------------------ */
+
+			/** 
+			 * Adds a glowing effect to objects - UI buttons mainly
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>obj [Object]: </i>Target object to highligh with the glowing effect.</li>
+			 * <li><i>repeat [Boolean] (Optional): </i>Specifies whether the repreat effect should continue to play, or it it hsould play only once. True=Continuous play.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function playGlow2(obj:Object, repeat:Boolean = false):void 
+			{
+				// Check if animation playing
+				if(glower2.isPlaying) {
+					glower2.end();
+				}
+				
+				// Set The target object
+				glower2.target = obj;
+				
+				// Set the repeat count
+				if (repeat) {
+					glower2.repeatCount = 0;
+				} else {
+					glower2.repeatCount = 1;
+				}
+				
+				// Start the animation
+				glower2.play();
+			}
+			
+			/** 
+			 * Help function
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function showHelp():void 
+			{
+				navigateToURL(new URLRequest(_helpLocation), "_blank");
+			}
+			
+			/** 
+			 * Show processing message function.		
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [String]: </i>Text to be displayed in the message area.</li>
+			 * </ul>
+			 * </p>
+			 */ 	
+			private function showMessage(message:String):void
+			{
+				txtMessage.htmlText = message;
+				_msgVisible = true;
+			}
+			
+			/** 
+			 * Clears the message.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function clearMessage():void
+			{
+				_msgVisible = false;
+			}
+
+			
+			
+			/* STATE CHANGE FUNCTIONS
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Changes the widget to the table of contents state
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function showStateVisibility():void
+			{				
+				clearMessage();
+				currentState = "layersTOC";
+			}
+			
+			/** 
+			 * Changes the widget to the add service state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function showAddService():void
+			{
+				// Clears any messgaes in the message area
+				clearMessage();
+
+				// Updates the add services list when the page is opened - added 28/03/2011 by Ryan Elley (ECan)
+				addServicesDataGrid.dataProvider = getAddServicesList();
+				
+				currentState = "addServices";
+			}
+			
+			/** 
+			 * Changes the widget to the add service state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function showLoadService():void
+			{
+				// Clears any messgaes in the message area
+				clearMessage();
+				
+				// Updates the add services list when the page is opened - added 28/03/2011 by Ryan Elley (ECan)
+				//addServicesDataGrid.dataProvider = getAddServicesList();
+				
+				currentState = "loadServices";
+			}
+			
+			/** 
+			 * Changes the widget to the remove service state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function showRemoveService():void
+			{
+				clearMessage();
+				
+				// Updates the remove services list when the page is opened - added 28/03/2011 by Ryan Elley (ECan)
+				removeServicesDataGrid.dataProvider = getServicesList();
+				
+				currentState = "removeServices";
+			}
+			
+			
+			/** 
+			 * Opens a browser window to display the metadata/rest endpoint for the layer
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>url [String]: </i>Url of then metadata location to be displayed.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			public function openMetaData(url:String):void
+			{
+				var window:String = "_blank";
+				var features:String = "toolbar=no,location=no,directories=no,status=no,scrollbars=yes,copyhistory=no,width=800,height=700";
+				
+				var WINDOW_OPEN_FUNCTION : String = "window.open";
+				
+				ExternalInterface.call( WINDOW_OPEN_FUNCTION, url, window, features );
+			}
+			
+			
+			
+			/* LOAD LAYER FROM WEB FUNCTIONS
+			------------------------------------------------------------ */
+
+			/**
+			 * Called when the selected item in the web layer type dropdown is changed
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [IndexChangeEvent]: </i>Event dispatced by the Drop Down List.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			protected function webLayerType_changeHandler(event:IndexChangeEvent):void
+			{
+				// Clear the existing url text
+				webLayerURL.text = "";
+			}
+
+			/**
+			 * Called when the user starts the add web service layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>None.</i></li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function loadWebServiceLayers():void
+			{
+				// Check for type of layer being loaded
+				switch (webLayerType.selectedItem.value)
+				{
+					case "AGS":
+						loadAGSLayerFromWeb(webLayerURL.text);
+						break;
+					
+					case "WMS":
+						loadWMSLayer(webLayerURL.text);
+						break;
+					
+					case "KML":
+						
+						break;
+					
+					default:
+						// Do nothing
+				}
+			}
+			
+			/**
+			* Loads up an argis layer from the given URL details.
+			* <p>
+			* <b>Parameters</b><br/>
+			* <ul>
+			* <li><i>url [String]: </i>Url of the arcgis map service or feature layer to be loaded.</li>
+			* </ul>
+			* </p>			 
+			*/
+			private function loadAGSLayerFromWeb(url:String):void
+			{
+				// Determine what kind of arcgis server layer is being loaded
+				if (url.match(/\/MapServer$/i) != null)
+				{
+					requestLayerDetails(url,"MapLayer");
+				}
+				else if (url.match(/\/MapServer\/\d$/i) != null)
+				{
+					requestLayerDetails(url,"FeatureLayer");
+				}
+				else if (url.match(/\/FeatureServer$/i) != null)
+				{
+					// Substitute FeatureServer for MapServer
+					url = url.replace("FeatureServer","MapServer");
+
+					// Load as a map Server layer
+					requestLayerDetails(url,"MapLayer");
+				}
+				else if (url.match(/\/FeatureServer\/\d$/i) != null)
+				{
+					requestLayerDetails(url,"FeatureLayer");
+				}
+				else
+				{
+					trace("Invalid URL");
+				}
+				
+				function loadMapServerLayer(url:String, layerDetails:Object):void
+				{
+					// Determine if this is a tiled or dynamic layer
+					if (layerDetails.singleFusedMapCache && layerDetails.singleFusedMapCache == "true")
+					{
+						// Load as a tiled layer service	
+						var tiledlayer:ArcGISTiledMapServiceLayer = new ArcGISTiledMapServiceLayer(url);
+						tiledlayer.id = layerDetails.mapName;
+						tiledlayer.name = layerDetails.mapName;
+						tiledlayer.visible = true;
+						
+						// Add layer to map
+						map.addLayer(tiledlayer);
+					}
+					else 
+					{
+						// Load as a dynamic layer service	
+						var dynlayer:ArcGISDynamicMapServiceLayer = new ArcGISDynamicMapServiceLayer(url);
+						dynlayer.id = layerDetails.mapName;
+						dynlayer.name = layerDetails.mapName;
+
+						dynlayer.visible = true; 
+						
+						// Add layer to map
+						map.addLayer(dynlayer);
+					}
+				}
+				
+				function loadFeatureLayer(url:String, layerDetails:Object):void
+				{
+					var featLayer:FeatureLayer = new FeatureLayer(url);
+					featLayer.id = layerDetails.name;
+					featLayer.name = layerDetails.name;
+					
+					featLayer.visible = true; 
+					//featLayer.alpha = addServicesDataGrid.dataProvider[j].alpha;	
+					featLayer.mode = FeatureLayer.MODE_ON_DEMAND;
+					
+					// Add layer to map
+					map.addLayer(featLayer);
+				}
+				
+				function requestLayerDetails(url:String, layerType:String):void
+				{
+					var jtask:JSONTask = new JSONTask(url + "?f=pjson");
+					jtask.execute(null, new AsyncResponder(
+						function resultHandler(result:Object, token:Object = null):void
+						{
+							if (token.layerType == "FeatureLayer")
+							{
+								loadFeatureLayer(token.url, result);
+							}
+							else
+							{
+								loadMapServerLayer(token.url, result);
+							}
+						},
+						function faultHandler(error:Object, token:Object = null):void
+						{
+							Alert.show(String(error));
+						},
+						{ url:url, layerType:layerType}
+					));
+				}
+			}
+
+			private function loadWMSLayer(url:String):void
+			{
+				var wmsLayer:WMSLayer = new WMSLayer(url);
+				
+				// Add layer to map
+				map.addLayer(wmsLayer);
+
+				/*
+				wmsLayer.addEventListener(LayerEvent.LOAD, addWMSToMap);
+					
+				function addWMSToMap(event:LayerEvent):void
+				{
+					event.layer.removeEventListener(LayerEvent.LOAD, addWMSToMap);
+					wmsLayer.
+				}*/
+			}
+		
+		]]>
+	</fx:Script>
+	
+	
+	<fx:Declarations>
+		<!--- Filter for selected tool -->
+		<s:GlowFilter id="glowFilter"
+					  alpha="1"
+					  color="{getStyle('focusColor')}"
+					  inner="true"
+					  strength="2"/>
+		
+		<!--- Flashing filter used to highlight a UI objects -->
+		<s:AnimateFilter id="glower2" bitmapFilter="{glowFilter}" 
+						 duration="600" repeatCount="0" 
+						 repeatBehavior="{RepeatBehavior.REVERSE}">
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>
+	</fx:Declarations>
+	
+	<viewer:WidgetTemplate id = "wTemplate"
+						   height = "280"
+						   width = "420" >
+		
+		<!--- Layer Table of Contents -->
+		<s:Group id="layersTOC" width="100%" height="100%" visible="false" visible.layersTOC="true">
+			<s:layout>
+				<s:VerticalLayout gap="3" />
+			</s:layout>
+			
+			<s:HGroup width="100%" paddingTop="2" verticalAlign="middle">
+				<s:HGroup width="50%" horizontalAlign="left">
+					<s:Label text="{_visibilityLabel}" width="175" textAlign="left" verticalAlign="middle" 
+							 height="100%"/>
+				</s:HGroup>
+				<s:HGroup id="zoomExtentContainer" width="50%" horizontalAlign="right">
+					<s:Button id="zoomToInitialExtentButton" 
+							  label="{_zoomLabel}" 
+							  skinClass="widgets.LayerListEnhanced.skins.LayerListWidgetZoomButtonSkin"
+							  click="playGlow2(zoomToInitialExtentButton);zoomToInitialExtent()" 
+							  toolTip="{_zoomTip}" 
+							  height="30"/>
+				</s:HGroup>
+			</s:HGroup> 
+			<toccomp:TOC2 id="toc" width="100%" height="100%" showLayerMenu="true"/>
+		</s:Group>
+
+		<!--- Add services group -->
+		<s:Group id="addServices" width="100%" height="100%" visible.addServices="true" visible="false">
+			<s:VGroup width="100%" height="100%">
+				<s:HGroup width="100%" paddingTop="2" verticalAlign="middle">
+					<s:HGroup width="50%" horizontalAlign="left">
+						<s:Label text="{_addServiceLabel}" width="175" textAlign="left" height="100%" 
+								 verticalAlign="middle" styleName="WidgeTtitle"/>
+					</s:HGroup>
+					<s:HGroup width="50%" horizontalAlign="right">
+						<s:Button id="addServiceButton" 
+								  label="{_addServiceLabel}" 
+								  skinClass="widgets.LayerListEnhanced.skins.LayerListWidgetAddServiceButtonSkin"
+								  click="playGlow2(addServiceButton);addAdditionalLayers()" 
+								  toolTip="{_addServiceTip}" 
+								  height="30"/>
+					</s:HGroup>
+				</s:HGroup>
+				
+				<!--- Filter box -->
+				<s:HGroup id="filterbox" width="100%" paddingLeft="2" paddingRight="2" paddingTop="2" 
+						  paddingBottom="2" gap="5" verticalAlign="middle" horizontalAlign="center" >
+					<s:TextInput id="filterInput" width="100%" change="filterInput_changeHandler(event)" toolTip="{_keywordSearchTip}" prompt="{_keywordSearchLabel}"/>
+				</s:HGroup>
+
+				<!--- Datagrid for displaying the available map services -->
+				<mx:DataGrid id="addServicesDataGrid" height="95%" width="100%" 
+							 alternatingItemColors="[#CCCCCC, #999999]" 
+							 rollOverColor="{getStyle('rollOverColor')}"
+							 selectionColor="{getStyle('focusColor')}"
+							 textRollOverColor="{getStyle('focusColor')}" >
+					<mx:columns>
+						<mx:DataGridColumn headerText="Add" dataField="add" width="60" editable="true" 
+										   editorDataField="selected" rendererIsEditor="true" resizable="false" 
+										   sortable="false" textAlign="center" paddingLeft="0">
+							<mx:itemRenderer>
+								<fx:Component>
+									<mx:CheckBox click="data.add=!data.add;" textAlign="center"/>
+								</fx:Component>
+							</mx:itemRenderer>
+						</mx:DataGridColumn>
+						<mx:DataGridColumn headerText="Service Name" width="255" dataField="label" resizable="false" 
+										   dataTipField="description" showDataTips="true" />						
+						<mx:DataGridColumn headerText="" dataField="" width="35" resizable="false" sortable="false" textAlign="center" >
+							<mx:itemRenderer>									
+								<fx:Component>
+									<mx:Image source="{data.icon}" width="20" height="20" verticalAlign="middle" 
+											  horizontalAlign="center" toolTip="{data.icontip}" />
+								</fx:Component>
+							</mx:itemRenderer>
+						</mx:DataGridColumn>
+						<mx:DataGridColumn headerText="Info" dataField="url" width="35" resizable="false" >
+							<mx:itemRenderer>									
+								<fx:Component>
+									<mx:LinkButton width="14" height="17" 
+												   icon="@Embed('widgets/LayerListEnhanced/assets/images/metadata.png')" 
+												   downIcon="@Embed('widgets/LayerListEnhanced/assets/images/metadata.png')" 
+												   click="{outerDocument.openMetaData(data.url)}" 
+												   toolTip="Show Additional Info"/>
+								</fx:Component>
+							</mx:itemRenderer>
+						</mx:DataGridColumn>
+					</mx:columns>
+				</mx:DataGrid>					
+			</s:VGroup>
+		</s:Group>
+
+		<!--- Remove services group -->
+		<s:Group id="removeServices" width="100%" height="100%" visible.removeServices="true" visible="false">
+			<s:VGroup width="100%" height="100%">
+				<s:HGroup width="100%" paddingTop="2">
+					<s:HGroup width="50%" horizontalAlign="left">
+						<s:Label text="{_removeServiceLabel}" 
+								 width="175" 
+								 textAlign="left" 
+								 height="100%" 
+								 verticalAlign="middle" styleName="WidgetTitle"/>
+					</s:HGroup>
+					<s:HGroup width="50%" horizontalAlign="right">
+						<s:Button id="removeServiceButton" 
+								  label="{_removeServiceLabel}" 
+								  skinClass="widgets.LayerListEnhanced.skins.LayerListWidgetRemoveServiceButtonSkin"
+								  click="playGlow2(this.removeServiceButton);this.removeCurrentLayers()" 
+								  toolTip="{_removeServiceTip}" 
+								  height="30" />
+					</s:HGroup>
+				</s:HGroup>
+				
+				<!--- Datagrid for removing services -->
+				<mx:DataGrid id="removeServicesDataGrid" height="95%" width="100%"
+							 alternatingItemColors="[#CCCCCC, #999999]" 
+							 rollOverColor="{getStyle('rollOverColor')}"
+							 selectionColor="{getStyle('focusColor')}"
+							 textRollOverColor="{getStyle('focusColor')}" >
+					<mx:columns>
+						<mx:DataGridColumn headerText="Remove" dataField="remove" width="60" 
+										   editable="true" editorDataField="selected" rendererIsEditor="true" 
+										   resizable="false" sortable="false" textAlign="center" paddingLeft="0">
+							<mx:itemRenderer>									
+								<fx:Component>
+									<mx:CheckBox click="{data.remove=!data.remove}" textAlign="center" />
+								</fx:Component>
+							</mx:itemRenderer>
+						</mx:DataGridColumn>
+						<mx:DataGridColumn headerText="Service Name" dataField="label" width="290" resizable="false" />						
+					</mx:columns>
+				</mx:DataGrid>					
+			</s:VGroup>
+		</s:Group>
+	
+		<!--- Load services group -->
+		<s:Group id="loadServices" width="100%" height="100%" visible.loadServices="true" visible="false">
+			<s:VGroup width="100%" height="100%" paddingTop="2">
+				<s:Label height="25" width="100%" verticalAlign="middle" text="Add Layer from Web" styleName="WidgetTitle" />
+				<s:Label width="100%" text="What kind of layer do you want to add?" />
+				<s:DropDownList id="webLayerType" width="100%" labelField="label" selectedIndex="0" 
+								change="webLayerType_changeHandler(event)">
+					<mx:ArrayCollection>
+						<fx:Object label="An ArcGIS Server Web Service" value="AGS" prompt="http://&lt;ServerName&gt;/ArcGIS/rest/services/&lt;ServiceName&gt;" />
+						<fx:Object label="A WMS OGC Web Service" value="WMS" prompt="http://&lt;enter URL&gt;" />
+						<!--<fx:Object label="A KML File" value="KML" prompt="http://&lt;enter URL&gt;" />-->
+					</mx:ArrayCollection>
+				</s:DropDownList>
+				
+				<s:HGroup width="100%" verticalAlign="middle" >
+					<s:Label text="URL:" styleName="WidgetTitle" />
+					<s:TextInput id="webLayerURL" width="100%" prompt="{webLayerType.selectedItem.prompt}" /> 
+				</s:HGroup>
+				<s:HGroup width="100%" horizontalAlign="center">
+					<s:Button id="loadServiceButton" 
+							  label="{_loadServiceLabel}" 
+							  skinClass="widgets.LayerListEnhanced.skins.LayerListWidgetLoadServiceButtonSkin"
+							  click="playGlow2(loadServiceButton);loadWebServiceLayers()" 
+							  toolTip="{_loadServiceTip}" 
+							  height="30"
+							  enabled="{webLayerURL.text.length &gt; 0}" />
+				</s:HGroup>
+			</s:VGroup>
+			
+		</s:Group>
+		
+		<!--- Start Hbox - message/loading box -->
+		<s:HGroup id="boxMessage" visible="{_msgVisible}" includeInLayout="{_msgVisible}" width="100%" bottom="0">
+			
+			<mx:SWFLoader id="swfMessage" source="assets/images/loader.swf" />
+			<mx:Text id="txtMessage" styleName="WidgetText" width="90%"/>
+			
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+</viewer:BaseWidget>

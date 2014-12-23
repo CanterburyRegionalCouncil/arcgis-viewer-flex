@@ -1,0 +1,792 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY				: 	Dialog which can be popped to allow user to select a feature from another 
+						feature layer or graphics layer currently in the map.  The dialog then 
+						dispatches an AppEvent which a listening component can use to signal that 
+						they can take the selected feature and perform some action (in this case copy it). 
+
+SOURCE				: 	ECAN
+	
+DEVELOPED BY	 	: 	Ryan Elley, ECan.
+	
+CREATED				: 	22/06/2013
+DEPENDENCIES		: 	None.
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan)	| 22/06/2013	| Initial Development.
+Ryan Elley (ECan)	| 07/08/2013	| Bug fix to hide hidden layers from copy source list
+									  Change to filter features in data grid to only those in visble extent of map
+Ryan Elley (ECan)	| 17/09/2013	| Bug fix in item click on data grid - centre on geometry causes data grid source to be refreshed and selection to be cleared. 
+-->
+
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+			   width=				"400" 
+			   height=				"300"
+			   title=				"{Title}"
+			   close=				"closeHandler(event)"
+			   defaultButton=		"{butCopy}" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.components.TemplatePicker;
+			import com.esri.ags.components.supportClasses.Template;
+			import com.esri.ags.events.ExtentEvent;
+			import com.esri.ags.events.TemplatePickerEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.CloseEvent;
+			import mx.events.ListEvent;
+			
+			import spark.effects.Animate;
+			import spark.effects.AnimateFilter;
+			import spark.effects.animation.*;
+			import spark.events.IndexChangeEvent;
+			import spark.filters.*;
+			
+			import widgets.supportClasses.utils.GeometryUtil;
+
+			
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+			
+			[Bindable]
+			private var _map:Map;
+			
+			[Bindable]
+			private var _template:Template;
+			
+			[Bindable]
+			private var _templatePicker:TemplatePicker;
+			
+			private var _geometryType:String = "";
+			
+			[Bindable]
+			private var _dataSources:ArrayCollection = new ArrayCollection();
+			
+			[Bindable]
+			private var _selectableFeatures:ArrayCollection = new ArrayCollection();
+			
+			[Bindable]
+			private var _graphicLayers:ArrayCollection = new ArrayCollection();
+			
+			
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Copy Features"  */
+			[Bindable]
+			public static var Title:String = "Copy Features";
+
+			/** Label text for the feature source dropdown list. Defaults to "Source Layer:"  */
+			[Bindable]
+			public static var SourceLayerLabel:String = "Source Layer:";
+
+			/** Tooltip text for the feature source dropdown list */
+			[Bindable]
+			public static var SourceLayerDropdowTooltip:String = "Select the data source to copy features from";
+
+			/** Column header text for the feature type column of the features datagrid */
+			[Bindable]
+			public static var FeaturesGridFeatureTypeHeaderText:String = "Feature Type";
+
+			/** Column header text for the feature id column of the features datagrid */
+			[Bindable]
+			public static var FeaturesGridFeatureIDHeaderText:String = "Feature";
+
+			/** Label text for the select all features button on the features datagrid */
+			[Bindable]
+			public static var SelectAllFeaturesButtonLabel:String = "Select All";
+
+			/** Label text for the select none button on the features datagrid */
+			[Bindable]
+			public static var SelectNoneButtonLabel:String = "Select None";
+
+			/** Label text for the record count label.  Defaults to "Visible Record Count:" */
+			[Bindable]
+			public static var RecordCountLabel:String = "Visible Record Count:";
+
+			/** Label text for the copy attributes checkbox.  Defaults to "Copy Attributes:" */
+			[Bindable]
+			public static var CopyAttributesCheckboxLabel:String = "Copy Attributes:";
+
+			/** Tooltip text for the copy attributes checkbox.  Defaults to "Copy Attributes:" */
+			[Bindable]
+			public static var CopyAttributesCheckboxTooltip:String = "Check to copy all attributes from the data source features that match attributes in the target layer";
+
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel copy action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel copy action and close dialog";
+
+			/** Label text for the create copy button.   Defaults to "Create Copy" */
+			[Bindable]
+			public static var CreateCopyButtonLabel:String = "Create Copy";
+
+			/** Tootltip text for the create copy button.   Defaults to "Click to create a copy of the selected feature in the target layer" */
+			[Bindable]
+			public static var CreateCopyButtonTooltip:String = "Click to create a copy of the selected feature in the target layer";
+
+			
+
+			/* COMPONENT PROPERTIES
+			---------------------------------------------------------------------------- */
+
+			
+			/* Map Property */
+
+			/**
+			 * ESRI Map component that contains the displayable features to be copied.   Sets the map object which contains the source layers that can be used as copy sources.
+			 */ 
+			
+			public function set map(linkedMap:Map):void
+			{
+				// Set the map object				
+				_map = linkedMap;
+				
+				// Call the routine to update the layer settings
+				updateSettings();
+			}
+			
+			public function get map():Map
+			{
+				return _map;
+			}
+
+			
+			/* Template Picker Property */
+
+			/**
+			 * Sets the map object which contains the source layers that can be used as copy sources.
+			 */
+			public function set templatePicker(templatePicker:TemplatePicker):void
+			{
+				if (templatePicker)
+				{
+					templatePicker.removeEventListener(TemplatePickerEvent.SELECTED_TEMPLATE_CHANGE,selectedtemplate_Change);
+					
+					_templatePicker = templatePicker;
+					_templatePicker.addEventListener(TemplatePickerEvent.SELECTED_TEMPLATE_CHANGE,selectedtemplate_Change);
+					
+					// Refresh the template
+					updateTemplate();		
+				}
+			}
+			
+			public function get templatePicker():TemplatePicker
+			{
+				return _templatePicker;
+			}
+			
+			
+			/* Target Property */
+			
+			/**
+			 * Returns the template generated by this dialog. 
+			 */
+			public function get target():Template
+			{
+				return _template;
+			}			
+			
+			
+			/* Graphics Layer Property */
+			
+			/**
+			 * Collection of names of graphic layers that can be sources of features that can be copied. . 
+			 */
+			public function set graphicLayerNames(names:Array):void
+			{
+				_graphicLayers = new ArrayCollection(names); 
+				
+				// Refresh the template
+				updateTemplate();		
+			}
+			
+						
+			public function get graphicLayerNames():Array
+			{
+				return _graphicLayers.toArray();
+			}
+			
+			
+			/* COMPONENT EVENT HANDLERS
+			---------------------------------------------------------------------------- */
+
+			/**
+			 * Called whe the dialog is closed
+			 */
+			protected function closeHandler(event:CloseEvent):void
+			{
+				// Stop glow playing
+				stopGlow();
+				
+				// Clear the highlight from any features
+				clearHighlight();
+			}
+
+			
+			/* COMPONENT FUNCTIONALITY
+			---------------------------------------------------------------------------- */
+
+			/**
+			 * Updates the internal template setting used to apply to the copied features
+			 */
+			private function updateTemplate():void
+			{
+				if (_templatePicker && _templatePicker.selectedTemplate)
+				{
+					// Set the template object				
+					_template = _templatePicker.selectedTemplate;
+					_geometryType = _template.featureLayer.layerDetails.geometryType;
+				}
+				else
+				{
+					// Clear the current settings
+					_template = null;
+					_geometryType = "";
+				}
+				
+				// Call the routine to update the layer settings
+				updateSettings();
+			}
+			
+			/** 
+			 * Sets up the data source setings
+			 */
+			private function updateSettings():void
+			{
+				// reset the datasource collection
+				_dataSources = new ArrayCollection();
+				sourceLayer.selectedIndex = -1;
+				
+				// Check for map
+				if (_map && _template)
+				{
+					// Update listener for map extent changes
+					map.removeEventListener(ExtentEvent.EXTENT_CHANGE, refreshFeatures);
+					map.addEventListener(ExtentEvent.EXTENT_CHANGE, refreshFeatures);
+					
+					// Update the list of graphic and 
+					for each (var layer:Layer in map.layers)
+					{
+						// Check for feature or graphics layers
+						if (layer is GraphicsLayer)
+						{
+							// Create a new dataSource object
+							var source:Object = {layer:layer};
+							source.name = layer.name;
+							
+							var add:Boolean = true;
+							
+							// Check if this is a feature layer and that geometry type matches the template type
+							if (layer is FeatureLayer)
+							{
+								var fLayer:FeatureLayer = layer as FeatureLayer;
+								if (fLayer.layerDetails.geometryType != _geometryType || fLayer.name.indexOf("hiddenLayer_") != -1)
+								{
+									add = false;
+								}
+								source.type = "Features";
+							}
+							else
+							{
+								// Check if the layer is in the graphic layer names list
+								var gLayerProperties:Object = getGraphicLayerDetails(layer.name,layer.id);
+								
+								if (gLayerProperties)
+								{
+									// Add in the feature type details if appropriate
+									if (gLayerProperties.type == "Features")
+									{
+										source.type = "Features";
+									}
+								}
+								else
+								{
+									add = false;
+								}
+							}
+							
+							// Add the item to the datasources list
+							if (add)
+							{
+								_dataSources.addItem(source);
+							}
+						}
+					}
+				}
+				
+				if (_dataSources.length > 0)
+				{
+					sourceLayer.selectedIndex = 0;
+					sourceLayer.enabled = true;
+					setSourcefeatures();
+				}
+				else
+				{
+					sourceLayer.enabled = false;
+					_selectableFeatures = new ArrayCollection();
+				}
+			}
+			
+			/** 
+			 * Retreives the layer details with the given name or id.
+			 */ 
+			private function getGraphicLayerDetails(name:String, id:String):Object
+			{
+				var result:Object;
+				for each (var gLayer:Object in _graphicLayers)
+				{
+					if (gLayer.name == name || gLayer.name == id)
+					{
+						result = gLayer;
+						break;
+					}
+				}
+				return result;
+			}
+			
+			
+			/* UI FUNCTIONALITY
+			---------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the selected template on the editor changes
+			 */ 
+			private function selectedtemplate_Change(event:TemplatePickerEvent):void
+			{
+				// Update the template settings
+				updateTemplate();
+			}
+
+			/** 
+			 * Called when the selected source layer is changed
+			 */ 
+			protected function sourceLayer_changeHandler(event:IndexChangeEvent):void
+			{
+				setSourcefeatures();
+			}
+			
+			/** 
+			 * Called when the map extent changes
+			 */ 
+			protected function refreshFeatures(event:ExtentEvent):void
+			{
+				setSourcefeatures();
+			}
+			
+			/**
+			 * Updates the dialog settings when the layer source is changed
+			 */
+			private function setSourcefeatures():void
+			{
+				// Determine if layer is a feature layer
+				if (sourceLayer.selectedItem && sourceLayer.selectedItem.layer)
+				{
+					var layer:GraphicsLayer = sourceLayer.selectedItem.layer as GraphicsLayer;
+					
+					if (layer is FeatureLayer)
+					{
+						// Get the selected items if any in this feature layer
+						var fLayer:FeatureLayer = layer as FeatureLayer;
+						if (fLayer.selectedFeatures.length > 0)
+						{
+							// Add just the selected features
+							populateFeatures(new ArrayCollection(fLayer.selectedFeatures),"Feature",fLayer.layerDetails.displayField);
+						} 
+						else 
+						{
+							// Add all features
+							populateFeatures(fLayer.graphicProvider as ArrayCollection,"Feature",fLayer.layerDetails.displayField);
+						}
+					}
+					else
+					{
+						// Layer is a plain graphics layer - get the graphics features
+						// Check if it is a features type layer (such as for the search widget) 
+						
+						if (sourceLayer.selectedItem.type == "Features")
+						{
+							populateFeatures(layer.graphicProvider as ArrayCollection,"Feature","");
+						}
+						else
+						{
+							populateFeatures(layer.graphicProvider as ArrayCollection,"Graphic","");
+						}
+					}
+				}
+			}
+			
+			/**
+			 * Used to populate the data grid with the selected features that may be chosen by the user to copy. 
+			 */
+			private function populateFeatures(data:ArrayCollection, featureType:String = "", fieldName:String = ""):void
+			{
+				// Clear any highlights playing
+				clearHighlight();
+				
+				// Reset the features list
+				_selectableFeatures = new ArrayCollection();
+				var cnt:int = 0;
+				
+				// Get the map extent
+				var extent:Extent = _map.extent;
+				
+				// Iterate through the collection of graphics and select those of the correct geometry type
+				for each (var graphic:Graphic in data)
+				{
+					var intersects:Boolean = extent.intersects(graphic.geometry);
+					
+					if (graphic.geometry.type == _geometryType && intersects)
+					{
+						var feature:Object = {graphic:graphic, featureType:featureType};
+						var id:String;
+						cnt += 1;
+						
+						// Check for the field name (if a feature rather than a graphic)
+						if (fieldName != "")
+						{
+							if (graphic.attributes[fieldName] != null)
+							{
+								id = graphic.attributes[fieldName];
+							}
+							else
+							{
+								id = "Feature " + cnt.toString();
+							}
+						}
+						else
+						{
+							if (featureType == "Feature")
+							{
+								for (var name:String in graphic.attributes)
+								{
+									id = graphic.attributes[name];
+									break;									
+								}
+							}
+							else
+							{
+								id = "Graphic " + cnt.toString();
+							}
+						}
+						
+						feature.featureID = id;
+						feature.recordid = cnt;
+						feature.selected = "false";
+						
+						// Add feature to the displayed collection
+						_selectableFeatures.addItem(feature);
+					}
+				}
+			}
+			
+			/** 
+			 * Called when the user rolls over a feature on the data grid
+			 */ 
+			protected function selFeatures_itemRollOverHandler(event:ListEvent):void
+			{
+				// Get the data object
+				var data:Object = event.itemRenderer.data;
+				
+				// get the graphic reference
+				var graphic:Graphic = data.graphic;
+				
+				// Highlight on the map
+				playGlow(graphic,true);
+			}
+			
+			/** 
+			 * Called when the user clicks a feature on the data grid
+			 */ 
+			protected function selFeatures_itemClickHandler(event:ListEvent):void
+			{
+				// Get the data object
+				var data:Object = event.itemRenderer.data;
+				
+				// get the graphic reference
+				var graphic:Graphic = data.graphic;
+				
+				/*  // Commented out to prevent extent change from reseting the source features and clearing the selection
+					// Centre map on the graphic 
+					var cpt:MapPoint = GeometryUtil.getMapPoint(graphic.geometry);
+					_map.centerAt(cpt);
+				*/
+				
+				// Apply highlight
+				if (selFeatures.selectedIndices.length > 1)
+				{
+					playHighlight(graphic,true,true);
+				}
+				else
+				{
+					playHighlight(graphic,false,true);
+				}
+				
+				// Update execute button status
+				butCopy.enabled = (selFeatures.selectedIndices.length > 0);
+			}
+			
+			/** 
+			 * Called when the user rolls off the data grid
+			 */ 
+			protected function selFeatures_rollOutHandler(event:MouseEvent):void
+			{
+				// Stop glow playing
+				stopGlow();
+			}
+			
+			/** 
+			 * Adds a glowing effect to objects - UI buttons mainly
+			 */ 
+			private function playGlow(obj:Object, repeat:Boolean = false):void 
+			{
+				// Stop glow playing
+				stopGlow();
+				
+				// Set The target object
+				glower.target = obj;
+				
+				// Set the repeat count
+				if (repeat) {
+					glower.repeatCount = 0;
+				} else {
+					glower.repeatCount = 1;
+				}
+				
+				// Start the animation
+				glower.play();
+			}
+			
+			/**
+			 * Stops the glow from playing
+			 */
+			private function stopGlow():void
+			{
+				// Check if animation playing
+				if(glower.isPlaying) 
+				{
+					glower.end();
+				}
+			}
+			
+			/** 
+			 * Adds a glowing effect to objects - UI buttons mainly
+			 */ 
+			private function playHighlight(obj:Object, add:Boolean = true, repeat:Boolean = false):void 
+			{
+				// Stop glow playing
+				stopHighlight();
+				
+				// Set the target object
+				if (add && highlighter.targets.indexOf(obj) == -1)
+				{
+					highlighter.targets.push(obj);
+				}
+				else
+				{
+					highlighter.target = obj;
+				}
+				
+				// Set the repeat count
+				if (repeat) {
+					highlighter.repeatCount = 0;
+				} else {
+					highlighter.repeatCount = 1;
+				}
+				
+				// Start the animation
+				highlighter.play();
+			}
+			
+			private function stopHighlight():void
+			{
+				// Check if animation playing
+				if(highlighter.isPlaying) 
+				{
+					highlighter.end();
+				}
+			}
+			
+			/**
+			 * Clears the highlighted from the features
+			 */
+			private function clearHighlight():void
+			{
+				// Stop glow playing
+				stopHighlight();
+				
+				// Celar the current targets
+				highlighter.targets = [];				
+			}
+			
+			/**
+			 * Generates the tooltip used on the features datagrid.  
+			 */
+			private function attributesDataTip(item:Object):String
+			{
+				var label:String = "";
+				
+				// Check if this is a feature or a graphic
+				if (item.featureType == "Feature")
+				{
+					// Get the attributes
+					var graphic:Graphic = item.graphic;
+					
+					for (var field:String in graphic.attributes)
+					{
+						var value:String = graphic.attributes[field];
+						if (value != null)
+						{
+							label += field + ": " + value + "\n";						
+						}
+					}
+				}
+				return label;
+			}
+			
+			/**
+			 * Checks to see if there selected features in the grid 
+			 */
+			private function checkSelectedFeatures():Boolean
+			{
+				return selFeatures.selectedIndices.length > 0;
+			}
+			
+			/**
+			 * Sets all of the current features in the grid
+			 */			
+			protected function butSelectAll_clickHandler(event:MouseEvent):void
+			{
+				// Set the selected items list to the entire dataset
+				selFeatures.selectedItems = (selFeatures.dataProvider as ArrayCollection).toArray();	
+				
+				// Update execute button status
+				this.butCopy.enabled = (selFeatures.selectedIndices.length > 0);
+			}
+			
+			/** 
+			 * Clears the selected features in the grid
+			 */
+			protected function butSelectNone_clickHandler(event:MouseEvent):void
+			{
+				// Clear the selected iitems list
+				selFeatures.selectedItems = new Array();
+				
+				// Disable the execute button
+				this.butCopy.enabled = false;
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!--- Filter used for highlighting graphics -->
+		<s:GlowFilter id="glow" 
+					  blurX="25" 
+					  blurY="25" 
+					  color="{getStyle('focusColor')}" 
+					  strength="2.5"/>
+		
+		<!--- Flashing filter used to highlight a feature -->
+		<s:AnimateFilter id="glower" bitmapFilter="{glow}" 
+						 duration="600" repeatCount="0" 
+						 repeatBehavior="{RepeatBehavior.REVERSE}">
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>	
+		
+		<!--- Filter used for highlighting graphics -->
+		<s:GlowFilter id="highlight" 
+					  blurX="20" 
+					  blurY="20" 
+					  color="0xFF9933" 
+					  strength="4"/>
+		
+		<!--- Flashing filter used to highlight a feature -->
+		<s:AnimateFilter id="highlighter" bitmapFilter="{highlight}" 
+						 duration="450" repeatCount="0" 
+						 repeatBehavior="{RepeatBehavior.REVERSE}">
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>	
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout gap="5" />
+	</s:layout>
+	
+	<!--- Source Layer Selection Area -->
+	<s:HGroup id="sourcelayerGroup" width="100%" paddingLeft="10" paddingRight="10" gap="5" verticalAlign="middle" height="35">
+		<s:Label id="labSourceLayers" text="{SourceLayerLabel}" styleName="WidgetTitle"/>
+		<s:DropDownList id="sourceLayer" width="100%" change="sourceLayer_changeHandler(event)" 
+						toolTip="{SourceLayerDropdowTooltip}" dataProvider="{_dataSources}" labelField="name" />
+	</s:HGroup>
+	
+	<!--- Features Area -->
+	<s:HGroup width="100%" height="100%" verticalAlign="middle" paddingLeft="10" paddingRight="10" gap="10" paddingTop="0">
+		<mx:DataGrid id="selFeatures" width="100%" height="100%" dataProvider="{_selectableFeatures}"
+					 itemRollOver="selFeatures_itemRollOverHandler(event)" 
+					 itemClick="selFeatures_itemClickHandler(event)" 
+					 rollOut="selFeatures_rollOutHandler(event)"
+					 dataTipFunction="attributesDataTip" 
+					 allowMultipleSelection="true" 
+					 alternatingItemColors="[#CCCCCC, #999999]" 
+					 rollOverColor="{getStyle('rollOverColor')}" 
+					 selectionColor="{getStyle('focusColor')}" >
+			<mx:columns>
+				<mx:DataGridColumn dataField="featureType" headerText="{FeaturesGridFeatureTypeHeaderText}" />
+				<mx:DataGridColumn dataField="featureID" headerText="{FeaturesGridFeatureIDHeaderText}" showDataTips="true"/>
+			</mx:columns>
+		</mx:DataGrid>
+	</s:HGroup>
+	<s:HGroup width="100%" verticalAlign="middle" paddingLeft="10" paddingRight="10" gap="10" paddingTop="0" paddingBottom="0">
+		<s:Button id="butSelectAll" 
+				  label="{SelectAllFeaturesButtonLabel}" 
+				  click="butSelectAll_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		<s:Button id="butSelectNone" 
+				  label="{SelectNoneButtonLabel}" 
+				  click="butSelectNone_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		<s:Label id="labRecordNumber" width="100%" paddingLeft="10" paddingRight="10" textAlign="center" 
+				 text="{RecordCountLabel + ' ' + _selectableFeatures.length.toString()}" />
+	</s:HGroup>
+	
+	<!--- Copy Attributes Area -->
+	<s:HGroup id="copyAttributesGroup" width="100%" paddingLeft="5" paddingRight="5" gap="5" verticalAlign="middle" height="35">
+		<s:Label id="labCopyAttributes" text="{CopyAttributesCheckboxLabel}" styleName="WidgetTitle"/>
+		<s:CheckBox id="chkCopyAttributes" toolTip="{CopyAttributesCheckboxTooltip}" selected="true" />
+	</s:HGroup>
+	
+	<!--- Actions Area -->
+	<s:HGroup width="100%" verticalAlign="middle" horizontalAlign="center" paddingLeft="10" 
+			  paddingRight="10" paddingBottom="10" gap="10">
+		<s:Button id="butCancel" 
+				  label="{CancelButtonLabel}" 
+				  toolTip="{CancelButtonTooltip}" 
+				  click="{clearHighlight();}" 
+				  buttonMode="true"
+				  useHandCursor="true" />
+		<s:Button id="butCopy" 
+				  label="{CreateCopyButtonLabel}" 
+				  toolTip="{CreateCopyButtonTooltip}" 
+				  enabled="{checkSelectedFeatures()}" 
+				  click="{clearHighlight();}"
+				  buttonMode="true"
+				  useHandCursor="true" />
+	</s:HGroup>
+</s:TitleWindow>

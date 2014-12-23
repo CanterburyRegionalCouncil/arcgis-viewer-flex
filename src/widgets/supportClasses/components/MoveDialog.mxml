@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+			   width=				"400" 
+			   height=				"200"
+			   creationComplete=	"creationCompleteHandler(event)"
+			   title=				"{Title}"
+			   currentState=		"moveToXY"
+			   defaultButton=		"{butMove}" >
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.symbols.SimpleFillSymbol;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			
+			import mx.events.FlexEvent;
+			import mx.events.ValidationResultEvent;			
+			
+			import widgets.supportClasses.utils.GeometryUtil;
+
+			
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+
+			[Bindable]
+			private var _map:Map;
+
+			[Bindable]
+			private var _geometry:Geometry;
+
+			
+			[Bindable]
+			private var _XValid:Boolean = false;
+			[Bindable]
+			private var _YValid:Boolean = false;
+
+			
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Move Feature"  */
+			[Bindable]
+			public static var Title:String = "Move Feature";
+			
+			/** Label text for the dialog instruction when in Move mode. Defaults to "Enter the X and Y coordinates to move this feature to and press MOVE."  */
+			[Bindable]
+			public static var MoveInstructionLabel:String = "Enter the X and Y coordinates to move this feature to and press MOVE.";
+
+			/** Label text for the dialog instruction when in Offset mode. Defaults to "Enter the X and Y offsets to move this feature by and press MOVE."  */
+			[Bindable]
+			public static var OffsetInstructionLabel:String = "Enter the X and Y offsets to move this feature by and press MOVE.";
+			
+			/** Label text for the X coordinate input text box. Defaults to "X Coordinate:"  */
+			[Bindable]
+			public static var XCoordinateInputLabel:String = "X Coordinate:";
+			
+			/** Label text for the Y coordinate input text box. Defaults to "Y Coordinate:"  */
+			[Bindable]
+			public static var YCoordinateInputLabel:String = "Y Coordinate:";
+
+			/** Label text for the X offset input text box. Defaults to "Offset X:"  */
+			[Bindable]
+			public static var XOffsetInputLabel:String = "Offset X:";
+			
+			/** Label text for the Y offset input text box. Defaults to "Offset Y:"  */
+			[Bindable]
+			public static var YOffsetInputLabel:String = "Offset Y:";
+			
+			/** Validation error message for required fields. Defaults to "Required"  */
+			[Bindable]
+			public static var RequiredFieldLabel:String = "Required";
+
+			
+			/** Label text for the Move to XY toggle button. Defaults to "Move to XY"  */
+			[Bindable]
+			public static var MoveXYToggleButtonLabel:String = "Move to XY";
+			
+			/** Tooltip text for the Move to XY toggle button. Defaults to "Click to toggle to 'Move to XY' mode"  */
+			[Bindable]
+			public static var MoveXYToggleButtonTooltip:String = "Click to toggle to 'Move to XY' mode";
+
+			/** Label text for the Offset by XY Toggle button. Defaults to "Move by XY Offset"  */
+			[Bindable]
+			public static var OffsetXYToggleButtonLabel:String = "Move by XY Offset";
+			
+			/** Tooltip text for the Offset by XY toggle button. Defaults to "Click to toggle to 'Offset by XY' mode"  */
+			[Bindable]
+			public static var OffsetXYToggleButtonTooltip:String = "Click to toggle to 'Offset by XY' mode";
+			
+			
+			
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel the move action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel the move action and close dialog";
+
+			/** Label text for the move button.  Defaults to "Move" */
+			[Bindable]
+			public static var MoveButtonLabel:String = "Move";
+			
+			/** Tooltip text for the move button.  Defaults to "Click to move the feature and close dialog" */
+			[Bindable]
+			public static var MoveButtonTooltip:String = "Click to move the feature and close dialog";
+
+			
+			
+			
+			/* COMPONENT PROPERTIES
+			---------------------------------------------------------------------------- */
+			
+			/* Map Property */
+			
+			/**
+			 * ESRI Map component that contains the displayable features to be copied.   Sets the map object which contains the source layers that can be used as copy sources.
+			 */ 
+			public function set map(linkedMap:Map):void
+			{
+				// Set the map object				
+				_map = linkedMap;
+			}
+			
+			public function get map():Map
+			{
+				return _map;
+			}
+			
+			
+			/* VALIDATOR UI FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the number validitors on the text entry return true
+			 */ 
+			protected function Validator_validHandler(event:ValidationResultEvent):void
+			{
+				if (event.currentTarget == xValidator) 
+				{
+					_XValid = true;
+				}
+				
+				if (event.currentTarget == yValidator) 
+				{
+					_YValid = true;
+				}
+			}
+			
+			/** 
+			 * Called when the number validitors on the text entry return false
+			 */ 
+			protected function Validator_invalidHandler(event:ValidationResultEvent):void
+			{
+				if (event.currentTarget == xValidator) 
+				{
+					_XValid = false;
+				}
+				
+				if (event.currentTarget == yValidator) 
+				{
+					_YValid = false;
+				}	
+			}
+			
+			
+			/* COMPONENT HANDLERS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the title window gets the focus
+			 */
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				focusManager.setFocus(txtXCoordinate);
+			}
+			
+			
+			/* COMPONENT UI FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/** 
+			 * Change states between moving to XY and offsetting by XY
+			 */
+			protected function butMoveXYState_clickHandler(event:MouseEvent):void
+			{
+				this.currentState = "moveToXY";
+				focusManager.setFocus(txtXCoordinate);
+			}
+			
+			/** 
+			 * Change states between offsetting to XY and moving by XY
+			 */
+			protected function butMoveDeltaXYState_clickHandler(event:MouseEvent):void
+			{
+				this.currentState = "moveDeltaXY";
+				focusManager.setFocus(txtXCoordinate);
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<!--- State and transition details -->
+	<s:states>
+		<s:State name="moveToXY" />
+		<s:State name="moveDeltaXY" />
+	</s:states>
+	
+	<s:transitions>
+		<s:Transition toState="*" autoReverse="true">
+			<s:Fade targets="{[labInstructions, frmItmX, frmItmY]}" duration="500" />
+		</s:Transition>
+	</s:transitions>
+	
+	<fx:Declarations>
+		<s:NumberValidator 	id="xValidator" source="{txtXCoordinate}" required="true" property="text" 
+							domain="real" enabled="true" triggerEvent="change" requiredFieldError="{RequiredFieldLabel}"
+							valid="Validator_validHandler(event)" invalid="Validator_invalidHandler(event)" />
+		<s:NumberValidator 	id="yValidator" source="{txtYCoordinate}" required="true" property="text" 
+							domain="real" enabled="true" triggerEvent="change" requiredFieldError="{RequiredFieldLabel}" 
+							valid="Validator_validHandler(event)" invalid="Validator_invalidHandler(event)" />
+	</fx:Declarations>
+
+	
+	<s:VGroup width="100%" height="100%">
+		<!--- Instructions Area -->	
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10" paddingTop="10">
+			<s:Label id="labInstructions" width="100%" 
+					 text.moveToXY="{MoveInstructionLabel}" 
+					 text.moveDeltaXY="{OffsetInstructionLabel}" />
+		</s:HGroup>
+		
+		<!--- Coordinate/Offset Area -->	
+		<mx:Form width="100%" height="100%" id="frmMoveToXY" >
+			<mx:FormItem id="frmItmX" 
+						 label.moveToXY="{XCoordinateInputLabel}"  
+						 label.moveDeltaXY="{XOffsetInputLabel}" width="100%">
+				<s:TextInput id="txtXCoordinate" width="100%" restrict="-1234567890." />
+			</mx:FormItem>
+			
+			<mx:FormItem id="frmItmY" 
+						 label.moveToXY="{YCoordinateInputLabel}" 
+						 label.moveDeltaXY="{YOffsetInputLabel}" width="100%">
+				<s:TextInput id="txtYCoordinate" width="100%" restrict="-1234567890." />
+			</mx:FormItem>
+		</mx:Form>
+		
+		<!--- Mode/Action Area -->	
+		<s:HGroup width="100%" paddingLeft="10" gap="10" verticalAlign="middle">
+			<s:Button id="butMoveXYState" 
+					  label="{MoveXYToggleButtonLabel}" 
+					  toolTip="{MoveXYToggleButtonTooltip}" 
+					  click="butMoveXYState_clickHandler(event)"  
+					  visible="false" 
+					  visible.moveDeltaXY="true" 
+					  includeInLayout="false" 
+					  includeInLayout.moveDeltaXY="true" 
+					  buttonMode="true" 
+					  useHandCursor="true" />
+			
+			<s:Button id="butMoveDeltaXYState" 
+					  label="{OffsetXYToggleButtonLabel}" 
+					  toolTip="{OffsetXYToggleButtonTooltip}" 
+					  click="butMoveDeltaXYState_clickHandler(event)"  
+					  visible="false" 
+					  visible.moveToXY="true" 
+					  includeInLayout="false" 
+					  includeInLayout.moveToXY="true"
+					  buttonMode="true"
+					  useHandCursor="true" />
+			
+			<s:HGroup width="100%"  horizontalAlign="right" paddingLeft="10" paddingRight="10" paddingBottom="10" paddingTop="10" gap="10">
+				<s:Button id="butCancel" 
+						  label="{CancelButtonLabel}" 
+						  toolTip="{CancelButtonTooltip}" 
+						  buttonMode="true" 
+						  useHandCursor="true" />
+				<s:Button id="butMove" 
+						  label="{MoveButtonLabel}" 
+						  toolTip="{MoveButtonTooltip}" 
+						  enabled="{(_XValid &amp;&amp; _YValid)}" 
+						  buttonMode="true" 
+						  useHandCursor="true" />
+			</s:HGroup>
+		</s:HGroup>
+	</s:VGroup>
+	
+</s:TitleWindow>

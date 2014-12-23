@@ -9,3 +9,4 @@ dist/
 
 # Other files
 *.swc
+*-ecan.xml

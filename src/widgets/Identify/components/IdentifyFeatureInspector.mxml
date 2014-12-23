@@ -1,0 +1,1168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx=					"http://ns.adobe.com/mxml/2009" 
+		 xmlns:s=					"library://ns.adobe.com/flex/spark" 
+		 xmlns:mx=					"library://ns.adobe.com/flex/mx" 
+		 xmlns:esri=				"http://www.esri.com/2008/ags"
+		 minWidth=					"300"
+		 minHeight=					"200"
+		 currentState=				"tree" 
+		 creationComplete=			"creationCompleteHandler(event)" 
+		 mouseChildren=				"true" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.supportClasses.Field;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.symbols.SimpleFillSymbol;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.symbols.Symbol;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			
+			import spark.components.gridClasses.GridColumn;
+			import spark.skins.spark.DefaultGridItemRenderer;
+			
+			import widgets.Identify.components.supportClasses.IdentifyFeature;
+			import widgets.supportClasses.SearchSuggestion;
+			import widgets.supportClasses.utils.GraphicUtil;
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Component constants
+			-------------------------------------------------------------------- */
+			
+			public static const SEARCHWIDGET_SELECTFEATURES:String = "searchwidget_selectfeatures";
+			public static const SEARCHWIDGET_READY:String = "searchwidget_ready";
+
+
+			/* --------------------------------------------------------------------
+			Component variables
+			-------------------------------------------------------------------- */
+			
+			private var _lastState:String = "tree";
+			
+			[Bindable]
+			private var _records:ArrayCollection = new ArrayCollection();
+			
+			[Bindable]
+			private var _activeRecord:IdentifyFeature;
+			
+			[Bindable]
+			private var _activeRecordLayerName:String = "";
+
+			[Bindable]
+			private var _activeRecordTitle:String = "";
+			
+			[Bindable]
+			private var _activeRecordAttributes:Array = [];
+
+			[Bindable]
+			private var _activeRecordLinks:ArrayCollection = new ArrayCollection();
+			
+			[Bindable]
+			private var _activeRecordImage:String = "";
+			
+			[Bindable]
+			private var _map:Map;
+			
+			private var _graphicsLayer:GraphicsLayer;
+			
+			[Bindable]
+			private var _drawnGraphicsLayer:GraphicsLayer;
+			
+			[Bindable]
+			public var _treeMenu:ContextMenu = new ContextMenu();
+
+			private var _lastNode:ListEvent;
+			
+			[Bindable]
+			private var _showSendSearch:Boolean = false;
+			
+			private var _useInfoWindow:Boolean = true;
+			
+			// Search widget properties 
+			private var _searchWidgetName:String;
+			[Bindable]
+			private var _searchWidgetID:int = -1;
+			
+			/** Delay to use in the timeout when calling the search widget.  Used to make sure that viewer widgets have all loaded correctly */
+			protected var _URLHandlerPreloadDelay:Number = 1000;
+
+			
+			[Bindable]
+			[Embed(source="widgets/Identify/assets/images/i_layer.png")] 
+			public var layericonOpen:Class; 
+			
+			[Bindable]
+			[Embed(source="widgets/Identify/assets/images/i_group_layer.png")] 
+			public var layericonClosed:Class; 
+			
+			[Bindable]
+			[Embed(source="widgets/Identify/assets/images/i_infoSmall.png")] 
+			public var resulticon:Class; 
+
+			
+			/* --------------------------------------------------------------------
+			Component properties
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Data provider 
+			 */
+			[Bindable]
+			public function get dataProvider():ArrayCollection
+			{
+				return _records;
+			}
+			
+			public function set dataProvider(value:ArrayCollection):void
+			{
+				if (value)
+				{
+					_records = value;
+				}
+				else
+				{
+					_records = new ArrayCollection();
+				}
+			}
+			
+			/**
+			 * Map that the results are displayed on. 
+			 */
+			public function get map():Map
+			{
+				return _map;
+			}
+			
+			public function set map(value:Map):void
+			{
+				_map = value;
+			}
+			
+			/**
+			 * Graphics layer that the results are displayed in.
+			 */
+			public function get graphicsLayer():GraphicsLayer
+			{
+				return _graphicsLayer;
+			}
+			
+			public function set graphicsLayer(value:GraphicsLayer):void
+			{
+				_graphicsLayer = value;
+			}
+			
+			/**
+			 * Graphics layer that drawing graphics are displayed in.
+			 */
+			public function get drawnGraphicsLayer():GraphicsLayer
+			{
+				return _drawnGraphicsLayer;
+			}
+			
+			public function set drawnGraphicsLayer(value:GraphicsLayer):void
+			{
+				_drawnGraphicsLayer = value;
+			}
+			
+			/**
+			 * Property for when this component is embeded in an info window
+			 * wther it should reposition the info window when ctive record changes. 
+			 */
+			public function get useInfoWindow():Boolean
+			{
+				return _useInfoWindow;
+			}
+			
+			public function set useInfoWindow(value:Boolean):void
+			{
+				_useInfoWindow = value;
+			}
+			
+			/**
+			 * Property for whether the button that sends the results of an ID 
+			 * to the Search Widget should be displayed on the inspector.
+			 */
+			public function get showSendButton():Boolean
+			{
+				return _showSendSearch;
+			}
+			
+			public function set showSendButton(value:Boolean):void
+			{
+				_showSendSearch = value;
+			}
+
+			/**
+			 * Property for the name of the search widget to send the ID results 
+			 * to if the show search button is clicked.  
+			 */ 
+			public function get searchWidgetName():String
+			{
+				return _searchWidgetName;
+			}
+			
+			public function set searchWidgetName(value:String):void
+			{
+				_searchWidgetName = value;
+				
+				// Get the search widget ID
+				_searchWidgetID = ViewerContainer.getInstance().widgetManager.getWidgetId(_searchWidgetName);
+			}
+			
+			/* --------------------------------------------------------------------
+			Component fucntions
+			-------------------------------------------------------------------- */
+
+			/**
+			 * Called when the next button on the action bar is clicked.  Changes the displayed 
+			 * record to the next record in the list.  If the current record is the last in the 
+			 * list, it jumps back to the first record in the list.
+			 */			
+			protected function nextButton_clickHandler(event:MouseEvent):void
+			{
+				var index:int = _records.getItemIndex(_activeRecord);
+				var newIndex:int;
+				
+				// Get the index of the next record
+				if (index != (_records.length - 1) && index != -1)
+				{
+					newIndex = index + 1;	
+				}
+				else
+				{
+					newIndex = 0;	
+				}
+				
+				// Set the next record as the active record
+				setActiveRecord(_records.getItemAt(newIndex) as IdentifyFeature);
+			}
+
+			/**
+			 * Called when the previous button on the action bar is clicked.  Changes the displayed 
+			 * record to the preceding record in the list.  If the current record is the first in the 
+			 * list, it jumps back to the last record in the list.
+			 */			
+			protected function previousButton_clickHandler(event:MouseEvent):void
+			{
+				var index:int = _records.getItemIndex(_activeRecord);
+				var newIndex:int;
+				
+				// Get the index of the next record
+				if (index != 0 && index != -1)
+				{
+					newIndex = index - 1;	
+				}
+				else
+				{
+					newIndex = _records.length - 1;	
+				}
+				
+				// Set the next record as the active record
+				setActiveRecord(_records.getItemAt(newIndex) as IdentifyFeature);			
+			}
+			
+			/** 
+			 * Called when the zoom button on the action bar is clicked by the user.
+			 */ 
+			protected function zoomButton_clickHandler(event:MouseEvent):void
+			{
+				if (_activeRecord && _map)
+				{
+					if (_activeRecord.geometry is MapPoint)
+					{
+						// Pan to the point and maintain the extent
+						_map.centerAt(_activeRecord.point);
+					}
+					else
+					{
+						// Zoom to extent of record
+						var extent:Extent = _activeRecord.geometry.extent;
+						
+						_map.extent = extent.expand(1.25);
+						if (!_map.extent.contains(extent))
+						{
+							_map.level += 1;
+						}
+					}
+				}
+			}
+			
+			/* Component functions
+			-------------------------------------------------------------------- */
+
+			/**
+			 * Adds the provided Identify Feature to the current list of identified results.
+			 */
+			public function addResult(result:IdentifyFeature):void
+			{
+				_records.addItem(result);
+
+				// Only set active record if not in working mode
+				if (currentState != "working")
+				{
+					setActiveRecord(result);
+				}
+				validateNow();
+			}
+			
+			/**
+			 * Appends the provided array of Identify Features to the current list of identified results.
+			 */
+			public function addResults(results:Array):void
+			{
+				if (results.length > 0)
+				{
+					_records.addAll(new ArrayCollection(results));
+					if (currentState != "working")
+					{
+						setActiveRecord(_records.getItemAt(0) as IdentifyFeature);
+					}					
+				}
+				validateNow();
+			}
+			
+			/**
+			 * Resets the component and clears all of the existing selected records.
+			 */
+			public function clearResults():void
+			{
+				clearActiveRecord();
+				_records.removeAll();
+				_lastNode = null;
+				prepareTreeData();
+				validateNow();
+			}
+			
+			/**
+			 * Clears the component for the currently displayed record's details.
+			 */
+			private function clearActiveRecord():void
+			{
+				_activeRecordLayerName = "";
+				_activeRecordTitle = "";
+				_activeRecord = null;	
+				_activeRecordAttributes = [];
+				_activeRecordLinks.removeAll();
+				_activeRecordImage = "";
+				
+				// Clear the existing graphics
+				_graphicsLayer.clear();
+			}
+			
+			/**
+			 * Displays the given record within the inspector and shose the record on the map. 
+			 */
+			private function setActiveRecord(record:IdentifyFeature):void
+			{
+				if (record && _records.getItemIndex(record) >= 0)
+				{
+					// Set active record details
+					_activeRecordLayerName = record.layername;
+					_activeRecordTitle = record.title;
+					_activeRecord = record;
+					_activeRecordAttributes = record.attributes;
+					
+					_activeRecordLinks.removeAll();
+					_activeRecordLinks.addAll(new ArrayCollection(record.links));
+					
+					_activeRecordImage = record.image;
+					
+					// Display the result on the map
+					updateMapDisplay();
+					
+					// Reposition the info window to point at the active feature
+					if(_useInfoWindow)
+						_map.infoWindow.show(record.point);
+					
+					// Check to make sure that the infowindow is within the map extent
+					if (!_map.extent.contains(record.point))
+					{
+						_map.centerAt(record.point);
+					}
+				}
+				else
+				{
+					clearActiveRecord();
+				}
+				validateNow();
+			}
+			
+			/**
+			 * Prepares the record tree based on the current records being displayed in the inpsector.
+			 */  
+			private function prepareTreeData():void
+			{
+				var layers:ArrayCollection = new ArrayCollection();
+				
+				// Check for any results
+				if (_records.length > 0)
+				{
+					// Generate the layer groups of results
+					for each (var result:IdentifyFeature in _records)
+					{
+						// Get the source name
+						var source:String = result.source;
+						var layerID:int = result.layerID;
+						
+						// Check if an object for this layer exists
+						var layer:Object = null;
+						for each (var lyr:Object in layers)
+						{
+							if (lyr.source == source && lyr.layerID == layerID)
+							{
+								layer = lyr;
+								break;
+							}
+						}
+						
+						if (!layer)
+						{
+							layer = { name:result.layername, source:source, layerID:layerID, children:new ArrayCollection() }; //, icon:layericon
+							layers.addItem(layer);
+						}
+							
+						// Create a result object and append to the layer definition
+						var feature:Object = { name:result.title, record:result, icon:resulticon };
+						ArrayCollection(layer.children).addItem(feature);
+					}
+				}
+				else
+				{
+					// Generate a no result node
+					var noResult:Object = { name:"No features identified" };
+					layers.addItem(noResult);
+				}
+				
+				// Sort the results
+				for each(var resSet:Object in layers)
+				{
+					var results:ArrayCollection = resSet.children;
+					if (results && results.length > 0)
+					{
+						var dataSortField:SortField = new SortField(); 
+						dataSortField.name = "name"; 
+						dataSortField.numeric = false; 
+						var numericDataSort:Sort = new Sort(); 
+						numericDataSort.fields = [dataSortField]; 
+						results.sort = numericDataSort; 
+						results.refresh(); 
+					}
+				}
+				
+				resultsTree.dataProvider = layers;
+				validateNow();
+				
+				for each (var obj:Object in resultsTree.dataProvider)
+				{
+					resultsTree.expandItem(obj,true,true);
+				}
+			}
+			
+			/**
+			 * Updates the displayed results in the map.
+			 */ 
+			private function updateMapDisplay():void
+			{
+				// Display the result on the map
+				if (_graphicsLayer && _activeRecord)
+				{
+					// Clear the existing graphics
+					_graphicsLayer.clear();
+					
+					// Check to see if the show all results button is toggled on
+					if (showAllResultsToggleButton.selected)
+					{
+						//Iterate through all results and create a graphic
+						for each (var record:IdentifyFeature in _records)
+						{
+							// Exclude the active record
+							if (record != _activeRecord)
+							{
+								var resultSymbol:Symbol;	
+								switch (record.geometry.type)
+								{
+									case Geometry.MAPPOINT:
+									case Geometry.MULTIPOINT:
+									{
+										resultSymbol = ResultsMarkerSynbol;								
+										break;
+									}
+										
+									case Geometry.EXTENT:
+									case Geometry.POLYGON:
+									{
+										resultSymbol = ResultsFillSymbol;
+										break;
+									}
+										
+									case Geometry.POLYLINE:
+									{
+										resultSymbol = ResultsLineSymbol; 	
+										break;
+									}
+								}
+							}
+	
+							var resultGraphic:Graphic = new Graphic(record.geometry,resultSymbol);
+							_graphicsLayer.add(resultGraphic);
+						}
+					}
+					
+					// Append the selection graphic
+					var symbol:Symbol
+					switch (_activeRecord.geometry.type)
+					{
+						case Geometry.MAPPOINT:
+						case Geometry.MULTIPOINT:
+						{
+							symbol = ActiveMarkerSynbol;								
+							break;
+						}
+							
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						{
+							symbol = ActiveFillSymbol;
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							symbol = ActiveLineSymbol; 	
+							break;
+						}
+					}
+					
+					var displayGraphic:Graphic = new Graphic(_activeRecord.geometry,symbol);
+					_graphicsLayer.add(displayGraphic);
+					
+					// Update results tree selected item
+					var found:Boolean = false;
+					for each (var layer:Object in resultsTree.dataProvider)
+					{
+						if (!found)
+						{
+							// Iterate through each child in the item
+							for each (var feature:Object in layer.children)
+							{
+								if (feature.record == _activeRecord)
+								{
+									resultsTree.selectedItem = feature;										
+									found = true;
+								}
+							}
+						}
+						else
+						{
+							break;
+						}
+					}
+				}
+			}
+			
+			/**
+			 * Shows the working screen.
+			 */ 
+			public function showWorking():void
+			{
+				if (currentState != "working")
+				{
+					_lastState = currentState;
+				}
+				currentState = "working";
+			}
+			
+			/**
+			 * Shows the current display screen if the widget was in working mode. 
+			 */
+			public function showResults():void
+			{
+				if (currentState == "working")
+				{
+					// Refresh the tree
+					prepareTreeData();
+					
+					// Check for no results
+					if (_records.length == 0)
+					{
+						_activeRecordLayerName = "No features found";
+						_activeRecordTitle = "";
+					}
+					else
+					{
+						// Set the first record in the selection set as the active record
+						setActiveRecord(_records.getItemAt(0) as IdentifyFeature);
+					}
+					
+					// Show the results in tree or without tree depending on what was last viewed
+					currentState = _lastState;
+				}
+			}
+			
+			/**
+			 * Called when the slected tree node changes.
+			 */
+			protected function resultsTree_changeHandler(event:ListEvent):void
+			{
+				var object:Object = event.currentTarget.selectedItem;
+				if (object && object.record && object.record != _activeRecord)
+				{
+					setActiveRecord(object.record as IdentifyFeature);
+				}
+			}
+
+			/**
+			 * Creates a copy of the graphic associated with the active record and adds it to the drawn graphics layer. 
+			 */
+			protected function copyToGraphicsButton_clickHandler(event:MouseEvent):void
+			{
+				// Confirm that there is an active record and a drawing layer to place it into
+				if (_activeRecord && _drawnGraphicsLayer)
+				{
+					// Create a copy of the result graphic
+					var graphic:Graphic = GraphicUtil.CopyGraphic(_activeRecord.graphic);
+					
+					// Apply a default symbol
+					switch (graphic.geometry.type)
+					{
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						{
+							graphic.symbol = new SimpleFillSymbol();
+							break;
+						}
+						case Geometry.MAPPOINT:
+						case Geometry.MULTIPOINT:
+						{
+							graphic.symbol = new SimpleMarkerSymbol();
+							break;
+						}
+						case Geometry.POLYLINE:
+						{
+							graphic.symbol = new SimpleLineSymbol();
+							break;
+						}
+					}
+					
+					// Add the copy to the drawn graphics layer
+					_drawnGraphicsLayer.add(graphic);
+				}
+			}
+
+			/**
+			 * Converts the displayed attributes of the active record to text and adds to the clipboard/ 
+			 */
+			protected function copyToClipboardButton_clickHandler(event:MouseEvent):void
+			{
+				// Confirm that there is an active record and a drawing layer to place it into
+				if (_activeRecord)
+				{
+					var text:String = "";
+					for each (var att:Object in _activeRecord.attributes)
+					{
+						text += att.field + ":\t" + att.value + "\n";						
+					}
+
+					if (text.length > 0)
+					{
+						System.setClipboard(text);
+						Alert.show("Attribute data has been copied to clipboard","Copy to Clipboard",Alert.OK);								
+					}
+					else
+					{
+						Alert.show("No attribute details to display","Copy to Clipboard",Alert.OK);
+					}
+				}
+			}
+
+			/**
+			 * Called when a nide in the results tree is clicked - not utilised.
+			 */
+			protected function resultsTree_itemClickHandler(event:ListEvent):void
+			{
+				var object:Object = event.currentTarget.selectedItem;
+				if (object && object.children)
+				{
+					// This is the parent node
+					var string:String = object.source;
+				}
+			}
+
+			/**
+			 * Called when the user mouses over the nodes in the results tree.  Used to apply the context menu to the tree node.
+			 */ 
+			protected function resultsTree_itemRollOverHandler(event:ListEvent):void
+			{
+				_lastNode = event;
+				
+				var object:Object = event.itemRenderer.data;
+				
+				if (object && object.children)
+				{
+					resultsTree.contextMenu = _treeMenu;					
+				} 
+				else 
+				{
+					resultsTree.contextMenu = new ContextMenu();
+					resultsTree.contextMenu.hideBuiltInItems();
+				}
+			}
+
+			/**
+			 * Called when the component creation event is triggered.
+			 */
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				// Prepare the result tree context menu
+				_treeMenu.hideBuiltInItems();
+				
+				// Add Export to CSV option
+				var cmExportCSV:ContextMenuItem = new ContextMenuItem("Export Results to CSV");
+				cmExportCSV.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,exportToCSV);
+				_treeMenu.customItems.push(cmExportCSV);
+
+				// Add default tree node
+				resultsTree.dataProvider = new ArrayCollection([ { name:"No features identified" }]);
+			}
+			
+			/**
+			 * Called when the eport to csv item is clicked on a root node context menu on the results tree. 
+			 */
+			protected function exportToCSV(event:ContextMenuEvent):void
+			{
+				try
+				{
+					var object:Object = _lastNode.itemRenderer.data;
+					var csv:String = "";
+					var firstRecord:Boolean = true;
+	
+					var headers:Array = [];
+					var rows:Array = [];
+					
+					for each (var rec:Object in object.children)
+					{
+						var record:IdentifyFeature = rec.record as IdentifyFeature;
+						var row:Array = [];	
+						
+						for each (var att:Object in record.attributes)
+						{
+							if (firstRecord) headers.push( att.field );
+
+							switch (att.fieldtype)
+							{
+								case Field.TYPE_DOUBLE:
+								case Field.TYPE_INTEGER:
+								case Field.TYPE_SINGLE:
+								case Field.TYPE_SMALL_INTEGER:
+								{
+									// Remove formatting commas from the text
+									row.push(att.value.replace(/,/gi, ""));								
+									break;
+								}
+								default:
+								{
+									// Add text qualifiers to take into account internal commas in the text
+									row.push("\"" + att.value + "\"");								
+								}
+							}
+						}
+	
+						// Clear the first record flag
+						if (firstRecord) 
+						{ 
+							firstRecord = false; 
+							rows.push(headers.join(","));
+						}
+						rows.push(row.join(","));
+					}
+	
+					csv = rows.join("\n");
+	
+					var fr:FileReference = new FileReference();
+					var defaultFileName:String = "Export.csv";
+					
+					fr.save(csv,defaultFileName);
+				}
+				catch(error:Error)
+				{
+					Alert.show(error.message);
+				}
+			}
+
+			/**
+			 * Calling this function dispatches an AppEvent that the Search Widget is listening for. 
+			 */
+			protected function sendToSearchButton_clickHandler(event:MouseEvent):void
+			{
+				if (_activeRecord.objectIdField && _searchWidgetID != -1 )
+				{
+					var loaded:Boolean = false;
+					
+					// Check if the widget is loaded				
+					for each (var widgetId:Number in ViewerContainer.getInstance().widgetManager.getAllLoadedWidgetIds())
+					{
+						if (ViewerContainer.getInstance().widgetManager.getWidget(widgetId).widgetTitle == _searchWidgetName)
+						{
+							loaded = true;
+							break;
+						}
+					}
+					
+					if (!loaded)
+					{
+						// Dispatch a shared data containing the info about the search to run
+						AppEvent.dispatch(AppEvent.DATA_PUBLISH, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: prepareSearchSuggestions() } );
+						
+						// Call a request to run after a short time delay - only because the app is quite swamped at startup and otherwise the event never heard 
+						setTimeout(
+							function ():void 
+							{
+								// Open the id widget
+								AppEvent.dispatch(AppEvent.WIDGET_RUN, _searchWidgetID);
+							}, 
+							_URLHandlerPreloadDelay );
+					}
+					else
+					{
+						callSearchWidget();
+					}
+				}
+			}
+
+			/**
+			 * Sends the search widget a requist to add the current active record to the selection set.
+			 */
+			private function callSearchWidget():void
+			{
+				if (_searchWidgetID >= 0)
+				{
+					// Dispatch event to call the widget
+					AppEvent.dispatch(AppEvent.DATA_SENT, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: prepareSearchSuggestions() } );
+				}
+			}
+
+			private function prepareSearchSuggestions(allRecords:Boolean = false):ArrayCollection
+			{
+				var result:ArrayCollection = new ArrayCollection();
+				var suggestion:Object;
+				
+				if (allRecords)
+				{
+					var i:int = 0;
+					var mode:String;
+					for each (var record:IdentifyFeature in _records)
+					{
+						if(i != 0)
+						{
+							mode = FeatureLayer.SELECTION_ADD;
+						}
+						
+						suggestion = {
+							searchurl:  record.source + "/" + record.layerID.toString(),
+								searchtext: record.objectIdField + " = " + record.graphic.attributes[_activeRecord.objectIdField],
+								selectionmode: mode	
+						};
+						result.addItem(new SearchSuggestion(suggestion));
+						i++;
+					}
+				}
+				else
+				{
+					suggestion = {
+						searchurl:  _activeRecord.source + "/" + _activeRecord.layerID.toString(),
+							searchtext: _activeRecord.objectIdField + " = " + _activeRecord.graphic.attributes[_activeRecord.objectIdField]
+					};
+					result.addItem(new SearchSuggestion(suggestion));
+				}
+				
+				return result;
+			}
+			
+			
+			/**
+			 * Called when the show all results toggle button is clicked
+			 */ 
+			protected function showAllResultsToggleButton_clickHandler(event:MouseEvent):void
+			{
+				// Call to update the display
+				updateMapDisplay();
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!--- Map symbols utilised to display the results -->
+		<esri:SimpleFillSymbol id="ResultsFillSymbol" style="solid" color="{getStyle('focusColor')}" alpha="0.5">
+			<esri:SimpleLineSymbol style="solid" color="{getStyle('focusColor')}" alpha="0.8" width="2" />
+		</esri:SimpleFillSymbol>
+		
+		<esri:SimpleLineSymbol id="ResultsLineSymbol" style="solid" color="{getStyle('focusColor')}" alpha="0.8" width="2" />
+		
+		<esri:SimpleMarkerSymbol id="ResultsMarkerSynbol" style="square" color="{getStyle('focusColor')}" alpha="0.5">
+			<esri:SimpleLineSymbol style="solid" color="{getStyle('focusColor')}" alpha="0.8" width="2" />
+		</esri:SimpleMarkerSymbol>
+
+		<!--- Map symbols utilised to display the active record -->
+		<esri:SimpleFillSymbol id="ActiveFillSymbol" style="solid" color="0xFF0000" alpha="0.5">
+			<esri:SimpleLineSymbol style="solid" color="0xFF0000" alpha="0.8" width="2" />
+		</esri:SimpleFillSymbol>
+		
+		<esri:SimpleLineSymbol id="ActiveLineSymbol" style="solid" color="0xFF0000" alpha="0.8" width="2" />
+		
+		<esri:SimpleMarkerSymbol id="ActiveMarkerSynbol" style="square" color="0xFF0000" alpha="0.5">
+			<esri:SimpleLineSymbol style="solid" color="0xFF0000" alpha="0.8" width="2" />
+		</esri:SimpleMarkerSymbol>
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingLeft="3" paddingRight="3" paddingTop="3" paddingBottom="3" />
+	</s:layout>
+	
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="working" />
+		<s:State name="tree" />
+	</s:states>
+	
+	<s:HGroup id="hgrpLayout" gap="3" width="100%" height="100%">
+		
+		<s:VGroup id="vgrpTree" width="200" height="100%" visible="false" visible.tree="true" 
+				  includeInLayout="false" includeInLayout.tree="true">
+
+			<mx:Tree id="resultsTree" width="100%" height="100%"
+					 folderOpenIcon="{layericonOpen}" folderClosedIcon="{layericonClosed}"
+					 labelField="name" iconField="icon" showRoot="true" dataTipField="name" 
+					 change="resultsTree_changeHandler(event)" itemClick="resultsTree_itemClickHandler(event)"
+					 selectionColor="{getStyle('selectionColor')}" 
+					 itemRollOver="resultsTree_itemRollOverHandler(event)" contextMenu="{_treeMenu}" />
+
+		</s:VGroup>
+		
+		<s:VGroup id="vgrp" width="100%" height="100%" gap="3" >
+			
+			<s:HGroup id="hgrpHeader" gap="5" width="100%" verticalAlign="middle">
+				
+				<s:Button id="treeStateButton" height="24" width="24" visible="true" visible.working="false" 
+						  toolTip.tree="Click to hide results tree" toolTip.normal="Click to show results tree"
+						  skinClass.normal="widgets.Identify.skins.IdentifyWidgetShowResultsTreeButtonSkin"
+						  skinClass.tree="widgets.Identify.skins.IdentifyWidgetHideResultsTreeButtonSkin"
+						  click.normal="{currentState = 'tree';}" click.tree="{currentState = 'normal';}" />
+				
+				<s:VGroup width="100%" gap="3" visible="true" visible.working="false" >
+					<s:Label id="layerNameLabel" text="{_activeRecordLayerName}" width="100%" styleName="WidgetTitle" />
+					<s:Label id="titleLabel" text="{_activeRecordTitle}" width="100%" styleName="WidgetTitle" />
+				</s:VGroup>
+				
+				<s:ToggleButton id="showAllResultsToggleButton" width="24" height="24" visible="true" visible.working="false"
+								toolTip="Click to toggle the visibility of the full results set on/off"
+								skinClass="widgets.Identify.skins.IdentifyWidgetShowResultsToggleButtonSkin" click="showAllResultsToggleButton_clickHandler(event)" />
+
+			</s:HGroup>
+			
+			<s:Line width="100%" height="1" />
+			
+			<s:Group id="grpContent" width="100%" height="100%" visible="true"
+					 visible.working="false" includeInLayout="true" includeInLayout.working="false">
+				
+				<s:layout>
+					<s:VerticalLayout gap="3" />
+				</s:layout>
+				
+				<s:DataGrid id="attributes" minWidth="250" width="100%" height="100%" 
+							dataProvider="{new ArrayCollection(_activeRecordAttributes)}"
+							alternatingRowColors="[#CCCCCC, #999999]"
+							rollOverColor="{getStyle('rollOverColor')}"
+							selectionColor="{getStyle('focusColor')}"
+							horizontalScrollPolicy="off" 
+							verticalScrollPolicy="auto"
+							visible="true" visible.working="false" >
+					<s:columns>
+						<s:ArrayList>
+							<s:GridColumn id="fieldNameColumnn" headerText="Field" dataField="field" 
+										  dataTipField="field" showDataTips="false" sortable="false" editable="false" />
+							<s:GridColumn id="valueColumn" headerText="Value" dataField="value" 
+										  dataTipField="value" showDataTips="true" sortable="false" editable="false" />
+						</s:ArrayList>
+					</s:columns>
+				</s:DataGrid>
+
+				<s:DataGroup id="linksDG" width="100%" dataProvider="{_activeRecordLinks}" >
+					<s:layout>
+						<s:VerticalLayout gap="3" horizontalAlign="justify" paddingLeft="5" paddingRight="5" />
+					</s:layout>
+					<s:itemRenderer>
+						<fx:Component>
+							<s:ItemRenderer autoDrawBackground="false" minHeight= "20" 
+											mouseOver="itemrenderer1_mouseOverHandler(event)" 
+											mouseOut="itemrenderer1_mouseOutHandler(event)"
+											dataChange="itemrenderer1_dataChangeHandler(event)" >
+								
+								<fx:Script>
+									<![CDATA[
+										import mx.events.FlexEvent;
+										
+										import spark.effects.animation.RepeatBehavior;
+										
+										
+										// Called when the mouse moves over the item renderer
+										protected function itemrenderer1_mouseOverHandler(event:MouseEvent):void
+										{
+											playGlow(event.currentTarget, true);
+										}
+
+										// Called when the mouse moves off the item renderer
+										protected function itemrenderer1_mouseOutHandler(event:MouseEvent):void
+										{
+											if (glower.isPlaying) 
+											{
+												glower.end();
+											};
+										}
+
+										// Called when the data changes on the item renderer
+										protected function itemrenderer1_dataChangeHandler(event:FlexEvent):void
+										{
+											if (data)
+											{
+												// Set the link label text
+												linkLabel.text = data.label;
+											}
+										}
+										
+										// Adds a glowing effect to objects
+										private function playGlow(obj:Object, repeat:Boolean = false):void 
+										{
+											if (glower.isPlaying) 
+											{
+												glower.end();
+											};
+											glower.target = obj;
+											
+											if (repeat) 
+											{
+												glower.repeatCount = 0;
+											} 
+											else 
+											{
+												glower.repeatCount = 1;
+											}
+											glower.play();
+										}
+										
+									]]>
+								</fx:Script>
+								
+								<fx:Declarations>
+									<s:GlowFilter id="glow" blurX="25" blurY="25" color="{getStyle('focusColor')}" strength="1.5"/>
+									<s:AnimateFilter id="glower" bitmapFilter="{glow}" 
+													 duration="300" repeatCount="0" 
+													 repeatBehavior="{RepeatBehavior.REVERSE}">
+										<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+									</s:AnimateFilter>
+								</fx:Declarations>
+								
+								<s:HGroup width="100%" gap="5" verticalAlign="middle" toolTip="Click to view his link" 
+									click="{navigateToURL(new URLRequest(data.url),'_blank');}" >
+									
+									<s:Image id="linkimage" useHandCursor="true" buttonMode="true" 
+											  source="assets/images/w_link.png"  />
+									<s:Label id="linkLabel" width="100%" textAlign="left"
+									 		 height="100%" verticalAlign="middle" />
+								
+								</s:HGroup>
+							</s:ItemRenderer>
+						</fx:Component>
+					</s:itemRenderer>
+				</s:DataGroup>
+				
+				<s:Image id="recordImage" maintainProjectionCenter="true" source="{_activeRecordImage}" 
+						  visible="{_activeRecordImage != ''}" includeInLayout="{_activeRecordImage != ''}" 
+						  horizontalAlign="center" maxWidth="300" maxHeight="150" verticalAlign="middle" /> 
+				
+			</s:Group>
+			
+			<s:Label id="recordCountLabel" width="100%" textAlign="center" 
+					 text="Record {_records.getItemIndex(_activeRecord) + 1} of {_records.length} identified"
+					 styleName="WidgetTitle" paddingTop="3" visible="true" visible.working="false"
+					 includeInLayout="true" includeInLayout.working="false"/>
+			
+			<s:HGroup id="hgrpFooter" gap="5" width="100%" horizontalAlign="center" verticalAlign="middle" 
+					  visible="true" visible.working="false" 
+					  includeInLayout="true" includeInLayout.working="false">
+				
+				<s:Button id="previousButton" click="previousButton_clickHandler(event)"
+						  toolTip="Click to move to previous record"
+						  visible="{_records &amp;&amp; _records.length &gt; 1}"
+						  includeInLayout="{_records &amp;&amp; _records.length &gt; 1}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetPreviousButtonSkin" />
+				
+				<s:Button id="zoomButton" click="zoomButton_clickHandler(event)"
+						  toolTip="Click to zoom to the extent of this record"
+						  visible="{_records &amp;&amp; _records.length &gt; 0}"
+						  includeInLayout="{_records &amp;&amp; _records.length &gt; 0}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetZoomButtonSkin" />
+				
+				<s:Button id="copyToGraphicsButton" click="copyToGraphicsButton_clickHandler(event)" 
+						  toolTip="Click to convert the result to a graphic in the drawing layer"
+						  visible="{_drawnGraphicsLayer != null &amp;&amp; _records &amp;&amp; _records.length &gt; 0}" 
+						  includeInLayout="{_drawnGraphicsLayer != null &amp;&amp; _records &amp;&amp; _records.length &gt; 0}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetConvertToGraphicsButtonSkin" />
+				
+				<s:Button id="copyToClipboardButton" click="copyToClipboardButton_clickHandler(event)"
+						  toolTip="Click to copy the attribute details to the clipboard"
+						  visible="{_records &amp;&amp; _records.length &gt; 0}"
+						  includeInLayout="{_records &amp;&amp; _records.length &gt; 0}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetCopyToClipboardButtonSkin" />
+				
+				<s:Button id="sendToSearchButton" click="sendToSearchButton_clickHandler(event)"
+						  toolTip="Click to add this result to the search results"
+						  visible="{_showSendSearch &amp;&amp; _records &amp;&amp; _records.length &gt; 0 
+						  	&amp;&amp; _searchWidgetID != -1}"
+						  includeInLayout="{_showSendSearch &amp;&amp; _records &amp;&amp; _records.length &gt; 0
+						  	&amp;&amp; _searchWidgetID != -1}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetSendToSearchButtonSkin" />
+				
+				<s:Button id="nextButton" click="nextButton_clickHandler(event)"
+						  toolTip="Click to move to next record"
+						  visible="{_records &amp;&amp; _records.length &gt; 1}"
+						  includeInLayout="{_records &amp;&amp; _records.length &gt; 1}"
+						  height="30" width="30" buttonMode="true"
+						  skinClass="widgets.Identify.skins.IdentifyWidgetNextButtonSkin" />
+
+			</s:HGroup>
+			
+			<s:HGroup id="hgrpWorking" gap="5" width="100%" height="100%" 
+					  horizontalAlign="center" verticalAlign="middle"  
+					  visible="false" visible.working="true" 
+					  includeInLayout="false" includeInLayout.working="true" >
+				<mx:Image id="swfMessage"
+						  source="assets/images/loader.swf"
+						  visible="true" height="50" width="50"/>
+				<s:Label id="txtMessage"
+						 text="Working"/>
+			</s:HGroup>
+		</s:VGroup>
+		
+	</s:HGroup>
+</s:Group>

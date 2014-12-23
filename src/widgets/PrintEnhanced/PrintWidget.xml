@@ -1,0 +1,92 @@
+<?xml version="1.0" ?>
+<configuration>
+    <!-- Print Task Settings - change this URL to your own Export Web Map Task (requires ArcGIS 10.1) -->
+ 	<taskurl>http://[PATH TO ARCGIS SERVER]/arcgis/rest/services/Utilities/PrintingTools/GPServer/Export%20Web%20Map%20Task</taskurl>
+
+	<!-- Proxy page for the print task -->
+	<proxyurl>http://[PATHTO PRINITING PROXY]/PrintingProxy/proxy.ashx</proxyurl>
+
+	<!-- Print Template Settings -->
+	<printTemplates>
+		<printTemplate>
+			<templateName>A3 Landscape</templateName>
+			<templateMapWidth>39.9998</templateMapWidth>
+			<templateMapHeight>21.1688</templateMapHeight>
+		</printTemplate>
+		<printTemplate>
+			<templateName>A3 Portrait</templateName>
+			<templateMapWidth>27.6756</templateMapWidth>
+			<templateMapHeight>29.0002</templateMapHeight>
+		</printTemplate>
+		<printTemplate>
+			<templateName>A4 Landscape</templateName>
+			<templateMapWidth>27.7564</templateMapWidth>
+			<templateMapHeight>15.918</templateMapHeight>
+		</printTemplate>
+		<printTemplate>
+			<templateName>A4 Portrait</templateName>
+			<templateMapWidth>19.024</templateMapWidth>
+			<templateMapHeight>22.285</templateMapHeight>
+		</printTemplate>
+	</printTemplates>
+	
+	<!-- Export Option Settings -->
+	<exportOptions>
+    	<resolutions>96,300,600</resolutions>    
+	</exportOptions>
+	
+	<!-- Scale Options:  allowCustomScale	: Specify whether users can enter a custom print scale output [possible values: true|false]
+						 useMapScale:		: Specify whether the Use scale checkbox is checked by default [possible values: true|false] -->
+	<allowCustomScale>true</allowCustomScale> 
+	<useMapScale>true</useMapScale>
+	
+	<!-- Printable Area Settings -->
+	<printableArea>
+		<!--
+			simplerenderer below is used to define display style for printable area
+			for simplefillsymbol see http://resources.esri.com/help/9.3/arcgisserver/apis/flex/apiref/com/esri/ags/symbol/SimpleFillSymbol.html
+			for outline see http://resources.esri.com/help/9.3/arcgisserver/apis/flex/apiref/com/esri/ags/symbol/SimpleLineSymbol.html			
+		-->
+		<simplerenderer>
+		    <simplefillsymbol color="0x000000" alpha="0.5">
+		    	<outline width="2" color="0xFF0000" style="dash"/>
+		    </simplefillsymbol>
+		</simplerenderer>
+	</printableArea>
+	
+	<!-- Protected Layer Settings - Layers which not be allowed to be printed, or should be warned before printing. -->
+	<protectedLayers popupwidth="300" popupheight="300" >
+		<layer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer" protectionmethod="protected" message="Be aware that you are printing this layer." />
+		<layer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Beta/Operational_Layers/FeatureServer/5" protectionmethod="protected" message="Be aware that you are printing this layer." />
+		<layer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Beta/Operational_Layers/FeatureServer/4" protectionmethod="protected" message="This layer is not allowed to printed." />
+	</protectedLayers>
+	
+	<!-- Legend settings -->
+	<legendLayers>
+		<excludelayer>http://gis.ecan.govt.nz/arcgis/rest/services/SimpleBasemap/MapServer</excludelayer>
+	</legendLayers>
+	
+	<!-- Widget Labels -->
+	<labels>
+		<printOptionsLabel>Print Options</printOptionsLabel>
+		<legendOptionsLabel>Legend Options</legendOptionsLabel>
+        <dpiLabel>DPI</dpiLabel>
+		<legendLabel>Legend</legendLabel>
+		<legendBtnLabel>Customise</legendBtnLabel>
+		<legendResetBtnLabel>Reset</legendResetBtnLabel>
+		<legendSelectAllBtnLabel>Select All</legendSelectAllBtnLabel>
+		<legendSelectNoneBtnLabel>Select None</legendSelectNoneBtnLabel>
+		<legendDoneBtnLabel>Done</legendDoneBtnLabel>
+		
+		<!-- Protected Layers Labels -->
+		<protectedpopupbtnlabel>OK</protectedpopupbtnlabel>
+	</labels>
+
+	<!-- Help Location Settings -->
+	<helplocationurl>http://somewebsitee.com/HelpTopic</helplocationurl>
+</configuration>
+
+<!--
+    See Print widget tag reference at
+    http://links.esri.com/printwidget
+-->

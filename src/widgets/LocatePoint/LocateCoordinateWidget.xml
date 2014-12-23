@@ -1,0 +1,891 @@
+<?xml version="1.0" ?>
+<configuration>
+	<!-- Default zoom scale to send map to when the user clicks on a point -->
+	<zoomscale>4000</zoomscale>
+	
+	<!-- Add geometry server URL below -->
+    <geometryservice>http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer</geometryservice>
+		
+	<!-- Name to use for the graphics lay that will be used to display the coordinate markers.
+		 This should be a unique name not used by other widgets or as the name of a base or
+		 operational layer-->
+	<graphicsLayerName alias="Locate Point Graphics" >LocatePointGraphicsLayer</graphicsLayerName>
+	
+	<!-- Result number formatting settings -->
+	<projNumDecPlace>2</projNumDecPlace>
+	<wgs84NumDecPlace>6</wgs84NumDecPlace> <!-- 10cms at 6th dp -->
+
+	<!-- Initial data entry view setting.  Allowable values are:
+		nzmg = New Zealand Map Grid XY Entry
+		nztm = New Zealand Transverse Mercator XY Entry
+		nzms260 = New Zealand Map System 260 Map Reference Entry
+		nztopo50 = New Zealand Topo 50 Map Reference Entry
+		wgs84dms = WGS84 Lat-Long Entry in Degrees-Minutes-Seconds
+		wgs84dm = WGS84 Lat-Long Entry in Degrees-Decimal Minutes
+		wgs84dm = WGS84 Lat-Long Entry in Decimal Degrees -->
+	<initialview>nztm</initialview>
+
+	<!-- Label settings -->	
+	<labels>
+		<instructionlabel>Use the locate tool to zoom to coordinates on the map:</instructionlabel>
+		<modelabel>Click the button to set the coordinate entry mode.</modelabel>
+		<sheetlabel>Sheet:</sheetlabel>
+		<xlabel>Easting:</xlabel>
+		<ylabel>Northing:</ylabel>
+		<longitudelabel>Longitude:</longitudelabel>
+		<latitudelabel>Latitude:</latitudelabel>			
+		
+		<!-- Buttons -->
+		<resetLabel>Reset</resetLabel>
+		<clearLabel>Clear</clearLabel>
+		<submitLabel>Locate</submitLabel>
+		
+		<!-- Example labels for coordinates -->
+		<exampleNZMS260SheetLabel>Pick a sheet from the list e.g. M35</exampleNZMS260SheetLabel>
+		<exampleNZTopo50SheetLabel>Pick a sheet from the list e.g. BM25</exampleNZTopo50SheetLabel>
+		<exampleNZTMXLabel>e.g. 1570292</exampleNZTMXLabel>
+		<exampleNZTMYLabel>e.g. 5180600</exampleNZTMYLabel>
+		<exampleNZMGXLabel>e.g. 2480293</exampleNZMGXLabel>
+		<exampleNZMGYLabel>e.g. 5742212</exampleNZMGYLabel>
+		<exampleWGS84LongitudeLabel>e.g. 172.632377</exampleWGS84LongitudeLabel>
+		<exampleWGS84DMLongitudeLabel>e.g. 172° 29.814199′</exampleWGS84DMLongitudeLabel>
+		<exampleWGS84DMSLongitudeLabel>e.g. 172° 29′ 48.85″</exampleWGS84DMSLongitudeLabel>
+		<exampleWGS84LatitudeLabel>e.g. -43.526945</exampleWGS84LatitudeLabel>
+		<exampleWGS84DMLatitudeLabel>e.g. -43° 28.999′</exampleWGS84DMLatitudeLabel>
+		<exampleWGS84DMSLatitudeLabel>e.g. -43° 28′ 59.94″</exampleWGS84DMSLatitudeLabel>
+		<webmercatorXExampleLabel>e.g. 19217347</webmercatorXExampleLabel>
+		<webmercatorYExampleLabel>e.g. -5392526</webmercatorYExampleLabel>
+		
+		<!-- Prompt labels -->
+		<promptXValue>Enter X Value</promptXValue>
+		<promptYValue>Enter Y Value</promptYValue>
+		<promptDegrees>Enter Degrees</promptDegrees>		
+		<promptMinutes>Enter Minutes</promptMinutes>		
+		<promptSeconds>Enter Seconds</promptSeconds>
+	</labels>
+	
+	<!-- Widget message settings -->
+	<messages>
+		<locationError>Your location reference is invalid or outside the region.</locationError>
+		<extentError>Your location reference is outside the region.</extentError>
+		<validationError>There were problems with your values entered.</validationError>
+	</messages>
+	
+	<!-- Extent check settings: used to make sure input coordinates are within a valid range 
+			"initial" = valid points are within starting extent of map
+			"full" = valid points are within full extent of map
+			"" = don't perform an extent check -->
+	<extentCheckSetting></extentCheckSetting>
+	
+	<!-- Coordinate systems to include and display -->
+	<NZTM>
+		<enable>true</enable>
+		<enablenztopo50>true</enablenztopo50>
+		<gridrefs>
+			<gridref xmin="1492000" xmax="1516000" ymin="6198000" ymax="6234000" sheet="AS21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="6198000" ymax="6234000" sheet="AS22" />
+			<gridref xmin="1564000" xmax="1588000" ymin="6162000" ymax="6198000" sheet="AT24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="6162000" ymax="6198000" sheet="AT25" />
+			<gridref xmin="1588000" xmax="1612000" ymin="6126000" ymax="6162000" sheet="AU25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="6126000" ymax="6162000" sheet="AU26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="6126000" ymax="6162000" sheet="AU27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="6126000" ymax="6162000" sheet="AU28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="6126000" ymax="6162000" sheet="AU29" />
+			<gridref xmin="1588000" xmax="1612000" ymin="6090000" ymax="6126000" sheet="AV25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="6090000" ymax="6126000" sheet="AV26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="6090000" ymax="6126000" sheet="AV27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="6090000" ymax="6126000" sheet="AV28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="6090000" ymax="6126000" sheet="AV29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="6090000" ymax="6126000" sheet="AV30" />
+			<gridref xmin="1612000" xmax="1636000" ymin="6054000" ymax="6090000" sheet="AW26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="6054000" ymax="6090000" sheet="AW27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="6054000" ymax="6090000" sheet="AW28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="6054000" ymax="6090000" sheet="AW29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="6054000" ymax="6090000" sheet="AW30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="6054000" ymax="6090000" sheet="AW31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="6054000" ymax="6090000" sheet="AW32" />
+			<gridref xmin="1636000" xmax="1660000" ymin="6018000" ymax="6054000" sheet="AX27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="6018000" ymax="6054000" sheet="AX28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="6018000" ymax="6054000" sheet="AX29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="6018000" ymax="6054000" sheet="AX30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="6018000" ymax="6054000" sheet="AX31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="6018000" ymax="6054000" sheet="AX32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="6018000" ymax="6054000" sheet="AX33" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5982000" ymax="6018000" sheet="AY28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5982000" ymax="6018000" sheet="AY29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5982000" ymax="6018000" sheet="AY30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5982000" ymax="6018000" sheet="AY31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5982000" ymax="6018000" sheet="AY32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5982000" ymax="6018000" sheet="AY33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5982000" ymax="6018000" sheet="AY34" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5946000" ymax="5982000" sheet="AZ29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5946000" ymax="5982000" sheet="AZ30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5946000" ymax="5982000" sheet="AZ31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5946000" ymax="5982000" sheet="AZ32" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5946000" ymax="5982000" sheet="AZ34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5946000" ymax="5982000" sheet="AZ35" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5910000" ymax="5946000" sheet="BA30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5910000" ymax="5946000" sheet="BA31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5910000" ymax="5946000" sheet="BA32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5910000" ymax="5946000" sheet="BA33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5910000" ymax="5946000" sheet="BA34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5910000" ymax="5946000" sheet="BA35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5910000" ymax="5946000" sheet="BA36" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5874000" ymax="5910000" sheet="BB30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5874000" ymax="5910000" sheet="BB31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5874000" ymax="5910000" sheet="BB32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5874000" ymax="5910000" sheet="BB33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5874000" ymax="5910000" sheet="BB34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5874000" ymax="5910000" sheet="BB35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5874000" ymax="5910000" sheet="BB36" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5838000" ymax="5874000" sheet="BC31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5838000" ymax="5874000" sheet="BC32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5838000" ymax="5874000" sheet="BC33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5838000" ymax="5874000" sheet="BC34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5838000" ymax="5874000" sheet="BC35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5838000" ymax="5874000" sheet="BC36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5838000" ymax="5874000" sheet="BC37" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5838000" ymax="5874000" sheet="BC40" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5802000" ymax="5838000" sheet="BD31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5802000" ymax="5838000" sheet="BD32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5802000" ymax="5838000" sheet="BD33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5802000" ymax="5838000" sheet="BD34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5802000" ymax="5838000" sheet="BD35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5802000" ymax="5838000" sheet="BD36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5802000" ymax="5838000" sheet="BD37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5802000" ymax="5838000" sheet="BD38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5802000" ymax="5838000" sheet="BD39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5802000" ymax="5838000" sheet="BD40" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5802000" ymax="5838000" sheet="BD42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5802000" ymax="5838000" sheet="BD43" />
+			<gridref xmin="2044000" xmax="2068000" ymin="5802000" ymax="5838000" sheet="BD44" />
+			<gridref xmin="2068000" xmax="2092000" ymin="5802000" ymax="5838000" sheet="BD45" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5766000" ymax="5802000" sheet="BE31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5766000" ymax="5802000" sheet="BE32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5766000" ymax="5802000" sheet="BE33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5766000" ymax="5802000" sheet="BE34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5766000" ymax="5802000" sheet="BE35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5766000" ymax="5802000" sheet="BE36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5766000" ymax="5802000" sheet="BE37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5766000" ymax="5802000" sheet="BE38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5766000" ymax="5802000" sheet="BE39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5766000" ymax="5802000" sheet="BE40" />
+			<gridref xmin="1972000" xmax="1996000" ymin="5766000" ymax="5802000" sheet="BE41" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5766000" ymax="5802000" sheet="BE42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5766000" ymax="5802000" sheet="BE43" />
+			<gridref xmin="2044000" xmax="2068000" ymin="5766000" ymax="5802000" sheet="BE44" />
+			<gridref xmin="2068000" xmax="2092000" ymin="5766000" ymax="5802000" sheet="BE45" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5730000" ymax="5766000" sheet="BF31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5730000" ymax="5766000" sheet="BF32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5730000" ymax="5766000" sheet="BF33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5730000" ymax="5766000" sheet="BF34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5730000" ymax="5766000" sheet="BF35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5730000" ymax="5766000" sheet="BF36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5730000" ymax="5766000" sheet="BF37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5730000" ymax="5766000" sheet="BF38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5730000" ymax="5766000" sheet="BF39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5730000" ymax="5766000" sheet="BF40" />
+			<gridref xmin="1972000" xmax="1996000" ymin="5730000" ymax="5766000" sheet="BF41" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5730000" ymax="5766000" sheet="BF42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5730000" ymax="5766000" sheet="BF43" />
+			<gridref xmin="2044000" xmax="2068000" ymin="5730000" ymax="5766000" sheet="BF44" />
+			<gridref xmin="2068000" xmax="2092000" ymin="5730000" ymax="5766000" sheet="BF45" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5694000" ymax="5730000" sheet="BG30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5694000" ymax="5730000" sheet="BG31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5694000" ymax="5730000" sheet="BG32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5694000" ymax="5730000" sheet="BG33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5694000" ymax="5730000" sheet="BG34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5694000" ymax="5730000" sheet="BG35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5694000" ymax="5730000" sheet="BG36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5694000" ymax="5730000" sheet="BG37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5694000" ymax="5730000" sheet="BG38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5694000" ymax="5730000" sheet="BG39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5694000" ymax="5730000" sheet="BG40" />
+			<gridref xmin="1972000" xmax="1996000" ymin="5694000" ymax="5730000" sheet="BG41" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5694000" ymax="5730000" sheet="BG42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5694000" ymax="5730000" sheet="BG43" />
+			<gridref xmin="2044000" xmax="2068000" ymin="5694000" ymax="5730000" sheet="BG44" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5658000" ymax="5694000" sheet="BH28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5658000" ymax="5694000" sheet="BH29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5658000" ymax="5694000" sheet="BH30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5658000" ymax="5694000" sheet="BH31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5658000" ymax="5694000" sheet="BH32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5658000" ymax="5694000" sheet="BH33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5658000" ymax="5694000" sheet="BH34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5658000" ymax="5694000" sheet="BH35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5658000" ymax="5694000" sheet="BH36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5658000" ymax="5694000" sheet="BH37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5658000" ymax="5694000" sheet="BH38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5658000" ymax="5694000" sheet="BH39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5658000" ymax="5694000" sheet="BH40" />
+			<gridref xmin="1972000" xmax="1996000" ymin="5658000" ymax="5694000" sheet="BH41" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5658000" ymax="5694000" sheet="BH42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5658000" ymax="5694000" sheet="BH43" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5622000" ymax="5658000" sheet="BJ28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5622000" ymax="5658000" sheet="BJ29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5622000" ymax="5658000" sheet="BJ30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5622000" ymax="5658000" sheet="BJ31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5622000" ymax="5658000" sheet="BJ32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5622000" ymax="5658000" sheet="BJ33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5622000" ymax="5658000" sheet="BJ34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5622000" ymax="5658000" sheet="BJ35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5622000" ymax="5658000" sheet="BJ36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5622000" ymax="5658000" sheet="BJ37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5622000" ymax="5658000" sheet="BJ38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5622000" ymax="5658000" sheet="BJ39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5622000" ymax="5658000" sheet="BJ40" />
+			<gridref xmin="1996000" xmax="2020000" ymin="5622000" ymax="5658000" sheet="BJ42" />
+			<gridref xmin="2020000" xmax="2044000" ymin="5622000" ymax="5658000" sheet="BJ43" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5586000" ymax="5622000" sheet="BK28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5586000" ymax="5622000" sheet="BK29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5586000" ymax="5622000" sheet="BK30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5586000" ymax="5622000" sheet="BK31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5586000" ymax="5622000" sheet="BK32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5586000" ymax="5622000" sheet="BK33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5586000" ymax="5622000" sheet="BK34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5586000" ymax="5622000" sheet="BK35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5586000" ymax="5622000" sheet="BK36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5586000" ymax="5622000" sheet="BK37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5586000" ymax="5622000" sheet="BK38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5586000" ymax="5622000" sheet="BK39" />
+			<gridref xmin="1948000" xmax="1972000" ymin="5586000" ymax="5622000" sheet="BK40" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5550000" ymax="5586000" sheet="BL31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5550000" ymax="5586000" sheet="BL32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5550000" ymax="5586000" sheet="BL33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5550000" ymax="5586000" sheet="BL34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5550000" ymax="5586000" sheet="BL35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5550000" ymax="5586000" sheet="BL36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5550000" ymax="5586000" sheet="BL37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5550000" ymax="5586000" sheet="BL38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5550000" ymax="5586000" sheet="BL39" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5514000" ymax="5550000" sheet="BM24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5514000" ymax="5550000" sheet="BM25" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5514000" ymax="5550000" sheet="BM33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5514000" ymax="5550000" sheet="BM34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5514000" ymax="5550000" sheet="BM35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5514000" ymax="5550000" sheet="BM36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5514000" ymax="5550000" sheet="BM37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5514000" ymax="5550000" sheet="BM38" />
+			<gridref xmin="1924000" xmax="1948000" ymin="5514000" ymax="5550000" sheet="BM39" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5478000" ymax="5514000" sheet="BN22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5478000" ymax="5514000" sheet="BN23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5478000" ymax="5514000" sheet="BN24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5478000" ymax="5514000" sheet="BN25" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5478000" ymax="5514000" sheet="BN28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5478000" ymax="5514000" sheet="BN29" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5478000" ymax="5514000" sheet="BN32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5478000" ymax="5514000" sheet="BN33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5478000" ymax="5514000" sheet="BN34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5478000" ymax="5514000" sheet="BN35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5478000" ymax="5514000" sheet="BN36" />
+			<gridref xmin="1876000" xmax="1900000" ymin="5478000" ymax="5514000" sheet="BN37" />
+			<gridref xmin="1900000" xmax="1924000" ymin="5478000" ymax="5514000" sheet="BN38" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5442000" ymax="5478000" sheet="BP22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5442000" ymax="5478000" sheet="BP23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5442000" ymax="5478000" sheet="BP24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5442000" ymax="5478000" sheet="BP25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5442000" ymax="5478000" sheet="BP26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5442000" ymax="5478000" sheet="BP27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5442000" ymax="5478000" sheet="BP28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5442000" ymax="5478000" sheet="BP29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5442000" ymax="5478000" sheet="BP30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5442000" ymax="5478000" sheet="BP31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5442000" ymax="5478000" sheet="BP32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5442000" ymax="5478000" sheet="BP33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5442000" ymax="5478000" sheet="BP34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5442000" ymax="5478000" sheet="BP35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5442000" ymax="5478000" sheet="BP36" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5406000" ymax="5442000" sheet="BQ21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5406000" ymax="5442000" sheet="BQ22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5406000" ymax="5442000" sheet="BQ23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5406000" ymax="5442000" sheet="BQ24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5406000" ymax="5442000" sheet="BQ25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5406000" ymax="5442000" sheet="BQ26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5406000" ymax="5442000" sheet="BQ27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5406000" ymax="5442000" sheet="BQ28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5406000" ymax="5442000" sheet="BQ29" />
+			<gridref xmin="1708000" xmax="1732000" ymin="5406000" ymax="5442000" sheet="BQ30" />
+			<gridref xmin="1732000" xmax="1756000" ymin="5406000" ymax="5442000" sheet="BQ31" />
+			<gridref xmin="1756000" xmax="1780000" ymin="5406000" ymax="5442000" sheet="BQ32" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5406000" ymax="5442000" sheet="BQ33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5406000" ymax="5442000" sheet="BQ34" />
+			<gridref xmin="1828000" xmax="1852000" ymin="5406000" ymax="5442000" sheet="BQ35" />
+			<gridref xmin="1852000" xmax="1876000" ymin="5406000" ymax="5442000" sheet="BQ36" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5370000" ymax="5406000" sheet="BR20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5370000" ymax="5406000" sheet="BR21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5370000" ymax="5406000" sheet="BR22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5370000" ymax="5406000" sheet="BR23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5370000" ymax="5406000" sheet="BR24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5370000" ymax="5406000" sheet="BR25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5370000" ymax="5406000" sheet="BR26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5370000" ymax="5406000" sheet="BR27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5370000" ymax="5406000" sheet="BR28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5370000" ymax="5406000" sheet="BR29" />
+			<gridref xmin="1780000" xmax="1804000" ymin="5370000" ymax="5406000" sheet="BR33" />
+			<gridref xmin="1804000" xmax="1828000" ymin="5370000" ymax="5406000" sheet="BR34" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5334000" ymax="5370000" sheet="BS19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5334000" ymax="5370000" sheet="BS20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5334000" ymax="5370000" sheet="BS21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5334000" ymax="5370000" sheet="BS22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5334000" ymax="5370000" sheet="BS23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5334000" ymax="5370000" sheet="BS24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5334000" ymax="5370000" sheet="BS25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5334000" ymax="5370000" sheet="BS26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5334000" ymax="5370000" sheet="BS27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5334000" ymax="5370000" sheet="BS28" />
+			<gridref xmin="1684000" xmax="1708000" ymin="5334000" ymax="5370000" sheet="BS29" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5298000" ymax="5334000" sheet="BT19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5298000" ymax="5334000" sheet="BT20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5298000" ymax="5334000" sheet="BT21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5298000" ymax="5334000" sheet="BT22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5298000" ymax="5334000" sheet="BT23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5298000" ymax="5334000" sheet="BT24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5298000" ymax="5334000" sheet="BT25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5298000" ymax="5334000" sheet="BT26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5298000" ymax="5334000" sheet="BT27" />
+			<gridref xmin="1660000" xmax="1684000" ymin="5298000" ymax="5334000" sheet="BT28" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5262000" ymax="5298000" sheet="BU18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5262000" ymax="5298000" sheet="BU19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5262000" ymax="5298000" sheet="BU20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5262000" ymax="5298000" sheet="BU21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5262000" ymax="5298000" sheet="BU22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5262000" ymax="5298000" sheet="BU23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5262000" ymax="5298000" sheet="BU24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5262000" ymax="5298000" sheet="BU25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5262000" ymax="5298000" sheet="BU26" />
+			<gridref xmin="1636000" xmax="1660000" ymin="5262000" ymax="5298000" sheet="BU27" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5226000" ymax="5262000" sheet="BV16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5226000" ymax="5262000" sheet="BV17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5226000" ymax="5262000" sheet="BV18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5226000" ymax="5262000" sheet="BV19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5226000" ymax="5262000" sheet="BV20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5226000" ymax="5262000" sheet="BV21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5226000" ymax="5262000" sheet="BV22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5226000" ymax="5262000" sheet="BV23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5226000" ymax="5262000" sheet="BV24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5226000" ymax="5262000" sheet="BV25" />
+			<gridref xmin="1612000" xmax="1636000" ymin="5226000" ymax="5262000" sheet="BV26" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5190000" ymax="5226000" sheet="BW14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5190000" ymax="5226000" sheet="BW15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5190000" ymax="5226000" sheet="BW16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5190000" ymax="5226000" sheet="BW17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5190000" ymax="5226000" sheet="BW18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5190000" ymax="5226000" sheet="BW19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5190000" ymax="5226000" sheet="BW20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5190000" ymax="5226000" sheet="BW21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5190000" ymax="5226000" sheet="BW22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5190000" ymax="5226000" sheet="BW23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5190000" ymax="5226000" sheet="BW24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5190000" ymax="5226000" sheet="BW25" />
+			<gridref xmin="1276000" xmax="1300000" ymin="5154000" ymax="5190000" sheet="BX12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="5154000" ymax="5190000" sheet="BX13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5154000" ymax="5190000" sheet="BX14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5154000" ymax="5190000" sheet="BX15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5154000" ymax="5190000" sheet="BX16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5154000" ymax="5190000" sheet="BX17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5154000" ymax="5190000" sheet="BX18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5154000" ymax="5190000" sheet="BX19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5154000" ymax="5190000" sheet="BX20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5154000" ymax="5190000" sheet="BX21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5154000" ymax="5190000" sheet="BX22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5154000" ymax="5190000" sheet="BX23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5154000" ymax="5190000" sheet="BX24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5154000" ymax="5190000" sheet="BX25" />
+			<gridref xmin="1228000" xmax="1252000" ymin="5118000" ymax="5154000" sheet="BY10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="5118000" ymax="5154000" sheet="BY11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="5118000" ymax="5154000" sheet="BY12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="5118000" ymax="5154000" sheet="BY13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5118000" ymax="5154000" sheet="BY14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5118000" ymax="5154000" sheet="BY15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5118000" ymax="5154000" sheet="BY16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5118000" ymax="5154000" sheet="BY17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5118000" ymax="5154000" sheet="BY18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5118000" ymax="5154000" sheet="BY19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5118000" ymax="5154000" sheet="BY20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5118000" ymax="5154000" sheet="BY21" />
+			<gridref xmin="1516000" xmax="1540000" ymin="5118000" ymax="5154000" sheet="BY22" />
+			<gridref xmin="1540000" xmax="1564000" ymin="5118000" ymax="5154000" sheet="BY23" />
+			<gridref xmin="1564000" xmax="1588000" ymin="5118000" ymax="5154000" sheet="BY24" />
+			<gridref xmin="1588000" xmax="1612000" ymin="5118000" ymax="5154000" sheet="BY25" />
+			<gridref xmin="1204000" xmax="1228000" ymin="5082000" ymax="5118000" sheet="BZ09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="5082000" ymax="5118000" sheet="BZ10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="5082000" ymax="5118000" sheet="BZ11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="5082000" ymax="5118000" sheet="BZ12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="5082000" ymax="5118000" sheet="BZ13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5082000" ymax="5118000" sheet="BZ14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5082000" ymax="5118000" sheet="BZ15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5082000" ymax="5118000" sheet="BZ16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5082000" ymax="5118000" sheet="BZ17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5082000" ymax="5118000" sheet="BZ18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5082000" ymax="5118000" sheet="BZ19" />
+			<gridref xmin="1468000" xmax="1492000" ymin="5082000" ymax="5118000" sheet="BZ20" />
+			<gridref xmin="1492000" xmax="1516000" ymin="5082000" ymax="5118000" sheet="BZ21" />
+			<gridref xmin="1156000" xmax="1180000" ymin="5046000" ymax="5082000" sheet="CA07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="5046000" ymax="5082000" sheet="CA08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="5046000" ymax="5082000" sheet="CA09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="5046000" ymax="5082000" sheet="CA10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="5046000" ymax="5082000" sheet="CA11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="5046000" ymax="5082000" sheet="CA12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="5046000" ymax="5082000" sheet="CA13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5046000" ymax="5082000" sheet="CA14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5046000" ymax="5082000" sheet="CA15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5046000" ymax="5082000" sheet="CA16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5046000" ymax="5082000" sheet="CA17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5046000" ymax="5082000" sheet="CA18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5046000" ymax="5082000" sheet="CA19" />
+			<gridref xmin="1132000" xmax="1156000" ymin="5010000" ymax="5046000" sheet="CB06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="5010000" ymax="5046000" sheet="CB07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="5010000" ymax="5046000" sheet="CB08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="5010000" ymax="5046000" sheet="CB09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="5010000" ymax="5046000" sheet="CB10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="5010000" ymax="5046000" sheet="CB11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="5010000" ymax="5046000" sheet="CB12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="5010000" ymax="5046000" sheet="CB13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="5010000" ymax="5046000" sheet="CB14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="5010000" ymax="5046000" sheet="CB15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="5010000" ymax="5046000" sheet="CB16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="5010000" ymax="5046000" sheet="CB17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="5010000" ymax="5046000" sheet="CB18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="5010000" ymax="5046000" sheet="CB19" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4974000" ymax="5010000" sheet="CC05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4974000" ymax="5010000" sheet="CC06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4974000" ymax="5010000" sheet="CC07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4974000" ymax="5010000" sheet="CC08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4974000" ymax="5010000" sheet="CC09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4974000" ymax="5010000" sheet="CC10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4974000" ymax="5010000" sheet="CC11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4974000" ymax="5010000" sheet="CC12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4974000" ymax="5010000" sheet="CC13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="4974000" ymax="5010000" sheet="CC14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="4974000" ymax="5010000" sheet="CC15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="4974000" ymax="5010000" sheet="CC16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="4974000" ymax="5010000" sheet="CC17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="4974000" ymax="5010000" sheet="CC18" />
+			<gridref xmin="1444000" xmax="1468000" ymin="4974000" ymax="5010000" sheet="CC19" />
+			<gridref xmin="1084000" xmax="1108000" ymin="4938000" ymax="4974000" sheet="CD04" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4938000" ymax="4974000" sheet="CD05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4938000" ymax="4974000" sheet="CD06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4938000" ymax="4974000" sheet="CD07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4938000" ymax="4974000" sheet="CD08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4938000" ymax="4974000" sheet="CD09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4938000" ymax="4974000" sheet="CD10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4938000" ymax="4974000" sheet="CD11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4938000" ymax="4974000" sheet="CD12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4938000" ymax="4974000" sheet="CD13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="4938000" ymax="4974000" sheet="CD14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="4938000" ymax="4974000" sheet="CD15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="4938000" ymax="4974000" sheet="CD16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="4938000" ymax="4974000" sheet="CD17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="4938000" ymax="4974000" sheet="CD18" />
+			<gridref xmin="1084000" xmax="1108000" ymin="4902000" ymax="4938000" sheet="CE04" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4902000" ymax="4938000" sheet="CE05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4902000" ymax="4938000" sheet="CE06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4902000" ymax="4938000" sheet="CE07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4902000" ymax="4938000" sheet="CE08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4902000" ymax="4938000" sheet="CE09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4902000" ymax="4938000" sheet="CE10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4902000" ymax="4938000" sheet="CE11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4902000" ymax="4938000" sheet="CE12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4902000" ymax="4938000" sheet="CE13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="4902000" ymax="4938000" sheet="CE14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="4902000" ymax="4938000" sheet="CE15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="4902000" ymax="4938000" sheet="CE16" />
+			<gridref xmin="1396000" xmax="1420000" ymin="4902000" ymax="4938000" sheet="CE17" />
+			<gridref xmin="1420000" xmax="1444000" ymin="4902000" ymax="4938000" sheet="CE18" />
+			<gridref xmin="1084000" xmax="1108000" ymin="4866000" ymax="4902000" sheet="CF04" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4866000" ymax="4902000" sheet="CF05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4866000" ymax="4902000" sheet="CF06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4866000" ymax="4902000" sheet="CF07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4866000" ymax="4902000" sheet="CF08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4866000" ymax="4902000" sheet="CF09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4866000" ymax="4902000" sheet="CF10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4866000" ymax="4902000" sheet="CF11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4866000" ymax="4902000" sheet="CF12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4866000" ymax="4902000" sheet="CF13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="4866000" ymax="4902000" sheet="CF14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="4866000" ymax="4902000" sheet="CF15" />
+			<gridref xmin="1372000" xmax="1396000" ymin="4866000" ymax="4902000" sheet="CF16" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4830000" ymax="4866000" sheet="CG05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4830000" ymax="4866000" sheet="CG06" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4830000" ymax="4866000" sheet="CG07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4830000" ymax="4866000" sheet="CG08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4830000" ymax="4866000" sheet="CG09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4830000" ymax="4866000" sheet="CG10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4830000" ymax="4866000" sheet="CG11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4830000" ymax="4866000" sheet="CG12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4830000" ymax="4866000" sheet="CG13" />
+			<gridref xmin="1324000" xmax="1348000" ymin="4830000" ymax="4866000" sheet="CG14" />
+			<gridref xmin="1348000" xmax="1372000" ymin="4830000" ymax="4866000" sheet="CG15" />
+			<gridref xmin="1108000" xmax="1132000" ymin="4794000" ymax="4830000" sheet="CH05" />
+			<gridref xmin="1132000" xmax="1156000" ymin="4794000" ymax="4830000" sheet="CH06" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4794000" ymax="4830000" sheet="CH08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4794000" ymax="4830000" sheet="CH09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4794000" ymax="4830000" sheet="CH10" />
+			<gridref xmin="1252000" xmax="1276000" ymin="4794000" ymax="4830000" sheet="CH11" />
+			<gridref xmin="1276000" xmax="1300000" ymin="4794000" ymax="4830000" sheet="CH12" />
+			<gridref xmin="1300000" xmax="1324000" ymin="4794000" ymax="4830000" sheet="CH13" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4758000" ymax="4794000" sheet="CJ07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4758000" ymax="4794000" sheet="CJ08" />
+			<gridref xmin="1204000" xmax="1228000" ymin="4758000" ymax="4794000" sheet="CJ09" />
+			<gridref xmin="1228000" xmax="1252000" ymin="4758000" ymax="4794000" sheet="CJ10" />
+			<gridref xmin="1156000" xmax="1180000" ymin="4722000" ymax="4758000" sheet="CK07" />
+			<gridref xmin="1180000" xmax="1204000" ymin="4722000" ymax="4758000" sheet="CK08" />
+		</gridrefs>
+	</NZTM>
+	
+	<NZMG>
+		<enable>true</enable>
+		<enablenzms260>true</enablenzms260>
+		<gridrefs>
+			<gridref xmin="2410000" xmax="2450000" ymin="6760000" ymax="6772604" sheet="L1" />
+			<gridref xmin="2450000" xmax="2490000" ymin="6730000" ymax="6760000" sheet="M2" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6730000" ymax="6760000" sheet="N2" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6700000" ymax="6730000" sheet="N3" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6700000" ymax="6730000" sheet="O3" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6670000" ymax="6700000" sheet="N4" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6670000" ymax="6700000" sheet="O4" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6670000" ymax="6700000" sheet="P4" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6670000" ymax="6700000" sheet="Q4" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6640000" ymax="6670000" sheet="N5" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6640000" ymax="6670000" sheet="O5" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6640000" ymax="6670000" sheet="P5" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6640000" ymax="6670000" sheet="Q5" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6610000" ymax="6640000" sheet="O6" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6610000" ymax="6640000" sheet="P6" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6610000" ymax="6640000" sheet="Q6" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6610000" ymax="6640000" sheet="R6" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6580000" ymax="6610000" sheet="O7" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6580000" ymax="6610000" sheet="P7" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6580000" ymax="6610000" sheet="Q7" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6580000" ymax="6610000" sheet="R7" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6580000" ymax="6610000" sheet="S7" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6550000" ymax="6580000" sheet="P8" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6550000" ymax="6580000" sheet="Q8" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6550000" ymax="6580000" sheet="R8" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6550000" ymax="6580000" sheet="S8" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6550000" ymax="6580000" sheet="T8" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6520000" ymax="6550000" sheet="P9" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6520000" ymax="6550000" sheet="Q9" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6520000" ymax="6550000" sheet="R9" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6520000" ymax="6550000" sheet="S9" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6520000" ymax="6550000" sheet="T9" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6490000" ymax="6520000" sheet="Q10" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6490000" ymax="6520000" sheet="R10" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6490000" ymax="6520000" sheet="S10" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6490000" ymax="6520000" sheet="T10" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6490000" ymax="6520000" sheet="U10" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6460000" ymax="6490000" sheet="Q11" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6460000" ymax="6490000" sheet="R11" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6460000" ymax="6490000" sheet="S11" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6460000" ymax="6490000" sheet="T11" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6460000" ymax="6490000" sheet="U11" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6430000" ymax="6460000" sheet="Q12" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6430000" ymax="6460000" sheet="R12" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6430000" ymax="6460000" sheet="S12" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6430000" ymax="6460000" sheet="T12" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6430000" ymax="6460000" sheet="U12" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6400000" ymax="6430000" sheet="R13" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6400000" ymax="6430000" sheet="S13" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6400000" ymax="6430000" sheet="T13" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6400000" ymax="6430000" sheet="U13" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6370000" ymax="6400000" sheet="R14" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6370000" ymax="6400000" sheet="S14" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6370000" ymax="6400000" sheet="T14" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6370000" ymax="6400000" sheet="U14" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6370000" ymax="6400000" sheet="V14" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6370000" ymax="6400000" sheet="X14" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6370000" ymax="6400000" sheet="Y14" />
+			<gridref xmin="2970000" xmax="3010000" ymin="6370000" ymax="6400000" sheet="Z14" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6340000" ymax="6370000" sheet="Q15" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6340000" ymax="6370000" sheet="R15" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6340000" ymax="6370000" sheet="S15" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6340000" ymax="6370000" sheet="T15" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6340000" ymax="6370000" sheet="U15" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6340000" ymax="6370000" sheet="V15" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6340000" ymax="6370000" sheet="W15" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6340000" ymax="6370000" sheet="X15" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6340000" ymax="6370000" sheet="Y15" />
+			<gridref xmin="2970000" xmax="3010000" ymin="6340000" ymax="6370000" sheet="Z15" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6310000" ymax="6340000" sheet="R16" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6310000" ymax="6340000" sheet="S16" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6310000" ymax="6340000" sheet="T16" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6310000" ymax="6340000" sheet="U16" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6310000" ymax="6340000" sheet="V16" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6310000" ymax="6340000" sheet="W16" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6310000" ymax="6340000" sheet="X16" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6310000" ymax="6340000" sheet="Y16" />
+			<gridref xmin="2970000" xmax="3010000" ymin="6310000" ymax="6340000" sheet="Z16" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6280000" ymax="6310000" sheet="R17" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6280000" ymax="6310000" sheet="S17" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6280000" ymax="6310000" sheet="T17" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6280000" ymax="6310000" sheet="U17" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6280000" ymax="6310000" sheet="V17" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6280000" ymax="6310000" sheet="W17" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6280000" ymax="6310000" sheet="X17" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6280000" ymax="6310000" sheet="Y17" />
+			<gridref xmin="2970000" xmax="3010000" ymin="6280000" ymax="6310000" sheet="Z17" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6250000" ymax="6280000" sheet="Q18" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6250000" ymax="6280000" sheet="R18" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6250000" ymax="6280000" sheet="S18" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6250000" ymax="6280000" sheet="T18" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6250000" ymax="6280000" sheet="U18" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6250000" ymax="6280000" sheet="V18" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6250000" ymax="6280000" sheet="W18" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6250000" ymax="6280000" sheet="X18" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6250000" ymax="6280000" sheet="Y18" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6220000" ymax="6250000" sheet="P19" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6220000" ymax="6250000" sheet="Q19" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6220000" ymax="6250000" sheet="R19" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6220000" ymax="6250000" sheet="S19" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6220000" ymax="6250000" sheet="T19" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6220000" ymax="6250000" sheet="U19" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6220000" ymax="6250000" sheet="V19" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6220000" ymax="6250000" sheet="W19" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6220000" ymax="6250000" sheet="X19" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6220000" ymax="6250000" sheet="Y19" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6190000" ymax="6220000" sheet="P20" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6190000" ymax="6220000" sheet="Q20" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6190000" ymax="6220000" sheet="R20" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6190000" ymax="6220000" sheet="S20" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6190000" ymax="6220000" sheet="T20" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6190000" ymax="6220000" sheet="U20" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6190000" ymax="6220000" sheet="V20" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6190000" ymax="6220000" sheet="W20" />
+			<gridref xmin="2890000" xmax="2930000" ymin="6190000" ymax="6220000" sheet="X20" />
+			<gridref xmin="2930000" xmax="2970000" ymin="6190000" ymax="6220000" sheet="Y20" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6160000" ymax="6190000" sheet="P21" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6160000" ymax="6190000" sheet="Q21" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6160000" ymax="6190000" sheet="R21" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6160000" ymax="6190000" sheet="S21" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6160000" ymax="6190000" sheet="T21" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6160000" ymax="6190000" sheet="U21" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6160000" ymax="6190000" sheet="V21" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6160000" ymax="6190000" sheet="W21" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6130000" ymax="6160000" sheet="Q22" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6130000" ymax="6160000" sheet="R22" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6130000" ymax="6160000" sheet="S22" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6130000" ymax="6160000" sheet="T22" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6130000" ymax="6160000" sheet="U22" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6130000" ymax="6160000" sheet="V22" />
+			<gridref xmin="2850000" xmax="2890000" ymin="6130000" ymax="6160000" sheet="W22" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6100000" ymax="6130000" sheet="R23" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6100000" ymax="6130000" sheet="S23" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6100000" ymax="6130000" sheet="T23" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6100000" ymax="6130000" sheet="U23" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6100000" ymax="6130000" sheet="V23" />
+			<gridref xmin="2450000" xmax="2490000" ymin="6070000" ymax="6100000" sheet="M24" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6070000" ymax="6100000" sheet="N24" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6070000" ymax="6100000" sheet="S24" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6070000" ymax="6100000" sheet="T24" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6070000" ymax="6100000" sheet="U24" />
+			<gridref xmin="2810000" xmax="2850000" ymin="6070000" ymax="6100000" sheet="V24" />
+			<gridref xmin="2410000" xmax="2450000" ymin="6040000" ymax="6070000" sheet="L25" />
+			<gridref xmin="2450000" xmax="2490000" ymin="6040000" ymax="6070000" sheet="M25" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6040000" ymax="6070000" sheet="N25" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6040000" ymax="6070000" sheet="P25" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6040000" ymax="6070000" sheet="R25" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6040000" ymax="6070000" sheet="S25" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6040000" ymax="6070000" sheet="T25" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6040000" ymax="6070000" sheet="U25" />
+			<gridref xmin="2410000" xmax="2450000" ymin="6010000" ymax="6040000" sheet="L26" />
+			<gridref xmin="2450000" xmax="2490000" ymin="6010000" ymax="6040000" sheet="M26" />
+			<gridref xmin="2490000" xmax="2530000" ymin="6010000" ymax="6040000" sheet="N26" />
+			<gridref xmin="2530000" xmax="2570000" ymin="6010000" ymax="6040000" sheet="O26" />
+			<gridref xmin="2570000" xmax="2610000" ymin="6010000" ymax="6040000" sheet="P26" />
+			<gridref xmin="2610000" xmax="2650000" ymin="6010000" ymax="6040000" sheet="Q26" />
+			<gridref xmin="2650000" xmax="2690000" ymin="6010000" ymax="6040000" sheet="R26" />
+			<gridref xmin="2690000" xmax="2730000" ymin="6010000" ymax="6040000" sheet="S26" />
+			<gridref xmin="2730000" xmax="2770000" ymin="6010000" ymax="6040000" sheet="T26" />
+			<gridref xmin="2770000" xmax="2810000" ymin="6010000" ymax="6040000" sheet="U26" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5980000" ymax="6010000" sheet="L27" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5980000" ymax="6010000" sheet="M27" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5980000" ymax="6010000" sheet="N27" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5980000" ymax="6010000" sheet="O27" />
+			<gridref xmin="2570000" xmax="2610000" ymin="5980000" ymax="6010000" sheet="P27" />
+			<gridref xmin="2610000" xmax="2650000" ymin="5980000" ymax="6010000" sheet="Q27" />
+			<gridref xmin="2650000" xmax="2690000" ymin="5980000" ymax="6010000" sheet="R27" />
+			<gridref xmin="2690000" xmax="2730000" ymin="5980000" ymax="6010000" sheet="S27" />
+			<gridref xmin="2730000" xmax="2770000" ymin="5980000" ymax="6010000" sheet="T27" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5950000" ymax="5980000" sheet="L28" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5950000" ymax="5980000" sheet="M28" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5950000" ymax="5980000" sheet="N28" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5950000" ymax="5980000" sheet="O28" />
+			<gridref xmin="2570000" xmax="2610000" ymin="5950000" ymax="5980000" sheet="P28" />
+			<gridref xmin="2610000" xmax="2650000" ymin="5950000" ymax="5980000" sheet="Q28" />
+			<gridref xmin="2650000" xmax="2690000" ymin="5950000" ymax="5980000" sheet="R28" />
+			<gridref xmin="2690000" xmax="2730000" ymin="5950000" ymax="5980000" sheet="S28" />
+			<gridref xmin="2730000" xmax="2770000" ymin="5950000" ymax="5980000" sheet="T28" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5920000" ymax="5950000" sheet="K29" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5920000" ymax="5950000" sheet="L29" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5920000" ymax="5950000" sheet="M29" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5920000" ymax="5950000" sheet="N29" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5920000" ymax="5950000" sheet="O29" />
+			<gridref xmin="2570000" xmax="2610000" ymin="5920000" ymax="5950000" sheet="P29" />
+			<gridref xmin="2610000" xmax="2650000" ymin="5920000" ymax="5950000" sheet="Q29" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5890000" ymax="5920000" sheet="K30" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5890000" ymax="5920000" sheet="L30" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5890000" ymax="5920000" sheet="M30" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5890000" ymax="5920000" sheet="N30" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5890000" ymax="5920000" sheet="O30" />
+			<gridref xmin="2570000" xmax="2610000" ymin="5890000" ymax="5920000" sheet="P30" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5860000" ymax="5890000" sheet="J31" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5860000" ymax="5890000" sheet="K31" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5860000" ymax="5890000" sheet="L31" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5860000" ymax="5890000" sheet="M31" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5860000" ymax="5890000" sheet="N31" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5860000" ymax="5890000" sheet="O31" />
+			<gridref xmin="2570000" xmax="2610000" ymin="5860000" ymax="5890000" sheet="P31" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5830000" ymax="5860000" sheet="J32" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5830000" ymax="5860000" sheet="K32" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5830000" ymax="5860000" sheet="L32" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5830000" ymax="5860000" sheet="M32" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5830000" ymax="5860000" sheet="N32" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5830000" ymax="5860000" sheet="O32" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5800000" ymax="5830000" sheet="I33" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5800000" ymax="5830000" sheet="J33" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5800000" ymax="5830000" sheet="K33" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5800000" ymax="5830000" sheet="L33" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5800000" ymax="5830000" sheet="M33" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5800000" ymax="5830000" sheet="N33" />
+			<gridref xmin="2530000" xmax="2570000" ymin="5800000" ymax="5830000" sheet="O33" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5770000" ymax="5800000" sheet="H34" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5770000" ymax="5800000" sheet="I34" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5770000" ymax="5800000" sheet="J34" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5770000" ymax="5800000" sheet="K34" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5770000" ymax="5800000" sheet="L34" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5770000" ymax="5800000" sheet="M34" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5770000" ymax="5800000" sheet="N34" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5740000" ymax="5770000" sheet="G35" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5740000" ymax="5770000" sheet="H35" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5740000" ymax="5770000" sheet="I35" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5740000" ymax="5770000" sheet="J35" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5740000" ymax="5770000" sheet="K35" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5740000" ymax="5770000" sheet="L35" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5740000" ymax="5770000" sheet="M35" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5740000" ymax="5770000" sheet="N35" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5710000" ymax="5740000" sheet="F36" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5710000" ymax="5740000" sheet="G36" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5710000" ymax="5740000" sheet="H36" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5710000" ymax="5740000" sheet="I36" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5710000" ymax="5740000" sheet="J36" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5710000" ymax="5740000" sheet="K36" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5710000" ymax="5740000" sheet="L36" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5710000" ymax="5740000" sheet="M36" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5710000" ymax="5740000" sheet="N36" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5680000" ymax="5710000" sheet="E37" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5680000" ymax="5710000" sheet="F37" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5680000" ymax="5710000" sheet="G37" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5680000" ymax="5710000" sheet="H37" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5680000" ymax="5710000" sheet="I37" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5680000" ymax="5710000" sheet="J37" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5680000" ymax="5710000" sheet="K37" />
+			<gridref xmin="2410000" xmax="2450000" ymin="5680000" ymax="5710000" sheet="L37" />
+			<gridref xmin="2450000" xmax="2490000" ymin="5680000" ymax="5710000" sheet="M37" />
+			<gridref xmin="2490000" xmax="2530000" ymin="5680000" ymax="5710000" sheet="N37" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5650000" ymax="5680000" sheet="D38" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5650000" ymax="5680000" sheet="E38" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5650000" ymax="5680000" sheet="F38" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5650000" ymax="5680000" sheet="G38" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5650000" ymax="5680000" sheet="H38" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5650000" ymax="5680000" sheet="I38" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5650000" ymax="5680000" sheet="J38" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5650000" ymax="5680000" sheet="K38" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5620000" ymax="5650000" sheet="D39" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5620000" ymax="5650000" sheet="E39" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5620000" ymax="5650000" sheet="F39" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5620000" ymax="5650000" sheet="G39" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5620000" ymax="5650000" sheet="H39" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5620000" ymax="5650000" sheet="I39" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5620000" ymax="5650000" sheet="J39" />
+			<gridref xmin="2370000" xmax="2410000" ymin="5620000" ymax="5650000" sheet="K39" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5590000" ymax="5620000" sheet="C40" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5590000" ymax="5620000" sheet="D40" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5590000" ymax="5620000" sheet="E40" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5590000" ymax="5620000" sheet="F40" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5590000" ymax="5620000" sheet="G40" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5590000" ymax="5620000" sheet="H40" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5590000" ymax="5620000" sheet="I40" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5590000" ymax="5620000" sheet="J40" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5560000" ymax="5590000" sheet="B41" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5560000" ymax="5590000" sheet="C41" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5560000" ymax="5590000" sheet="D41" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5560000" ymax="5590000" sheet="E41" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5560000" ymax="5590000" sheet="F41" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5560000" ymax="5590000" sheet="G41" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5560000" ymax="5590000" sheet="H41" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5560000" ymax="5590000" sheet="I41" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5560000" ymax="5590000" sheet="J41" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5530000" ymax="5560000" sheet="B42" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5530000" ymax="5560000" sheet="C42" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5530000" ymax="5560000" sheet="D42" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5530000" ymax="5560000" sheet="E42" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5530000" ymax="5560000" sheet="F42" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5530000" ymax="5560000" sheet="G42" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5530000" ymax="5560000" sheet="H42" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5530000" ymax="5560000" sheet="I42" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5530000" ymax="5560000" sheet="J42" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5500000" ymax="5530000" sheet="B43" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5500000" ymax="5530000" sheet="C43" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5500000" ymax="5530000" sheet="D43" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5500000" ymax="5530000" sheet="E43" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5500000" ymax="5530000" sheet="F43" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5500000" ymax="5530000" sheet="G43" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5500000" ymax="5530000" sheet="H43" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5500000" ymax="5530000" sheet="I43" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5500000" ymax="5530000" sheet="J43" />
+			<gridref xmin="1970000" xmax="2010000" ymin="5470000" ymax="5500000" sheet="A44" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5470000" ymax="5500000" sheet="B44" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5470000" ymax="5500000" sheet="C44" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5470000" ymax="5500000" sheet="D44" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5470000" ymax="5500000" sheet="E44" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5470000" ymax="5500000" sheet="F44" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5470000" ymax="5500000" sheet="G44" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5470000" ymax="5500000" sheet="H44" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5470000" ymax="5500000" sheet="I44" />
+			<gridref xmin="2330000" xmax="2370000" ymin="5470000" ymax="5500000" sheet="J44" />
+			<gridref xmin="1970000" xmax="2010000" ymin="5440000" ymax="5470000" sheet="A45" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5440000" ymax="5470000" sheet="B45" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5440000" ymax="5470000" sheet="C45" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5440000" ymax="5470000" sheet="D45" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5440000" ymax="5470000" sheet="E45" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5440000" ymax="5470000" sheet="F45" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5440000" ymax="5470000" sheet="G45" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5440000" ymax="5470000" sheet="H45" />
+			<gridref xmin="2290000" xmax="2330000" ymin="5440000" ymax="5470000" sheet="I45" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5410000" ymax="5440000" sheet="B46" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5410000" ymax="5440000" sheet="C46" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5410000" ymax="5440000" sheet="D46" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5410000" ymax="5440000" sheet="E46" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5410000" ymax="5440000" sheet="F46" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5410000" ymax="5440000" sheet="G46" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5410000" ymax="5440000" sheet="H46" />
+			<gridref xmin="2010000" xmax="2050000" ymin="5380000" ymax="5410000" sheet="B47" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5380000" ymax="5410000" sheet="D47" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5380000" ymax="5410000" sheet="E47" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5380000" ymax="5410000" sheet="F47" />
+			<gridref xmin="2210000" xmax="2250000" ymin="5380000" ymax="5410000" sheet="G47" />
+			<gridref xmin="2250000" xmax="2290000" ymin="5380000" ymax="5410000" sheet="H47" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5350000" ymax="5380000" sheet="D48" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5350000" ymax="5380000" sheet="E48" />
+			<gridref xmin="2170000" xmax="2210000" ymin="5350000" ymax="5380000" sheet="F48" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5320000" ymax="5350000" sheet="C49" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5320000" ymax="5350000" sheet="D49" />
+			<gridref xmin="2130000" xmax="2170000" ymin="5320000" ymax="5350000" sheet="E49" />
+			<gridref xmin="2050000" xmax="2090000" ymin="5290000" ymax="5320000" sheet="C50" />
+			<gridref xmin="2090000" xmax="2130000" ymin="5290000" ymax="5320000" sheet="D50" />
+		</gridrefs>
+	</NZMG>
+	
+	<WGS84>
+		<enable>true</enable>
+		<enabledm>true</enabledm>
+		<enabledms>true</enabledms>
+	</WGS84>
+	
+	<webmercator>
+		<enable>true</enable>
+	</webmercator>
+	
+	<!-- Help Location Settings -->
+	<helplocationurl>http://somewebsite.com</helplocationurl>
+</configuration>

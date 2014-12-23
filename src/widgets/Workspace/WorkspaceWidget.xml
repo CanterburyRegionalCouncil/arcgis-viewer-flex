@@ -1,0 +1,76 @@
+<?xml version="1.0" ?>
+<configuration>
+    <!-- Image location for -->
+    <imageurl>assets/images/globe.png</imageurl>
+    
+    <!-- Email URL for sharing workspaces containing a link to the main viewer, including the query string term '?workspace=[workspaceid]' -->
+    <ShareByEmailLink>mailto://?subject=You%20have%20been%20sent%20a%20GISmo%20workspace&amp;body=You%20have%20been%20sent%20a%20GISmo%20workspace%20which%20can%20be%20viewed%20at%0d%0dhttp%3a%2f%2farcgis.ecan.govt.nz%2fEcanFlexViewer22%2findex.html?workspace=[workspaceid]</ShareByEmailLink>
+
+    <!-- If the Workspace widget is to run in CentralRepository storage mode, this URL specifies the location of the webservices used. -->
+	<CentralStorageEndpoint>[PATH TO WEB SERVICE HANDLER]/WebServicePortal.asmx</CentralStorageEndpoint>
+	<CentralStorageServiceName>WebServicePortal</CentralStorageServiceName>
+	<CentralStorageServicePort>WebServicePortalSoap</CentralStorageServicePort>
+    
+    <!-- URLHandlerPreloadDelay: (default = 1000) used by WorkspaceURLHandler as a short delay (in milliseconds) to wait before running the Main Workspace widget -->
+    <URLHandlerPreloadDelay>1000</URLHandlerPreloadDelay>
+
+    <!-- WorkspaceWidgetLabel: (default = 'Workspaces') used by WorkspaceURLHandler to determine the label used by the Main workspace widget. this value must be the same as the 'label' attribute of the main widget in config.xml -->
+    <WorkspaceWidgetLabel>Workspaces</WorkspaceWidgetLabel>
+
+    <!-- Graphics layer names (IDs) to include when saving a workspace. -->
+    <graphicLayersToSave>
+    	<graphicsLayerName>RedLiningGraphicsLayer</graphicsLayerName>
+    </graphicLayersToSave>
+
+	<!-- Default value for the clear features option -->
+	<clearfeaturesdefault>true</clearfeaturesdefault>
+
+	<!-- Flag as to whether the workspace contents should be displayed in the data grid -->
+	<showworkspacecontents>true</showworkspacecontents>
+
+    <!-- Label details for the widget -->
+	<labels>
+		<!-- UI Button Labels -->	    
+	    <openbutton>Open</openbutton>
+	    <emailbutton>Email</emailbutton>
+	    <deletebutton>Delete</deletebutton>
+	    <savebutton>Save</savebutton>
+	    <newbutton>New...</newbutton>
+	    
+	    <!-- Workspace Detail Save/Edit Labels -->
+	    <newtitle>Name:</newtitle>
+	    <newdescription>Description:</newdescription>
+	    <includegroup>Include:</includegroup>
+	    <includegraphics>Drawn Graphics</includegraphics>
+	    <includemaplayers>Map Layers</includemaplayers>
+	    <newsavebutton>Save</newsavebutton>
+	    <newcancelbutton>Cancel</newcancelbutton>
+	    
+		<!-- Overwrite Workspace Options -->	    
+	    <saveconfirmationtext>Are you sure you want to replace this workspace?</saveconfirmationtext>
+	    <saveconfirmationtitle>Confirm</saveconfirmationtitle>
+	    
+		<!-- Delete Workspace Options -->	    
+	    <deleteconfirmationtext>Are you sure you want to delete this workspace?</deleteconfirmationtext>
+	    <deleteconfirmationtitle>Confirm</deleteconfirmationtitle>
+		
+		<!-- Clear Existing Features Option -->
+		<clearfeatureslabel>Clear</clearfeatureslabel>
+		<clearfeaturestootip>When ticked, any layers currently in the map that are not also within a workspace that is being loaded will be removed.</clearfeaturestootip>
+		
+		<!-- Filtering Options -->
+		<filterlisttext>Filter Workspaces</filterlisttext>
+		<filterlistprompt>Enter keywords</filterlistprompt>
+		<filterlistclear>Clear</filterlistclear>
+
+		<!-- Messages -->
+	    <loadingworkspaceslabel>Loading Workspaces...</loadingworkspaceslabel>
+		<openingworkspacelabel>Opening workspace...</openingworkspacelabel>
+		
+		<!-- Help -->
+		<helplabel>Help</helplabel>
+	</labels>
+		
+	<!-- Help Location Settings -->
+	<helplocationurl>http://ecan.govt.nz</helplocationurl>
+</configuration>

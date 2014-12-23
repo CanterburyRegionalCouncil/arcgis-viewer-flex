@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx=					"http://ns.adobe.com/mxml/2009" 
+		 xmlns:s=					"library://ns.adobe.com/flex/spark" 
+		 xmlns:mx=					"library://ns.adobe.com/flex/mx" 
+		 xmlns:esri=				"http://www.esri.com/2008/ags"
+		 minWidth=					"200"
+		 minHeight=					"50"
+		 mouseChildren=				"true" >
+	
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="point" />
+		<s:State name="polyline" />
+		<s:State name="polygon" />
+	</s:states>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.GraphicsLayer;
+			import widgets.supportClasses.utils.MapGridUtil;
+			
+			import mx.controls.Alert;
+			
+			// Geographic coordinate WKID
+			private const EPSG_GEOGRAPHIC:Number = 4326;
+			
+			private var _graphic:Graphic;
+			
+			[Bindable]
+			private var _areaFormated:String = "";
+			private var _area:Number;
+			[Bindable]
+			private var _areaLabel:String = "Area:";
+			
+			[Bindable]
+			private var _lengthFormated:String = "";
+			private var _length:Number;
+			[Bindable]
+			private var _lengthLabel:String = "";
+
+			[Bindable]
+			private var _xFormated:String = "";
+			private var _x:Number;
+			[Bindable]
+			private var _xLabel:String = "";
+			
+			[Bindable]
+			private var _yFormated:String = "";
+			private var _y:Number;
+			[Bindable]
+			private var _yLabel:String = "";
+			
+			[Bindable]
+			private var _mapPosition:String = "";
+			[Bindable]
+			private var _mapPositionLabel:String = "Map Reference:";
+			
+			[Bindable]
+			private var _clipboardTooltip:String = "Copy this value to the clipboard";
+			
+			private var _mapGridUtil:MapGridUtil;
+			
+			// Cursor classes 			
+			[Bindable]
+			[Embed(source="widgets/Measure/assets/images/i_clipboard.png")]
+			private var clipIcon:Class;
+			
+
+			/* Graphic Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Graphic representing the shape being measured.
+			 */
+			public function set graphic(value:Graphic):void
+			{
+				_graphic = value;
+				updateState();
+			}
+			
+			public function get graphic():Graphic
+			{
+				return _graphic;
+			}
+
+			
+			/* Map Grid Util Property
+			-------------------------------------------------------------------- */
+
+			/**
+			 * Utility class for formatting a map reference.
+			 */
+			public function get MapPositionFormatter():MapGridUtil
+			{
+				return _mapGridUtil;
+			}
+			
+			public function set MapPositionFormatter(value:MapGridUtil):void
+			{
+				_mapGridUtil = value;
+				updateState();
+			}
+			
+
+			/* Update the component's display values
+			-------------------------------------------------------------------- */
+
+			/**
+			 * Updates the component display details.
+			 */
+			private function updateState():void
+			{
+				// Clear the current settings
+				clearSettings();
+				
+				// Check for the graphic
+				if (_graphic && _graphic.geometry)
+				{
+					switch(_graphic.geometry.type)
+					{
+						case Geometry.MAPPOINT:
+						{
+							var pt:MapPoint = MapPoint(_graphic.geometry);
+							_x = pt.x;
+							_y = pt.y;
+							
+							var wkid:Number = graphic.geometry.spatialReference.wkid;
+							if (wkid == EPSG_GEOGRAPHIC)
+							{
+								numberFormatter.fractionalDigits = 6;	
+								_xLabel = "Longitude:";
+								_yLabel = "Latitude:";
+							}
+							else
+							{
+								numberFormatter.fractionalDigits = 0;
+								_xLabel = "X Coordinate:";
+								_yLabel = "Y Coordinate:";
+							}
+							
+							_xFormated = numberFormatter.format(_x);
+							_yFormated = numberFormatter.format(_y);
+							
+							if (_mapGridUtil)
+							{
+								_mapPosition = _mapGridUtil.getMapReference(pt);
+							}
+							
+							// Update the state
+							currentState = "point";
+							
+							break;
+						}
+						
+						case Geometry.POLYLINE:
+						{
+							_length = graphic.attributes.linelength || 0;
+							_lengthFormated = graphic.attributes.linelengthformat || "Not Available";
+							_lengthLabel = "Length:";
+							
+							// Update the state
+							currentState = "polyline";
+							
+							break;
+						}
+						
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						{
+							_area = graphic.attributes.area || 0;
+							_areaFormated = graphic.attributes.areaformat || "Not Available";
+
+							_length = graphic.attributes.perimeter || 0;
+							_lengthFormated = graphic.attributes.perimeterformat || "Not Available";
+							_lengthLabel = "Perimeter:";
+
+							// Update the state
+							currentState = "polygon";
+
+							break;
+						}
+					}
+				}
+				else
+				{
+					currentState = "normal";
+				}
+			}
+			
+			/**
+			 * Resets the measurement value and label settings.
+			 */
+			private function clearSettings():void
+			{
+				_areaFormated = "";
+				_area = 0;
+				
+				_lengthFormated = "";
+				_length = 0;
+				_lengthLabel = "";
+
+				_xFormated = "";
+				_x = 0;			
+				_xLabel = "";
+				
+				_yFormated = "";
+				_y = 0;			
+				_yLabel = "";
+			}
+			
+			/**
+			 * Called when one of the clipboard icons is clicked.
+			 */
+			private function copyToClipboard(value:Object):void
+			{
+				System.setClipboard(value.toString());
+				Alert.show("Data has been copied to clipboard");			
+			}
+
+			/**
+			* Called when the remove graphic link is clicked
+			*/
+			protected function removeLink_clickHandler(event:MouseEvent):void
+			{
+				var graphicsLayer:GraphicsLayer = _graphic.graphicsLayer;
+				
+				// Remove the graphic from the layer
+				if (graphicsLayer)
+				{
+					graphicsLayer.remove(_graphic);
+				}
+				
+				// Hide the popup
+				dispatchEvent(new Event("GraphicInspector_ClosePopup"));				
+			}
+
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<s:NumberFormatter id="numberFormatter" useGrouping="true" groupingSeparator="," groupingPattern="3;*" negativeNumberFormat="1" />
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout gap="5" paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5" />
+	</s:layout>
+	
+	<!--- Point Coordinate values -->
+	<s:HGroup width="100%" verticalAlign="middle" gap="5" visible="false" visible.point="true" 
+			  includeInLayout="false" includeInLayout.point="true" >
+		<s:Label text="{_xLabel}" height="100%" width="100" styleName="WidgetTitle" verticalAlign="middle" />
+		<s:Label text="{_xFormated}" height="100%" width="100%" verticalAlign="middle" />
+		<mx:Image source="{clipIcon}" height="25" width="25" click="{copyToClipboard(_x);}" 
+				  useHandCursor="true" buttonMode="true" toolTip="{_clipboardTooltip}" />
+	</s:HGroup> 
+	<s:HGroup width="100%" verticalAlign="middle" gap="5" visible="false" visible.point="true" 
+			  includeInLayout="false" includeInLayout.point="true" >
+		<s:Label text="{_yLabel}" height="100%" width="100" styleName="WidgetTitle" verticalAlign="middle" />
+		<s:Label text="{_yFormated}" height="100%" width="100%" verticalAlign="middle" />
+		<mx:Image source="{clipIcon}" height="25" width="25" click="{copyToClipboard(_y);}" 
+				  useHandCursor="true" buttonMode="true" toolTip="{_clipboardTooltip}" />
+	</s:HGroup> 
+	<s:HGroup width="100%" verticalAlign="middle" gap="5" visible="false" visible.point="{_mapPosition != ''}" 
+			  includeInLayout="false" includeInLayout.point="{_mapPosition != ''}" >
+		<s:Label text="{_mapPositionLabel}" height="100%" width="100" styleName="WidgetTitle" verticalAlign="middle" />
+		<s:Label text="{_mapPosition}" height="100%" width="100%" verticalAlign="middle" />
+		<mx:Image source="{clipIcon}" height="25" width="25" click="{copyToClipboard(_mapPosition);}" 
+				  useHandCursor="true" buttonMode="true" toolTip="{_clipboardTooltip}" />
+	</s:HGroup> 
+	
+	<!--- Area Values -->
+	<s:HGroup width="100%" verticalAlign="middle" gap="5" visible="false" visible.polygon="true" 
+			  includeInLayout="false" includeInLayout.polygon="true" >
+		<s:Label text="{_areaLabel}" height="100%" width="100" styleName="WidgetTitle" verticalAlign="middle" />
+		<s:Label text="{_areaFormated}" height="100%" width="100%" verticalAlign="middle" />
+		<mx:Image source="{clipIcon}" height="25" width="25" click="{copyToClipboard(_area);}" 
+				  useHandCursor="true" buttonMode="true" toolTip="{_clipboardTooltip}" />
+	</s:HGroup> 
+	
+	<!--- Length Values -->
+	<s:HGroup width="100%" verticalAlign="middle" gap="5" visible="false" visible.polygon="true" visible.polyline="true" 
+			  includeInLayout="false" includeInLayout.polygon="true" includeInLayout.polyline="true" >
+		<s:Label text="{_lengthLabel}" height="100%" width="100" styleName="WidgetTitle" verticalAlign="middle" />
+		<s:Label text="{_lengthFormated}" height="100%" width="100%" verticalAlign="middle" />
+		<mx:Image source="{clipIcon}" height="25" width="25" click="{copyToClipboard(_length);}" 
+				  useHandCursor="true" buttonMode="true" toolTip="{_clipboardTooltip}" />
+	</s:HGroup> 
+	
+	<s:HGroup width="100%">
+		<mx:LinkButton id="removeLink" label="Remove Graphic" click="removeLink_clickHandler(event)" />
+	</s:HGroup>
+	
+</s:Group>

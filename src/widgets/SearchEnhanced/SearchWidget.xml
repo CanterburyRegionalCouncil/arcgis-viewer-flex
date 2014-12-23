@@ -1,0 +1,2494 @@
+<?xml version="1.0" ?>
+<configuration>
+	<!-- Show debug output on console -->
+	<debug>false</debug>
+
+	<!-- Name of the Search Widget as it appears in the main viewer config file - used by the SearchURLHandler -->
+	<searchWidgetName>Search</searchWidgetName>
+
+	<!-- replace the following url with your own geometry service -->
+    <geometryservice url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer" />
+
+	<!-- Tolerance to apply to map points used to search layers -->
+	<tolerance>6</tolerance>
+
+	<!-- Default setting for displaying results after a selection action -->
+	<autoshowresults>true</autoshowresults>
+
+	<!-- Default setting for selection mode the widget starts in. Valid values 
+		include "new", "add" and "subtract". This is an optional parameter. -->
+	<initialselectionmode>new</initialselectionmode>
+
+	<!-- Default view to be displayed. Valid values include "graphical" and 
+		"text". This is an optional parameter. -->
+	<initialview>graphical</initialview>
+
+	<!-- Name of graphics layer that will be used to display results -->
+	<graphicsLayerName alias="Search Results">SearchResultsLayer</graphicsLayerName>
+
+	<!-- Name of the graphics layer used by the drawing tool -->
+	<drawnGraphicsLayerName alias="Drawn Graphics">RedLiningGraphicsLayer</drawnGraphicsLayerName>
+
+	<!-- Name of the Attribute Table Widget as specified in the main viewer config -->
+	<includeAttributeTable attributetablewidget="Attribute Table" >false</includeAttributeTable>
+
+	<!-- Selectable Layers Configs:  allowOthers attribute indicates whether to use only the layers in this list or to include all of the layers in the map.  true=Include all layers + any in this list.  false=only layers in this config file)-->
+	<layers allowOthers="true"  >
+		<!-- Land parcels, roads and addresses -->
+
+		<layer>
+			<name>Address Points</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base_Labels/MapServer/3</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base_Labels/MapServer/3" />
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base_Labels/MapServer/3" />
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base_Labels/MapServer/3" />
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<!-- Text expression details-->
+			<expressions>
+				<expression predictiveID="ADD" label="Search by Full Address" expressiontext="address Like '[value]%'">
+					<parameter id="[value]" label="Address Text" example="58 Kilmore or for wildcard search '% kilmore st'" tooltip="Enter address value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by House number and Street Name" expressiontext="house_number Like '[value1]%' AND road_name Like '[value2]%'">
+					<parameter id="[value1]" label="House Number" example="58 or for wildcard search '5%'" tooltip="Enter house number value here" datatype="text"/>
+					<parameter id="[value2]" label="Street Name" example="Kilmore Street or for wildcard search 'Kilmore%'" tooltip="Enter street name value here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<!-- Result setting details -->
+			<titlefield>address</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view="" />
+				<field name="address" alias="Full Address" view="all"/>
+				<field name="house_number" alias="House Number" view="grid"/>
+				<field name="road_name" alias="Street Name" view="grid"/>
+				<field name="locality" alias="Locality" view="all"/>
+				<field name="territorial_authority" alias="TLA" view="all"/>
+				<field name="id" alias="Address Id" view="grid"/>
+				<field name="PAR_ID" alias="Par Id" view="grid"/>
+			</fields>
+
+			<!-- Link details -->
+			<links>
+			</links>
+
+			<!-- Scale details -->
+			<minscale>25000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Land Parcels</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/6</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/6"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/6"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/6"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+			<expressions>
+				<expression predictiveID="VAL" label="Search by Valuation No" expressiontext="Valuation_No = '[value]'">
+					<parameter id="[value]" label="Valuation No" example="2268047900" tooltip="Enter valuation number here" datatype="text" />
+				</expression>
+				<expression predictiveID="LEG" label="Search by Appellation" expressiontext="Appellation = '[value]'">
+					<parameter id="[value]" label="Appellation" example="Lot 1 DP 39988" tooltip="Enter appellation here" datatype="text" />
+				</expression>
+				<expression predictiveID="PAR" label="Search by Parcel ID" expressiontext="PAR_ID = [value]">
+					<parameter id="[value]" label="Parcel ID" example="3412254" tooltip="Enter parcel id number here" datatype="integer" />
+				</expression>
+			</expressions>
+			<titlefield>Valuation_No</titlefield>
+			<fields all="false">
+				<field name="Valuation_No" alias="Valuation No" view="all"/>
+				<field name="Appellation" alias="Appellation" view="all"/>
+				<field name="Titles" alias="Titles" view="grid"/>
+				<field name="Land_District" alias="Land District" view="grid"/>
+				<field name="TA_Property_ID" alias="Property ID" view="grid"/>
+				<field name="Roll_No" alias="Roll No" view="grid"/>
+				<field name="Assessment" alias="Assessment" view="grid"/>
+				<field name="Suffix" alias="Suffix" view="grid"/>
+				<field name="Roll_No" alias="Roll No" view="grid"/>
+				<field name="Valuation_Legal_Descriptions" alias="Valuation Legal Descriptions" view="grid"/>
+				<field name="TA_Code" alias="TA Code" view="grid"/>
+				<field name="Territorial_Authority" alias="Territorial Authority" view="all"/>
+				<field name="Affected_Surveys" alias="Affected Surveys" view="grid"/>
+				<field name="Statutory_Actions" alias="Statutory Actions" view="grid"/>
+				<field name="Parcel_Intent" alias="Parcel Intent" view="all"/>
+				<field name="Topology_Type" alias="Topology Type" view="grid"/>
+				<field name="Survey_Area" alias="Survey Area m²" view="grid"/>
+				<field name="Calc_Area" alias="Calculated Area m²" view="grid"/>
+				<field name="PAR_ID" alias="Par Id" view="grid"/>
+				<field name="Link" alias="More Info" view=""/>
+				<field name="OBJECTID" alias="OBJECTID" view="grid"/>
+			</fields>
+
+			<!-- Link details -->
+			<links>
+				<layerLink linkField="Link" linkButtonLabel="Property Info">[value]</layerLink>
+			</links>
+
+			<!-- Scale details -->
+			<minscale>25000</minscale>
+			<zoomscale useextent="true">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Roads</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/5</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/5"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/5"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer/5"/>
+			<useamf>false</useamf>
+			<useproxy>false</useproxy>
+
+			<!-- Text expression details-->
+			<expressions>
+				<expression predictiveID="" label="Search by Road Name" expressiontext="name = '[value]'">
+					<parameter id="[value]" label="Road Name" example="Kilmore Street" tooltip="Enter road name here here" datatype="text" />
+				</expression>
+				<expression predictiveID="RDI" label="Search by Road ID Number" expressiontext="OBJECTID = [value]">
+					<parameter id="[value]" label="Road ID No" example="5828" tooltip="Enter road id number here" datatype="integer" />
+				</expression>
+			</expressions>
+
+			<!-- Result setting details -->
+			<titlefield>name</titlefield>
+			<fields all="false">
+				<field name="name" alias="Road Name" view="all"/>
+				<field name="other_names" alias="Other Names" view="all"/>
+				<field name="territorial_authority" alias="Territorial Authority" view="grid"/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="true">5000</zoomscale>
+		</layer>
+
+
+		<!-- Consent layers -->
+
+		<layer>
+			<name>ECAN Resource Consents - All Activities</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Discharge To Air</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/1</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/1"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/1"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/1"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="ContaminantType" alias="Contaminant Type" view="grid"/>
+				<field name="PestControlSubstance" alias="Pest Control Substance" view="grid"/>
+				<field name="SurfactantPenetrant" alias="Surfactant Penetrant" view="grid"/>
+				<field name="ApplicationMethod" alias="Application Method" view="grid"/>
+				<field name="ApplianceType" alias="Appliance Type" view="grid"/>
+				<field name="PrimaryFuel" alias="Primary Fuel" view="grid"/>
+				<field name="SecondaryFuel" alias="Secondary Fuel" view="grid"/>
+				<field name="MaxFuelRateAppPerHour" alias="Max Fuel Rate App Per Hour" view="grid"/>
+				<field name="MaxFuelRate" alias="Max Fuel Rate" view="grid"/>
+				<field name="MaxSulphurContent" alias="Max Sulphur Content" view="grid"/>
+				<field name="MinStackHeight" alias="Min Stack Height" view="grid"/>
+				<field name="SprayPaintingProduct" alias="Spray Painting Product" view="grid"/>
+				<field name="SprayPaintingVolume" alias="Spray Painting Volume" view="grid"/>
+				<field name="SprayPaintingInOutdoors" alias="Spray Painting In|Outdoors" view="grid"/>
+				<field name="PowderCoatingVolume" alias="Powder Coating Volume" view="grid"/>
+				<field name="FibreglassingVolumes" alias="Fibreglassing Volumes" view="grid"/>
+				<field name="ProcessFerrousNonferrous" alias="Process Ferrous|Nonferrous" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Discharge To Land</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/2</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/2"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/2"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/2"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="FertiliserType" alias="Fertiliser Type" view="grid"/>
+				<field name="ContaminantType" alias="Contaminant Type" view="grid"/>
+				<field name="PestControlSubstance" alias="Pest Control Substance" view="grid"/>
+				<field name="StorageMethod" alias="Storage Method" view="grid"/>
+				<field name="TreatmentMethod" alias="Treatment Method" view="grid"/>
+				<field name="SWTreatmentMethod" alias="SW Treatment Method" view="grid"/>
+				<field name="TreatementDescription" alias="Treatement Description" view="grid"/>
+				<field name="DisposalMethod" alias="Disposal Method" view="grid"/>
+				<field name="DisposalDecsription" alias="Disposal Decsription" view="grid"/>
+				<field name="MaxRate" alias="Max Rate" view="grid"/>
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="ConsecutiveDayPeriod" alias="Consecutive Day Period" view="grid"/>
+				<field name="DischargeArea" alias="Discharge Area" view="grid"/>
+				<field name="DischargeLocation1" alias="Discharge Location 1" view="grid"/>
+				<field name="DischargeLocation2" alias="Discharge Location 2" view="grid"/>
+				<field name="Purpose" alias="Purpose" view="grid"/>
+				<field name="StormwaterCollectionArea" alias="Stormwater CollectionArea" view="grid"/>
+				<field name="StormwaterSource1" alias="Stormwater Source 1" view="grid"/>
+				<field name="StormwaterSource2" alias="Stormwater Source 2" view="grid"/>
+				<field name="StormwaterSource3" alias="Stormwater Source 3" view="grid"/>
+				<field name="BuildingConsentNumber" alias="Building Consent Number" view="grid"/>
+				<field name="SurfactantPenetrant" alias="Surfactant Penetrant" view="grid"/>
+				<field name="ApplicationMethod" alias="Application Method" view="grid"/>
+				<field name="EstimatedGWPermeability" alias="Estimated GW Permeability" view="grid"/>
+				<field name="GWConfined" alias="GW Confined" view="grid"/>
+				<field name="EstGWDownstreamUse" alias="Est GW Downstream Use" view="grid"/>
+				<field name="EstimatedSWDilution" alias="Estimated SW Dilution" view="grid"/>
+				<field name="EstSWDownstreamUse" alias="Est SW Downstream Use" view="grid"/>
+				<field name="EstSWInstreamValues" alias="Est SW Instream Values" view="grid"/>
+				<field name="AnimalType" alias="Animal Type" view="grid"/>
+				<field name="AnimalNumbers" alias="Animal Numbers" view="grid"/>
+				<field name="FarmNumber" alias="Farm Number" view="grid"/>
+				<field name="MilkSupply" alias="Milk Supply" view="grid"/>
+				<field name="LandfillStatus" alias="Landfill Status" view="grid"/>
+				<field name="LandfillType" alias="Landfill Type" view="grid"/>
+				<field name="LandfillArea" alias="Landfill Area" view="grid"/>
+				<field name="AssociatedConsents" alias="Associated Consents" view="grid"/>
+				<!--<field name="PlanRule" alias="Plan Rule" view="grid"/>-->
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Take Groundwater</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/4</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/4"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/4"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/4"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="MaxRate" alias="Max Rate" view="grid"/>
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="InAllocation" alias="In Allocation" view="grid"/>
+				<field name="FromMonth" alias="From Month" view="grid"/>
+				<field name="ToMonth" alias="To Month" view="grid"/>
+				<field name="EstMethod" alias="Est Method" view="grid"/>
+				<field name="EstDate" alias="Est Date" view="grid"/>
+				<field name="EstComment" alias="Est Comment" view="grid"/>
+				<field name="IrrigationTypeText" alias="Irrigation Type Text" view="grid"/>
+				<field name="SoilPAW" alias="Soil PAW" view="grid"/>
+				<field name="RainfallEIS" alias="Rainfall EIS" view="grid"/>
+				<field name="IrrigationOf" alias="Irrigation Of" view="grid"/>
+				<field name="IrrigationArea" alias="Irrigation Area" view="grid"/>
+				<field name="WaterTakePermitType" alias="Water Take Permit Type" view="grid"/>
+				<field name="PermitComment" alias="Permit Comment" view="grid"/>
+				<field name="WaterUsePlanText" alias="Water Use Plan Text" view="grid"/>
+				<field name="WaterUseDetailText" alias="Water Use Detail Text" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Discharge to Water</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/3</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/3"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/3"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/3"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="FertiliserType" alias="Fertiliser Type" view="grid"/>
+				<field name="ContaminantType" alias="Contaminant Type" view="grid"/>
+				<field name="PestControlSubstance" alias="Pest Control Substance" view="grid"/>
+				<field name="StorageMethod" alias="Storage Method" view="grid"/>
+				<field name="TreatmentMethod" alias="Treatment Method" view="grid"/>
+				<field name="SWTreatmentMethod" alias="SW Treatment Method" view="grid"/>
+				<field name="TreatementDescription" alias="Treatement Description" view="grid"/>
+				<field name="DisposalMethod" alias="Disposal Method" view="grid"/>
+				<field name="DisposalDecsription" alias="Disposal Decsription" view="grid"/>
+				<field name="MaxRate" alias="Max Rate" view="grid"/>
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="ConsecutiveDayPeriod" alias="Consecutive Day Period" view="grid"/>
+				<field name="DischargeArea" alias="Discharge Area" view="grid"/>
+				<field name="DischargeLocation1" alias="Discharge Location 1" view="grid"/>
+				<field name="DischargeLocation2" alias="Discharge Location 2" view="grid"/>
+				<field name="Purpose" alias="Purpose" view="grid"/>
+				<field name="StormwaterCollectionArea" alias="Stormwater Collection Area" view="grid"/>
+				<field name="StormwaterSource1" alias="Stormwater Source 1" view="grid"/>
+				<field name="StormwaterSource2" alias="Stormwater Source 2" view="grid"/>
+				<field name="StormwaterSource3" alias="Stormwater Source 3" view="grid"/>
+				<field name="BuildingConsentNumber" alias="Building Consent Number" view="grid"/>
+				<field name="SurfactantPenetrant" alias="Surfactant Penetrant" view="grid"/>
+				<field name="ApplicationMethod" alias="Application Method" view="grid"/>
+				<field name="EstimatedGWDepth" alias="Estimated GW Depth" view="grid"/>
+				<field name="EstimatedGWPermeability" alias="Estimated GW Permeability" view="grid"/>
+				<field name="GWConfined" alias="GW Confined" view="grid"/>
+				<field name="EstGWDownstreamUse" alias="Est GW DownstreamUse" view="grid"/>
+				<field name="EstimatedSWDilution" alias="Estimated SW Dilution" view="grid"/>
+				<field name="EstSWDownstreamUse" alias="Est SW DownstreamUse" view="grid"/>
+				<field name="EstSWInstreamValues" alias="Est SW Instream Values" view="grid"/>
+				<field name="AnimalType" alias="Animal Type" view="grid"/>
+				<field name="AnimalNumbers" alias="Animal Numbers" view="grid"/>
+				<field name="FarmNumber" alias="Farm Number" view="grid"/>
+				<field name="MilkSupply" alias="Milk Supply" view="grid"/>
+				<field name="AssociatedConsents" alias="Associated Consents" view="grid"/>
+				<!--<field name="PlanRule" alias="Plan Rule" view="grid"/>-->
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Effluent Discharge Dairy</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/5</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/5"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/5"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/5"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="ConsecutiveDayPeriod" alias="Consecutive Day Period" view="grid"/>
+				<field name="FarmNumber" alias="Farm Number" view="grid"/>
+				<field name="DisposalMethod" alias="Disposal Method" view="grid"/>
+				<field name="MilkSupply" alias="Milk Supply" view="grid"/>
+				<field name="StorageMethod" alias="Storage Method" view="grid"/>
+				<field name="StorageVolume" alias="Storage Volume" view="grid"/>
+				<field name="AnimalNumbers" alias="Animal Numbers" view="grid"/>
+				<field name="DischargeArea" alias="Discharge Area" view="grid"/>
+				<field name="AssociatedConsents" alias="AssociatedConsents" view="grid"/>
+				<!--<field name="PlanRule" alias="Plan Rule" view="grid"/>-->
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Effluent Discharge Human </name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/6</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/6"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/6"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/6"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="DischargeLocation1" alias="Discharge Location 1" view="grid"/>
+				<field name="DischargeLocation2" alias="Discharge Location 2" view="grid"/>
+				<field name="ConsecutiveDayPeriod" alias="Consecutive Day Period" view="grid"/>
+				<field name="ContaminantType" alias="Contaminant Type" view="grid"/>
+				<field name="BuildingConsentNumber" alias="Building Consent Number" view="grid"/>
+				<field name="TreatmentMethod" alias="Treatment Method" view="grid"/>
+				<field name="TreatmentDescription" alias="Treatment Description" view="grid"/>
+				<field name="DisposalMethod" alias="Disposal Method" view="grid"/>
+				<field name="DisposalDescription" alias="Disposal Description" view="grid"/>
+				<field name="HazardousSubstances" alias="Hazardous Substances" view="grid"/>
+				<field name="EstimatedGWDepth" alias="Estimated GW Depth" view="grid"/>
+				<field name="EstimatedGWPermeability" alias="EstimatedGWPermeability" view="grid"/>
+				<field name="GWConfined" alias="GW Confined" view="grid"/>
+				<field name="EstGWDownstreamUse" alias="Est GW Downstream Use" view="grid"/>
+				<field name="AssociatedConsents" alias="Associated Consents" view="grid"/>
+				<!--<field name="PlanRule" alias="Plan Rule" view="grid"/>-->
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Gravel Excavation </name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/7</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/7"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/7"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/7"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="UpperSiteDistance" alias="Upper Site Distance" view="grid"/>
+				<field name="RiverLocationDesc" alias="River Location Desc" view="grid"/>
+				<field name="RatingDistrict" alias="Rating District" view="grid"/>
+				<field name="MaxSiteVolumePerYear" alias="Max Site Volume Per Year" view="grid"/>
+				<field name="MaxConsentVolumePerYear" alias="Max Consent Volume Per Year" view="grid"/>
+				<field name="MaxVolumeOverConsentLife" alias="Max Volume Over Consent Life" view="grid"/>
+				<field name="CeaseExcavationDate" alias="Cease Excavation Date" view="grid"/>
+				<field name="Comments" alias="Comments" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Hazardous Storage Above Ground </name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/8</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/8"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/8"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/8"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="PipeworkMaterial" alias="Pipework Material" view="grid"/>
+				<field name="PipeworkType" alias="Pipework Type" view="grid"/>
+				<field name="PipeworkProtection" alias="Pipework Protection" view="grid"/>
+				<field name="TankNumber" alias="Tank Number" view="grid"/>
+				<field name="TankContaminant1" alias="Tank Contaminant 1" view="grid"/>
+				<field name="TankContaminant2" alias="Tank Contaminant 2" view="grid"/>
+				<field name="TankContaminant3" alias="Tank Contaminant 3" view="grid"/>
+				<field name="TankVolume" alias="Tank Volume" view="grid"/>
+				<field name="TankType" alias="Tank Type" view="grid"/>
+				<field name="SecondaryContainment" alias="Secondary Containment" view="grid"/>
+				<field name="SecondaryContainmentB" alias="Secondary Containment B" view="grid"/>
+				<field name="TankProtection" alias="Tank Protection" view="grid"/>
+				<field name="OverfillProtection" alias="OverfillP rotection" view="grid"/>
+				<field name="SpillContainment" alias="Spill Containment" view="grid"/>
+				<field name="StormwaterConsentNumber" alias="Stormwater Consent Number" view="grid"/>
+				<field name="InChchGWRchrgZone1" alias="In Chch GW Recharge Zone 1" view="grid"/>
+				<field name="ObservationBores" alias="Observation Bores" view="grid"/>
+				<field name="InChChGWZone" alias="In ChCh GW Zone" view="grid"/>
+				<field name="EstimatedGWDepth" alias="EstimatedGWDepth" view="grid"/>
+				<field name="GWConfined" alias="GW Confined" view="grid"/>
+				<field name="TankLocation" alias="Tank Location" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Hazardous Storage Below Ground </name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/9</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/9"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/9"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/9"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="PipeworkMaterial" alias="Pipework Material" view="grid"/>
+				<field name="PipeworkType" alias="Pipework Type" view="grid"/>
+				<field name="PipeworkProtection" alias="Pipework Protection" view="grid"/>
+				<field name="TankNumber" alias="Tank Number" view="grid"/>
+				<field name="TankContaminant1" alias="Tank Contaminant 1" view="grid"/>
+				<field name="TankContaminant2" alias="Tank Contaminant 2" view="grid"/>
+				<field name="TankContaminant3" alias="Tank Contaminant 3" view="grid"/>
+				<field name="TankVolume" alias="Tank Volume" view="grid"/>
+				<field name="TankType" alias="Tank Type" view="grid"/>
+				<field name="SecondaryContainment" alias="Secondary Containment" view="grid"/>
+				<field name="SecondaryContainmentB" alias="Secondary ContainmentB" view="grid"/>
+				<field name="TankProtection" alias="Tank Protection" view="grid"/>
+				<field name="OverfillProtection" alias="Overfill Protection" view="grid"/>
+				<field name="SpillContainment" alias="Spill Containment" view="grid"/>
+				<field name="StormwaterConsentNumber" alias="Stormwater ConsentNumber" view="grid"/>
+				<field name="InChchGWRchrgZone1" alias="In Chch GW Recharge Zone 1" view="grid"/>
+				<field name="ObservationBores" alias="Observation Bores" view="grid"/>
+				<field name="InChChGWZone" alias="In ChCh GW Zone" view="grid"/>
+				<field name="EstimatedGWDepth" alias="Estimated GW Depth" view="grid"/>
+				<field name="GWConfined" alias="GW Confined" view="grid"/>
+				<field name="TankLocation" alias="Tank Location" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - High Country Burn</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/10</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/10"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/10"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/10"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="BurnLocation" alias="Burn Location" view="grid"/>
+				<field name="BurnArea" alias="Burn Area" view="grid"/>
+				<field name="Vegetation1" alias="Vegetation 1" view="grid"/>
+				<field name="Vegetation2" alias="Vegetation 2" view="grid"/>
+				<field name="Vegetation3" alias="Vegetation 3" view="grid"/>
+				<field name="BurnPeriodFrom" alias="Burn Period From" view="grid"/>
+				<field name="BurnPeriodTo" alias="Burn Period To" view="grid"/>
+				<field name="IntendedLandUse" alias="Intended Land Use" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Install Well</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/11</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/11"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/11"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/11"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="WellNo" alias="Well No" view="all"/>
+				<field name="WellActivity" alias="Well Activity" view="grid"/>
+				<field name="WellLocation" alias="Well Location" view="grid"/>
+				<field name="Depth" alias="Depth" view="grid"/>
+				<field name="Diameter" alias="Diameter" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Surface Water Dam</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/12</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/12"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/12"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/12"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="Use1" alias="Use 1" view="grid"/>
+				<field name="Use2" alias="Use 2" view="grid"/>
+				<field name="Use3" alias="Use 3" view="grid"/>
+				<field name="DamSituation" alias="Dam Situation" view="grid"/>
+				<field name="DamStorageVolume" alias="Dam Storage Volume" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Surface Water Divert</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/13</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/13"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/13"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/13"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="SWAPNo" alias="SWAP No" view="all"/>
+				<field name="SWAllocationZone" alias="SW Allocation Zone" view="grid"/>
+				<field name="Source" alias="Source" view="grid"/>
+				<field name="SourceName" alias="Source Name" view="grid"/>
+				<field name="ConsentAllocation" alias="Consent Allocation" view="grid"/>
+				<field name="InAllocation" alias="In Allocation" view="grid"/>
+				<field name="EstComment" alias="Est Comment" view="grid"/>
+				<field name="EstAllocation" alias="Est Allocation" view="grid"/>
+				<field name="EstMethod" alias="Est Method" view="grid"/>
+				<field name="EstDate" alias="Est Date" view="grid"/>
+				<field name="MaxRate" alias="Max Rate" view="grid"/>
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="consecDays" alias="consec Days" view="grid"/>
+				<field name="fmMonth" alias="fm Month" view="grid"/>
+				<field name="toMonth" alias="to Month" view="grid"/>
+				<field name="fmMonthText" alias="fm Month Text" view="grid"/>
+				<field name="toMonthText" alias="to Month Text" view="grid"/>
+				<field name="IrrigationOf" alias="Irrigation Of" view="grid"/>
+				<field name="IrrigationTypeText" alias="Irrigation Type Text" view="grid"/>
+				<field name="SoilPAW" alias="Soil PAW" view="grid"/>
+				<field name="RainfallEIS" alias="Rainfall EIS" view="grid"/>
+				<field name="IrrigationArea" alias="Irrigation Area" view="grid"/>
+				<field name="WaterTakePermitType" alias="Water Take Permit Type" view="grid"/>
+				<field name="PermitComment" alias="Permit Comment" view="grid"/>
+				<field name="WaterUsePlanText" alias="Water Use Plan Text" view="grid"/>
+				<field name="WaterUseDetailText" alias="Water Use Detail Text" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Surface Water Take</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/14</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/14"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/14"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/14"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="SWAPNo" alias="SWAP No" view="all"/>
+				<field name="SWAllocationZone" alias="SW Allocation Zone" view="grid"/>
+				<field name="Source" alias="Source" view="grid"/>
+				<field name="SourceName" alias="Source Name" view="grid"/>
+				<field name="ConsentAllocation" alias="Consent Allocation" view="grid"/>
+				<field name="InAllocation" alias="In Allocation" view="grid"/>
+				<field name="EstComment" alias="Est Comment" view="grid"/>
+				<field name="EstAllocation" alias="Est Allocation" view="grid"/>
+				<field name="EstMethod" alias="Est Method" view="grid"/>
+				<field name="EstDate" alias="Est Date" view="grid"/>
+				<field name="MaxRate" alias="Max Rate" view="grid"/>
+				<field name="MaxVolume" alias="Max Volume" view="grid"/>
+				<field name="consecDays" alias="consec Days" view="grid"/>
+				<field name="fmMonth" alias="fm Month" view="grid"/>
+				<field name="toMonth" alias="to Month" view="grid"/>
+				<field name="fmMonthText" alias="fm Month Text" view="grid"/>
+				<field name="toMonthText" alias="to Month Text" view="grid"/>
+				<field name="IrrigationOf" alias="Irrigation Of" view="grid"/>
+				<field name="IrrigationTypeText" alias="Irrigation Type Text" view="grid"/>
+				<field name="SoilPAW" alias="Soil PAW" view="grid"/>
+				<field name="RainfallEIS" alias="Rainfall EIS" view="grid"/>
+				<field name="IrrigationArea" alias="Irrigation Area" view="grid"/>
+				<field name="WaterTakePermitType" alias="Water Take Permit Type" view="grid"/>
+				<field name="PermitComment" alias="Permit Comment" view="grid"/>
+				<field name="WaterUsePlanText" alias="Water Use Plan Text" view="grid"/>
+				<field name="WaterUseDetailText" alias="Water Use Detail Text" view="grid"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>ECAN Resource Consents - Surface Water Use</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/15</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/15"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/15"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/15"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="CON" label="Search By Authorisation No" expressiontext="ConsentNo = '[value]'">
+					<parameter id="[value]" label="Authorisation No" example="CRC000010" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="ACT" label="Search By Activity No" expressiontext="ActivityNo = '[value]'">
+					<parameter id="[value]" label="Activity No" example="ACT000033" tooltip="Enter value here" datatype="text"/>
+				</expression>
+				<expression predictiveID="AFT" label="Search By Feature No" expressiontext="FTID IN ([value])">
+					<parameter id="[value]" label="FTID Number" example="14" tooltip="Enter value here" datatype="int"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ConsentNo</titlefield>
+			<fields all="false">
+				<field name="ConsentNo" alias="Consent No" view="all"/>
+				<field name="ConsentType" alias="Consent Type" view="grid"/>
+				<field name="ConsentSource" alias="Consent Source" view="all"/>
+				<field name="ConsentStatus" alias="Consent Status" view="all"/>
+				<field name="PermitType" alias="Permit Type" view="grid"/>
+				<field name="ActivityNo" alias="Activity No" view="all"/>
+				<field name="ActivityRecordType" alias="Activity Record Type" view="all"/>
+				<field name="ActivityRecordNo" alias="Activity Record No" view="grid"/>
+				<field name="FeatureType" alias="Feature Type" view="all"/>
+				<field name="FeatureID" alias="Feature ID" view="grid"/>
+				<field name="RMASection" alias="RMA Section" view="grid"/>
+				<field name="ActivityText" alias="Activity Text" view="all"/>
+				<field name="Location" alias="Location" view="all"/>
+				<field name="HolderName" alias="Holder Name" view="all"/>
+				<field name="ECNumber" alias="EC Number" view="all"/>
+				<field name="FileNo" alias="File No" view="all"/>
+				<field name="fmDate" alias="fm Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="fmDateText" alias="fm Date Text" view="grid"/>
+				<field name="toDate" alias="to Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="toDateText" alias="to Date Text" view="grid"/>
+				<field name="Lapses" alias="Lapses" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="GivenEffectTo" alias="Given Effect To" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="Expires" alias="Expires" dateformat="DD MMM YYYY" view="grid"/>
+
+				<field name="Use1" alias="Use 1" view="all"/>
+				<field name="Use2" alias="Use 2" view="all"/>
+				<field name="Use3" alias="Use 3" view="all"/>
+
+				<field name="GIS_TerritorialAuthority" alias="GIS Territorial Authority" view="grid"/>
+				<field name="GIS_Catchment" alias="GIS Catchment" view="all"/>
+				<field name="GIS_CWMSZone" alias="GIS CWMS Zone" view="all"/>
+				<field name="GIS_Runanga" alias="GIS Runanga" view="all"/>
+				<field name="GIS_GWAllocationZone" alias="GW Allocation Zone" view="grid"/>
+				<field name="GIS_SWAllocationZone" alias="GIS SW Allocation Zone" view="grid"/>
+				<field name="GIS_CleanAirZone" alias="GIS Clean Air Zone" view="grid"/>
+
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ TOPO50" view="grid"/>
+				<field name="CaptureScale" alias="Capture Scale" view="grid"/>
+				<field name="SharedLocation" alias="Shared Location" view="grid"/>
+				<field name="SpecialLocationType" alias="Special Location Type" view="grid"/>
+				<field name="CAP" alias="CAP" view="grid"/>
+				<field name="LINK" alias="LINK" view="grid"/>
+				<field name="FTID" alias="FTID" view="grid"/>
+			</fields>
+
+			<links>
+				<layerLink linkField="LINK" linkButtonLabel="Show consent summary page">[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">4000</zoomscale>
+		</layer>
+
+
+		<!-- SWAPs layers -->
+
+		<layer>
+			<name>Surface Water Abstraction Points</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/16</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/16"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/16"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/16"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="SWP" label="Search by SWAP No" expressiontext="SWAP_NO  = '[value]'">
+					<parameter id="[value]" label="SWAP Number" example="M33/0297" tooltip="Enter SWAP Number here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>SWAP_NO</titlefield>
+			<fields all="false">
+				<field name="SWAP_NO" alias="SWAP No" view="all"/>
+				<field name="SWAP_TYPE" alias="SWAP Type" view="grid"/>
+				<field name="SWAP_TYPE_DESC" alias="SWAP Type Description" view="all"/>
+				<field name="SWAP_STATUS" alias="SWAP Status" view="grid"/>
+				<field name="SWAP_STATUS_DESC" alias="SWAP Status Description" view="all"/>
+				<field name="WATERUSE" alias="Water Use" view="grid"/>
+				<field name="USE_CODE_1" alias="Use Code 1" view="grid"/>
+				<field name="USE_CODE_1_DESC" alias="Use Code 1 Description" view="grid"/>
+				<field name="USE_CODE_2" alias="Use Code 2" view="grid"/>
+				<field name="USE_CODE_2_DESC" alias="Use Code 2 Description" view="grid"/>
+				<field name="USE_CODE_3" alias="Use Code 3" view="grid"/>
+				<field name="USE_CODE_3_DESC" alias="Use Code 3 Description" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="true">5000</zoomscale>
+		</layer>
+
+
+		<!-- Water Quality layers -->
+
+		<layer>
+			<name>Water Quality - Groundwater</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/1</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/1"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/1"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/1"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="GWQ" label="Search by Site ID" expressiontext="SITE_NO  = '[value]'">
+					<parameter id="[value]" label="Site ID" example="M36/4042" tooltip="Enter site id here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<!-- Result setting details -->
+			<titlefield>SITE_NO</titlefield>
+			<fields all="false">
+				<field name="SITE_NO" alias="Site No" view="all"/>
+				<field name="WELL_TYPE" alias="Well Type" view="grid"/>
+				<field name="WELL_TYPE_DESC" alias="Well Type Description" view="all"/>
+				<field name="DEPTH" alias="Depth" view="all"/>
+				<field name="DIAMETER" alias="Diamater" view="grid"/>
+				<field name="DATE_DRILLED" alias="Date Drilled" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="WELL_HEAD_SECURITY" alias="Well Head Security" view="grid"/>
+				<field name="GW_MONITORING_TYPE" alias="GW Monitoring Type" view="grid"/>
+				<field name="GW_MONITORING_TYPE_DESC" alias="GW Monitoring Type Desc" view="grid"/>
+				<field name="WQ_MONITORING_TYPE" alias="WQ Monitoring Type" view="all"/>
+				<field name="WQ_MONITORING_TYPE_DESC" alias="WQ Monitoring Type Desc" view="grid"/>
+				<field name="MONITORING_AREA" alias="Monitoring Area" view="grid"/>
+				<field name="WQ_SAMPLE_COUNT" alias="WQ Sample Count" view="grid"/>
+				<field name="FIRST_SAMPLE_DATE" alias="First Sample Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LAST_SAMPLE_DATE" alias="Last Sample Date" dateformat="DD MMM YYYY" view="all"/>
+				<field name="LAST_CHANGED_BY" alias="LAST_CHANGED By" view="grid"/>
+				<field name="LAST_UPDATED_ON" alias="LAST_UPDATED_ON" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LOCALITY" alias="Locality" view="all"/>
+				<field name="ROAD_OR_STREET" alias="Road or Street" view="all"/>
+				<field name="WATER_USE" alias="Water Use" view="grid"/>
+				<field name="AQUIFER_TESTS" alias="Aquifer Tests" view="grid"/>
+				<field name="STEP_TEST_STEPS" alias="Step Test Steps" view="grid"/>
+				<field name="REFERENCE_RL" alias="Reference RL" view="grid"/>
+				<field name="GROUND_RL" alias="Ground RL" view="grid"/>
+				<field name="QAR_CODE" alias="QAR Code" view="grid"/>
+				<field name="ARSENIC" alias="Arsenic" view="grid"/>
+				<field name="ANNUAL_IONS" alias="Annual Ions" view="grid"/>
+				<field name="SALTWATER_INTRUSION" alias="Saltwater Intrusion" view="grid"/>
+				<field name="MONTHLY" alias="Monthly" view="grid"/>
+				<field name="QUARTERLY" alias="Quarterly" view="grid"/>
+				<field name="wq_NGMP" alias="NGMP" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+				<layerLink linkField="SITE_NO" linkButtonLabel="Show quality samples">http://maps.ecan.govt.nz/QualarcReport/QualarcReport.aspx?Site_ID=[value]</layerLink>
+				<layerLink linkField="SITE_NO" linkButtonLabel="Show ground water summary page">http://ecan.govt.nz/services/online-services/monitoring/groundwater-levels/Pages/groundwater-chart.aspx?WellNo=[value]</layerLink>
+			</links>
+
+			<minscale>25000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Water Quality - Surface Water</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/0</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/0"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/0"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/0"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="SWQ" label="Search by Site ID" expressiontext="SITE_ID  = '[value]'">
+					<parameter id="[value]" label="Site ID" example="SQ32819" tooltip="Enter site id here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<!-- Result setting details -->
+			<titlefield>SITE_ID</titlefield>
+			<fields all="false">
+				<field name="SITE_ID" alias="Site Id" view="all"/>
+				<field name="SITE_NAME" alias="Site Name" view="all"/>
+				<field name="SOURCE" alias="Source" view="grid"/>
+				<field name="SITE_TYPE" alias="Site Type" view="grid"/>
+				<field name="SPRING_NO" alias="Spring No" view="grid"/>
+				<field name="WQ_SAMPLE_COUNT" alias="WQ Sample Count" view="grid"/>
+				<field name="FIRST_SAMPLE_DATE" alias="First Sample Date" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LAST_SAMPLE_DATE" alias="Last Sample Date" dateformat="DD MMM YYYY" view="all"/>
+				<field name="GAUGING_SITE_INDEX" alias="Gauging Site Index" view="grid"/>
+				<field name="ALTITUDE" alias="Altitude" view="grid"/>
+				<field name="QAR_CODE" alias="QAR Code" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+				<layerLink linkField="SITE_ID" linkButtonLabel="Show quality samples">http://maps.ecan.govt.nz/QualarcReport/QualarcReport.aspx?Site_ID=[value]</layerLink>
+				<layerLink linkField="SITE_ID" linkButtonLabel="Show swim graph">http://maps.ecan.govt.nz/WaterQuality/waterqualitygraph.aspx?site_id=[value]</layerLink>
+			</links>
+
+			<minscale>25000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+
+		<!-- Groundwater layers -->
+
+		<layer>
+			<name>Groundwater Wells and Bores</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/17</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/17"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/17"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/17"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="WEL" label="Search by Well No" expressiontext="WELL_NO  = '[value]'">
+					<parameter id="[value]" label="Well No" example="J41/0121" tooltip="Enter well no here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>WELL_NO</titlefield>
+			<fields all="false">
+				<field name="WELL_NO" alias="Well No" view="all"/>
+				<field name="WELL_TYPE" alias="Well Type" view="grid"/>
+				<field name="WELL_TYPE_DESC" alias="Well Type Description" view="all"/>
+				<field name="WELL_STATUS" alias="Well Status" view="grid"/>
+				<field name="WELL_STATUS_DESC" alias="Well Status Description" view="all"/>
+				<field name="WELL_OWNER" alias="Well Owner" view="all"/>
+				<field name="DEPTH" alias="Depth" view="all"/>
+				<field name="DIAMETER" alias="Diamater" view="grid"/>
+				<field name="DATE_DRILLED" alias="Date Drilled" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LOCALITY" alias="Locality" view="all"/>
+				<field name="ROAD_OR_STREET" alias="Road or Street" view="all"/>
+				<field name="USE_CODE_1" alias="Use Code 1" view="grid"/>
+				<field name="USE_CODE_1_DESC" alias="Use Code 1 Description" view="grid"/>
+				<field name="USE_CODE_2" alias="Use Code 2" view="grid"/>
+				<field name="USE_CODE_2_DESC" alias="Use Code 2 Description" view="grid"/>
+				<field name="USE_CODE_3" alias="Use Code 3" view="grid"/>
+				<field name="USE_CODE_3_DESC" alias="Use Code 3 Description" view="grid"/>
+				<field name="GW_MONITORING_TYPE" alias="GW Monitoring Type" view="grid"/>
+				<field name="GW_MONITORING_TYPE_DESC" alias="GW Monitoring Type Description" view="grid"/>
+				<field name="WQ_MONITORING_TYPE" alias="WQ Monitoring Type" view="grid"/>
+				<field name="WQ_MONITORING_TYPE_DESC" alias="WQ Monitoring Type Description" view="grid"/>
+				<field name="WQ_SAMPLE_COUNT" alias="WQ Sample Count" view="grid"/>
+				<field name="TOP_SCREEN_1" alias="Top Screen 1" view="grid"/>
+				<field name="TOP_SCREEN_2" alias="Top Screen 2" view="grid"/>
+				<field name="TOP_SCREEN_3" alias="Top Screen 3" view="grid"/>
+				<field name="BOTTOM_SCREEN_1" alias="Bottom Screen 1" view="grid"/>
+				<field name="BOTTOM_SCREEN_2" alias="Bottom Screen 2" view="grid"/>
+				<field name="BOTTOM_SCREEN_3" alias="Bottom Screen 3" view="grid"/>
+				<field name="READING_COUNT" alias="Reading Count" view="grid"/>
+				<field name="REFERENCE_RL" alias="Reference RL" view="grid"/>
+				<field name="GROUND_RL" alias="Ground RL" view="grid"/>
+				<field name="HIGHEST_WATER_LEVEL" alias="Highest Water Level" view="grid"/>
+				<field name="LOWEST_WATER_LEVEL" alias="Lowest Water Level" view="grid"/>
+				<field name="INITIAL_SWL" alias="Initial SWL" view="grid"/>
+				<field name="START_READINGS" alias="Start Readings" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="END_READINGS" alias="End Readings" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="CALC_MIN" alias="Calc Min" view="grid"/>
+				<field name="MAX_YIELD" alias="Max Yield" view="grid"/>
+				<field name="MAX_DRAW_DOWN" alias="Max Draw Down" view="grid"/>
+				<field name="STRATA" alias="Strata" view="grid"/>
+				<field name="SPECIFIC_CAPACITY" alias="Specific Capacity" view="grid"/>
+				<field name="ISOTOPE" alias="Isotope" view="grid"/>
+				<field name="WATER_USE" alias="Water Use" view="grid"/>
+				<field name="AQUIFER_TESTS" alias="Aquifer Tests" view="grid"/>
+				<field name="STEP_TEST_STEPS" alias="Step Test Steps" view="grid"/>
+				<field name="QAR_CODE" alias="QAR Code" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="Link" alias="Link" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+				<layerLink linkField="Link" linkButtonLabel="Show well summary page">[value]</layerLink>
+				<layerLink linkField="WELL_NO" linkButtonLabel="Show quality samples">http://maps.ecan.govt.nz/QualarcReport/QualarcReport.aspx?Site_ID=[value]</layerLink>
+				<layerLink linkField="WELL_NO" linkButtonLabel="Show ground water levels">http://ecan.govt.nz/services/online-services/monitoring/groundwater-levels/Pages/groundwater-chart.aspx?WellNo=[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+
+		<!-- Planning and Allocation layers -->
+		
+		<layer>
+			<name>Surface Water Allocation Zones</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/LWRP/MapServer/18</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/LWRP/MapServer/18"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/LWRP/MapServer/18"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/LWRP/MapServer/18"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="" label="Search by SWAZ Name" expressiontext="SWAZ_NAME LIKE '[value]%'">
+					<parameter id="[value]" label="SWAZ Name" example="'Kaiapoi River' or for wildcard search '% River'" tooltip="Enter SWAZ name value here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>SWAZ_NAME</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+				<field name="SWAZ_GROUP_NAME" alias="SWAZ Group Name" view="grid"/>
+				<field name="SWAZ_NAME" alias="SWAZ Name" view="all"/>
+				<field name="A_ALLOCATION_BLOCK" alias="A Allocation Block" view="all"/>
+				<field name="ALLOCATION_BLOCK_GAP" alias="Allocation Block Gap" view="all"/>
+				<field name="B_ALLOCATION_BLOCK" alias="B Allocation Block" view="all"/>
+				<field name="PLAN_STATUS" alias="Plan Status" view="all"/>
+				<field name="SUB_REGIONAL_CHAPTER_NAME" alias="Sub-regional Chapter Name" view="grid"/>
+				<field name="ALLOCATION_REGIME_NAME" alias="Allocation Regime Name" view="grid"/>
+				<field name="ALLOCATION_REGIME_CLASS" alias="Allocation Regime Class" view="grid"/>
+				<field name="PERIMETER_M" alias="Perimeter m" view="grid"/>
+				<field name="AREA_M2" alias="Area m²" view="grid"/>
+				<field name="AREA_HA" alias="Area ha" view="all"/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>5000000</minscale>
+			<zoomscale useextent="true">25000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Groundwater Allocation Zones</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/2</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/2"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/2"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/2"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="" label="Search by Zone Name" expressiontext="ZONE Like '[value]%'">
+					<parameter id="[value]" label="Zone Name" example="'Culverden Basin' or for wildcard search '%Basin'" tooltip="Enter zone name here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>ZONE</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+				<field name="ZONE" alias="Zone" view="all"/>
+				<field name="ALLOCATIONLIMIT" alias="Allocation Limit" view="all"/>
+				<field name="BASISOFCALCULATION" alias="Basis of Calculation" view="all"/>
+				<field name="EFFECTIVEALLOCATION_ISSUED" alias="Effective Allocation Issued" view="all"/>
+				<field name="EFFECTIVEALLOCATION_DECIDED" alias="Effective Allocation Decided" view="all"/>
+				<field name="EFFECTIVEALLOCATION_INPROCESS" alias="Effective Allocation In Process" view="all"/>
+				<field name="EFFECTIVEALLOCATION_TOTAL" alias="Effective Allocation Total" view="all"/>
+				<field name="ZONESTATUS_CURRENTANDDECIDED" alias="Zone Status Current And Decided" view="grid"/>
+				<field name="ZONESTATUS_INPROCESS" alias="Zone Status In Process" view="grid"/>
+				<field name="STATUS" alias="Status" view="all"/>
+				<field name="INPROCESS" alias="In Process" view="all"/>
+				<field name="LASTUPDATE" alias="Last Update" dateformat="DD MMM YYYY" view="all"/>
+				<field name="UPDATEACTION" alias="Update Action" view="grid"/>
+				<field name="SOURCE" alias="Source" view="grid"/>
+				<field name="PERIMETER_M" alias="Perimeter m" view="grid"/>
+				<field name="AREA_M2" alias="Area m²" view="grid"/>
+				<field name="AREA_HA" alias="Area ha" view="all"/>
+				<field name="SOURCECODE" alias="Source Code" view=""/>
+				<field name="QARCODE" alias="QAR Code" view=""/>
+				<field name="CREATEDBY" alias="Created By" view=""/>
+				<field name="CREATEDDATE" alias="Created Date" dateformat="DD MMM YYYY" view=""/>
+				<field name="MODIFIEDBY" alias="Modified By" view="grid"/>
+				<field name="MODIFIEDDATE" alias="Modified Date" dateformat="DD MMM YYYY" view="grid"/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>5000000</minscale>
+			<zoomscale useextent="true">25000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Region Clean Air Zones</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/1</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/1"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/1"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/PlanningZones/MapServer/1"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="" label="Search by Zone Name" expressiontext="ZONE LIKE '[value]%'">
+					<parameter id="[value]" label="Zone Name" example="'Christchurch Clean Air Zone 2' or for wildcard search '%2'" tooltip="Enter name here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>LABEL</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+				<field name="ZONE" alias="Zone" view="all"/>
+				<field name="LABEL" alias="Label" view="all"/>
+				<field name="PERIMETER_M" alias="Perimeter m" view="grid"/>
+				<field name="AREA_M2" alias="Area m²" view="grid"/>
+				<field name="AREA_HA" alias="Area ha" view="all"/>
+				<field name="SOURCECODE" alias="Source Code" view=""/>
+				<field name="QARCODE" alias="QAR Code" view=""/>
+				<field name="CREATEDBY" alias="Created By" view=""/>
+				<field name="CREATEDDATE" alias="Created Date" dateformat="DD MMM YYYY" view=""/>
+				<field name="MODIFIEDBY" alias="Modified By" view="grid"/>
+				<field name="MODIFIEDDATE" alias="Modified Date" dateformat="DD MMM YYYY" view="grid"/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>5000000</minscale>
+			<zoomscale useextent="true">25000</zoomscale>
+		</layer>
+
+
+		<!-- Water Quantity, Metering and Monitoring Runs layers -->
+
+		<layer>
+			<name>River Gaugings</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/4</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/4"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/4"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/4"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="GAU" label="Search by Site No" expressiontext="SITENUMBER = '[value]'">
+					<parameter id="[value]" label="Site Number" example="2" tooltip="Enter site number here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by Site Name" expressiontext="SITENAME Like '[value]%'">
+					<parameter id="[value]" label="Site Name" example="Kaituna Valley or for wildcard search '% Valley'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by River Name" expressiontext="RIVER Like '[value]%'">
+					<parameter id="[value]" label="River Name" example="CLARENCE RIVER or for wildcard search '% CLARENCE'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>Site</titlefield>
+			<fields all="false">
+				<field name="SITENUMBER" alias="Site Number" view="all"/>
+				<field name="RIVER" alias="River" view="grid"/>
+				<field name="SITENAME" alias="Site Name" view="grid"/>
+				<field name="SITE" alias="Site" view="all"/>
+				<field name="TIM_CHCH" alias="TIM CHCH" view="all"/>
+				<field name="FLOW_OR_STAGE" alias="Flow or Stage" view="all"/>
+				<field name="RECORDER_SITE" alias="Recorder Site" view="all"/>
+				<field name="TELEMETERED" alias="Telemetered" view="all"/>
+				<field name="COMPLIANCE_MONITORING" alias="Compliance Monitoring" view="all"/>
+				<field name="FLOOD_CONTROL" alias="Flood Control" view="all"/>
+				<field name="NO_OF_GAUGINGS" alias="No of Gaugings" view="grid"/>
+				<field name="FIRST_GAUGING" alias="First Gauging" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LAST_GAUGING" alias="Last Gauging" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="MINIMUM_FLOW_SITE" alias="Minimum Flow Site" view="all"/>
+				<field name="MINIMUM" alias="Minimum" view="grid"/>
+				<field name="LOWEST_FLOW" alias="Lowest Flow" view="grid"/>
+				<field name="HIGHEST_FLOW" alias="Highest Flow" view="grid"/>
+				<field name="ALTITUDE" alias="Altitude" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Rainfall Monitoring Sites</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/5</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/5"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/5"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/5"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+			<expressions>
+				<expression predictiveID="RAI" label="Search by Site No" expressiontext="SITENUMBER = '[value]'">
+					<parameter id="[value]" label="Site Number" example="2" tooltip="Enter site number here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by Site Name" expressiontext="SITENAME Like '[value]%'">
+					<parameter id="[value]" label="Site Name" example="Kaituna Valley or for wildcard search '% Valley'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by River Name" expressiontext="RIVER Like '[value]%'">
+					<parameter id="[value]" label="River Name" example="CLARENCE RIVER or for wildcard search '% CLARENCE'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>Site</titlefield>
+			<fields all="false">
+				<field name="SITENUMBER" alias="Site Number" view="all"/>
+				<field name="RIVER" alias="River" view="grid"/>
+				<field name="SITENAME" alias="Site name" view="grid"/>
+				<field name="SITE" alias="Site" view="all"/>
+				<field name="TIM_CHCH" alias="TIM CHCH" view="all"/>
+				<field name="TELEMETERED" alias="Telemetered" view="all"/>
+				<field name="COMPLIANCE_MONITORING" alias="Compliance Monitoring" view="all"/>
+				<field name="FLOOD_CONTROL" alias="Flood Control" view="all"/>
+				<field name="LAST_SAMPLE" alias="Last sample" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LAST_HOUR" alias="Last hour" view="grid"/>
+				<field name="RAIN_TODAY" alias="Rain today" view="grid"/>
+				<field name="RAIN_1_DAY_AGO" alias="Rain 1 day ago" view="grid"/>
+				<field name="RAIN_2_DAYS_AGO" alias="Rain 2 days ago" view="grid"/>
+				<field name="RAIN_3_DAYS_AGO" alias="Rain 3 days ago" view="grid"/>
+				<field name="RAIN_4_DAYS_AGO" alias="Rain 4 days ago" view="grid"/>
+				<field name="RAIN_5_DAYS_AGO" alias="Rain 5 days ago" view="grid"/>
+				<field name="RAIN_6_DAYS_AGO" alias="Rain 6 days ago" view="grid"/>
+				<field name="RAIN_7_DAYS_AGO" alias="Rain 7 days ago" view="grid"/>
+				<field name="TOTAL_RAINFALL" alias="Total Rainfall" view="grid"/>
+				<field name="ALTITUDE" alias="Altitude" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+				<layerLink linkField="SITENUMBER" linkButtonLabel="Show rainfall (only some sites)">http://ecan.govt.nz/services/online-services/monitoring/rainfall/Pages/rainfall-chart.aspx?SiteNo=[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>River Flow and Stage Monitoring Sites</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/6</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/6"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/6"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer/6"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="RVR" label="Search by Site No" expressiontext="SITENUMBER = '[value]'">
+					<parameter id="[value]" label="Site Number" example="66602" tooltip="Enter site number here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by Site Name" expressiontext="SITENAME LIKE '[value]%'">
+					<parameter id="[value]" label="Site Name" example="Kaituna Valley or for wildcard search '% Valley'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search by River Name" expressiontext="RIVER LIKE '[value]%'">
+					<parameter id="[value]" label="River Name" example="CLARENCE RIVER or for wildcard search '% CLARENCE'" tooltip="Enter site name here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>Site</titlefield>
+			<fields all="false">
+				<field name="SITENUMBER" alias="Site Number" view="all"/>
+				<field name="RIVER" alias="River" view="grid"/>
+				<field name="SITENAME" alias="Site Name" view="grid"/>
+				<field name="SITE" alias="Site" view="all"/>
+				<field name="TIM_CHCH" alias="TIM CHCH" view="all"/>
+				<field name="RECORDER_SITE" alias="Recorder Site" view="all"/>
+				<field name="TELEMETERED" alias="Telemetered" view="all"/>
+				<field name="COMPLIANCE_MONITORING" alias="Compliance Monitoring" view="all"/>
+				<field name="FLOOD_CONTROL" alias="Flood Control" view="all"/>
+				<field name="MINIMUM_FLOW_SITE" alias="Minimum Flow Site" view="all"/>
+				<field name="MINIMUM_FLOW" alias="Minimum Flow" view="all"/>
+				<field name="NO_OF_GAUGINGS" alias="No of Gaugings" view="grid"/>
+				<field name="FIRST_GAUGING" alias="First Gauging" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LAST_GAUGING" alias="Last Gauging" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="LOWEST_FLOW" alias="Lowest Flow" view="grid"/>
+				<field name="HIGHEST_FLOW" alias="Highest Flow" view="grid"/>
+				<field name="ALTITUDE" alias="Altitude" view="grid"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+				<layerLink linkField="SITENUMBER" linkButtonLabel="Show riverflow (only some sites)">http://ecan.govt.nz/services/online-services/monitoring/river-flows/Pages/river-flow-chart.aspx?SiteNo=[value]</layerLink>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">5000</zoomscale>
+		</layer>
+
+
+		<!-- Swing Mooring layers -->
+
+		<layer>
+			<name>Swing Moorings</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Harbours/MapServer/0</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Harbours/MapServer/0"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Harbours/MapServer/0"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Harbours/MapServer/0"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+				<expression predictiveID="MOR" label="Search by Mooring No" expressiontext="MOORING_NO = '[value]'">
+					<parameter id="[value]" label="Mooring No" example="AKA1" tooltip="Enter mooring no here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>MOORING_NO</titlefield>
+			<fields all="false">
+				<field name="MOORING_NO" alias="Mooring No" view="all"/>
+				<field name="AREA_CODE" alias="Area Code" view="grid"/>
+				<field name="BOAT_NAME" alias="Boat Name" view="all"/>
+				<field name="BOUY_COLOUR" alias="Bouy Colour" view="grid"/>
+				<field name="BOUY_DESCRIPTION" alias="Bouy Description" view="grid"/>
+				<field name="PERMIT_NO" alias="Permit No" view="all"/>
+				<field name="TRIM_NO" alias="TRIM No" view="all"/>
+				<field name="DATE_LAID" alias="Date Laid" dateformat="DD MMM YYYY" view="all"/>
+				<field name="BLOCK_WEIGHT" alias="Block Weight" view="all"/>
+				<field name="BOUYED" alias="Bouyed" view="grid"/>
+				<field name="NUMBERED" alias="Numbered" view="grid"/>
+				<field name="INSPECTION_DUE" alias="Inspection Due" dateformat="DD MMM YYYY" view="grid"/>
+				<field name="COMMENT" alias="Comment" view="grid"/>
+				<field name="SURVEY_NOTES" alias="Survey Notes" view="grid"/>
+				<field name="WGS84_LONGITUDE" alias="WGS84 Longitude" view="grid"/>
+				<field name="WGS84_LATITUDE" alias="WGS84 Latitude" view="grid"/>
+				<field name="WGS84_LONGITUDE_DMS" alias="WGS84 Longitide DMS" view="grid"/>
+				<field name="WGS84_LATITUDE_DMS" alias="WGS84 Latitude DMS" view="grid"/>
+				<field name="WGS84_LONGITUDE_DM" alias="WGS84 Longitude DM" view="all"/>
+				<field name="WGS84_LATITUDE_DM" alias="WGS84 Latitude DM" view="all"/>
+				<field name="NZMGX" alias="NZMGX" view="grid"/>
+				<field name="NZMGY" alias="NZMGY" view="grid"/>
+				<field name="NZMS260" alias="NZMS260" view="grid"/>
+				<field name="NZTMX" alias="NZTMX" view="grid"/>
+				<field name="NZTMY" alias="NZTMY" view="grid"/>
+				<field name="NZTOPO50" alias="NZ Topo 50" view="grid"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="false">2000</zoomscale>
+		</layer>
+
+
+		<!-- Aerial Photography layers -->
+
+		<layer>
+			<name>Aerial Imagery Age</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer/0</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer/0"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer/0"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer/0"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+
+			<expressions>
+			</expressions>
+
+			<titlefield>Tile_Name</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+				<field name="Tile_Name" alias="Tile Name" view="all"/>
+				<field name="Company_Name" alias="Company Name" view="grid"/>
+				<field name="Flown_By" alias="Flown By" view="grid"/>
+				<field name="Photo_No" alias="Photo No" view="all"/>
+				<field name="Date_Flown" alias="Date Flown" view="all"/>
+				<field name="Date_Supplied" alias="Date Supplied" view="all"/>
+				<field name="Ortho_GSD" alias="Ortho GSD" view="grid"/>
+				<field name="Ortho_Accuracy" alias="Ortho Accuracy" view="all"/>
+				<field name="TLA" alias="TLA" view="all"/>
+				<field name="Region" alias="Region" view="grid"/>
+				<field name="Projection" alias="Projection" view="grid"/>
+				<field name="Tile_Status" alias="Tile Status" view="all"/>
+				<field name="Comments" alias="Comments" view="grid"/>
+				<field name="Resupply_Date" alias="Resupply Date" view="grid"/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="true">5000</zoomscale>
+		</layer>
+
+
+		<!-- Soils and land layers -->
+		
+		<layer>
+			<name>Effective Soil Moisture by Parcel (60%)</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/11</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/11"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/11"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/11"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+			
+			<expressions>
+				<expression predictiveID="" label="Search by Valuation No" expressiontext="VALUATIONNO = '[value]'">
+					<parameter id="[value]" label="Valuation No" example="2268047900" tooltip="Enter valuation number here" datatype="text" />
+				</expression>
+				<expression predictiveID="" label="Search by Legal Description" expressiontext="LEGALDESCRIPTION = '[value]'">
+					<parameter id="[value]" label="Legal Description" example="Lot 1 DP 39988" tooltip="Enter value here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>LEGALDESCRIPTION</titlefield>
+			<fields all="false">
+				<field name="HECTARES" alias="Hectares" view="all"/>
+				<field name="RAINFALL" alias="Rainfall Band" view="all"/>
+				<field name="VALUATIONNO" alias="Valuation No" view="all"/>
+				<field name="LEGALDESCRIPTION" alias="Legal Description" view="all"/>
+				<field name="PAW_1m" alias="PAW 1m" view="all"/>
+				<field name="PAW_30cm" alias="PAW 30cm" view="all"/>
+				<field name="PAW_60cm" alias="PAW 60cm" view="all"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="true">5000</zoomscale>
+		</layer>
+
+		<layer>
+			<name>Effective Soil Moisture by Parcel (80%)</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/12</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/12"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/12"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/LandResourcesandConservation/MapServer/12"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+			
+			<expressions>
+				<expression predictiveID="" label="Search by Valuation No" expressiontext="VALUATIONNO = '[value]'">
+					<parameter id="[value]" label="Valuation No" example="2268047900" tooltip="Enter valuation number here" datatype="text" />
+				</expression>
+				<expression predictiveID="" label="Search by Legal Description" expressiontext="LEGALDESCRIPTION = '[value]'">
+					<parameter id="[value]" label="Legal Description" example="Lot 1 DP 39988" tooltip="Enter value here" datatype="text"/>
+				</expression>
+			</expressions>
+
+			<titlefield>LEGALDESCRIPTION</titlefield>
+			<fields all="false">
+				<field name="HECTARES" alias="Hectares" view="all"/>
+				<field name="RAINFALL" alias="Rainfall Band" view="all"/>
+				<field name="VALUATIONNO" alias="Valuation No" view="all"/>
+				<field name="LEGALDESCRIPTION" alias="Legal Description" view="all"/>
+				<field name="PAW_1m" alias="PAW 1m" view="all"/>
+				<field name="PAW_30cm" alias="PAW 30cm" view="all"/>
+				<field name="PAW_60cm" alias="PAW 60cm" view="all"/>
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+			</fields>
+
+			<links>
+			</links>
+
+			<minscale>50000</minscale>
+			<zoomscale useextent="true">5000</zoomscale>
+		</layer>
+
+
+		<!-- Hydrological Layers -->
+
+		<layer>
+			<name>ECAN Catchments</name>
+			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Hydrology/MapServer/1</url>
+			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Hydrology/MapServer/1"/>
+			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Hydrology/MapServer/1"/>
+			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Hydrology/MapServer/1"/>
+			<useamf>true</useamf>
+			<useproxy>false</useproxy>
+			
+			<expressions>
+				<expression predictiveID="CAT" label="Search By Catchment No" expressiontext="CATCHMENT_NUMBER Like '[value]'">
+					<parameter id="[value]" label="Catchment No" example="6211700 or 6211% for a wildcard search" tooltip="Enter catchment number here" datatype="text"/>
+				</expression>
+				<expression predictiveID="" label="Search By Catchment Name" expressiontext="CATCHMENT_NAME Like '[value]'">
+					<parameter id="[value]" label="Catchment Name" example="Mead Stream or Mead% for a wildcard search" tooltip="Enter catchment name here" datatype="text"/>
+				</expression>
+			</expressions>
+			
+			<titlefield>CATCHMENT_NUMBER</titlefield>
+			<fields all="false">
+				<field name="OBJECTID" alias="OBJECTID" view=""/>
+				<field name="CATCHMENT_NUMBER" alias="Catchment No" view="all"/>
+				<field name="CATCHMENT_NAME" alias="Catchment Name" view="all"/>
+				<field name="SOURCECODE" alias="SOURCECODE" view=""/>
+				<field name="QARCODE" alias="QARCODE" view=""/>
+				<field name="CREATEDBY" alias="CREATEDBY" view=""/>
+				<field name="CREATEDDATE" alias="CREATEDDATE" dateformat="DD MMM YYYY" view=""/>
+				<field name="MODIFIEDBY" alias="MODIFIEDBY" view=""/>
+				<field name="MODIFIEDDATE" alias="MODIFIEDDATE" dateformat="DD MMM YYYY" view=""/>
+				<field name="PERIMETER_M" alias="Perimeter (m)" view="grid"/>
+				<field name="AREA_M2" alias="Area (m2)" view="grid"/>
+				<field name="AREA_HA" alias="Area (ha)" view="all"/>
+			</fields>
+			<links>
+				<link linkField="" linkButtonLabel="">[value]</link>
+			</links>
+			<minscale>1000000</minscale>
+			<zoomscale useextent="true">50000</zoomscale>
+		</layer>
+		
+	</layers>
+
+
+	<!-- Excluded Layers - Lyers loaded in the map that should not be queryable.  Layers in the excluded list overide all other settings -->
+	<excludedlayers>
+		<layer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" type="exclude">all</layer>
+		<layer url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" type="exclude">all</layer>
+		<layer url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" type="exclude">all</layer>
+		<layer url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" type="exclude">all</layer>
+
+		<layer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/SimpleBasemap/MapServer" type="exclude">all</layer>
+		<layer url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/SimpleBasemap/MapServer" type="exclude">all</layer>
+		<layer url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/SimpleBasemap/MapServer" type="exclude">all</layer>
+		<layer url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/SimpleBasemap/MapServer" type="exclude">all</layer>
+
+		<layer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" type="include">all</layer>
+		<layer url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" type="include">all</layer>
+		<layer url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" type="include">all</layer>
+		<layer url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" type="include">all</layer>
+
+		<layer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" type="include">1,5,6</layer>
+		<layer url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" type="include">1,5,6</layer>
+		<layer url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" type="include">1,5,6</layer>
+		<layer url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" type="include">1,5,6</layer>
+
+		<layer url="http://gis.ecan.govt.nz/arcgis/rest/services/Public/Region_Base_Labels/MapServer" type="include">3</layer>
+		<layer url="http://gis1.ecan.govt.nz/arcgis/rest/services/Public/Region_Base_Labels/MapServer" type="include">3</layer>
+		<layer url="http://gis2.ecan.govt.nz/arcgis/rest/services/Public/Region_Base_Labels/MapServer" type="include">3</layer>
+		<layer url="http://gis3.ecan.govt.nz/arcgis/rest/services/Public/Region_Base_Labels/MapServer" type="include">3</layer>
+		
+		
+		<layer url="http://arcgis.ecan.govt.nz/arcgis/rest/services/Dynamic/Region_Base/MapServer" type="exclude">all</layer>layer>
+		<layer url="http://arcgis.ecan.govt.nz/arcgis/rest/services/Dynamic/Region_Base_Labels/MapServer" type="exclude">all</layer>layer>
+		<layer url="http://arcgis.ecan.govt.nz/arcgis/rest/services/Dynamic/Region_Base_Labels_Printing/MapServer" type="exclude">all</layer>layer>
+	</excludedlayers>
+
+	<!-- Results Symbol Settings -->
+	<symbols>
+		<simplemarkersymbol color="0xFF0000" alpha="0.6" style="square" size="15" angle="0" xoffset="0" yoffset="0">
+			<outline color="0xFF0000" alpha="1.0" width="2" />
+		</simplemarkersymbol>	
+		<simplelinesymbol color="0xFF0000" alpha="0.8" width="2" />
+		<simplefillsymbol color="0xFF0000" alpha="0.5">
+			<outline color="0xFF0000" alpha="0.8" width="2" />
+		</simplefillsymbol>
+	</symbols>
+
+	<!-- Label settings -->
+	<labels>
+		<!-- General labels -->
+		<layerlabel>Search layer</layerlabel>
+		<selectionmodetooltip>Click to change the selection method</selectionmodetooltip>
+		<zoomToselectiontooltip>Automatically zoom to results on selection change</zoomToselectiontooltip>
+		<showselectiontooltip>Automatically display results on selection change</showselectiontooltip>
+		
+		<!-- Widget titlebar labels -->		
+		<graphicalsearchlabel>Search by location</graphicalsearchlabel>
+		<drawingsearchlabel>Search using drawn graphics</drawingsearchlabel>
+		<textsearchlabel>Search by text expression</textsearchlabel>
+		<querysearchlabel>Search by query expression</querysearchlabel>
+		<resultslabel>Results</resultslabel>
+		<clearsearchlabel>Clear selected features</clearsearchlabel>
+		<datagridlabel>Show data grid of results</datagridlabel>
+		<selectionlabel>Features selected:</selectionlabel>
+		
+		<!-- Working labels -->
+		<loadinglabel>Loading...</loadinglabel>
+		<noresultlabel>No Results Found</noresultlabel>
+
+		<!-- Selection scale message -->
+		<overMaxScaleMsg>This layer is currently outside the searchable scale.  You must be zoomed in to a scale of 1:[value] or less to select features.</overMaxScaleMsg>
+
+		<!-- Search by Expression labels -->
+		<expressionlabel>Select Expression:</expressionlabel>
+
+		<!-- Graphical select tool tooltip settings -->
+		<pointlabel>Select by point</pointlabel>
+		<linelabel>Select by line</linelabel>
+		<freehandlinelabel>Select by freehand line</freehandlinelabel>
+		<rectanglelabel>Select by rectangle</rectanglelabel>
+		<polygonlabel>Select by polygon</polygonlabel>
+		<freehandpolygonlabel>Select by freehand polygon
+		</freehandpolygonlabel>
+
+		<!-- Help label settings -->
+		<helplabel>Help</helplabel>
+	</labels>
+
+	<!-- Help Location Settings -->
+	<helplocationurl>http://canterburymaps.govt.nz/Portal/AdvancedViewer/Help?topic=SearchTools</helplocationurl>
+</configuration>

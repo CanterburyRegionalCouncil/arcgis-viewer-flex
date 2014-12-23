@@ -1,0 +1,1496 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY			: 	This widget is an enhancement to the standard print widget.  It allows users to display the printable area prior use.
+
+SOURCE			: 	Developed for Otago Regional Council by the e-Spatial 
+
+DEVELOPED BY 	: 	.
+
+CREATED			: 	21/05/2013
+DEPENDENCIES	: 
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan) 	| 25/05/2013 	| Flex Viewer Port 3.3 API and 3.3 viewer
+Ryan Elley (ECan)	| 07/08/2013	| Fix to dpi enable process
+Ryan Elley (ECan)	| 05/09/2013	| Change to work with custom Printing Proxy page that allows dynamic layer substitution.  Also includes 
+									  reference to tiled map services as a custom parameter.  Normally tiled services are filtered out of
+									  the export map defintion by the print task when the requested map scale lies outside the map LOD's.  
+Ryan Elley (ECan)	| 25/09/2013	| Change to make the default "use scale" checkbox status a configurable option.
+Ryan Elley (ECan) 	| 21/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer
+									  Bug fix to LegendLayerTreeRenderer to fix scale dependecny changesto colour on layer
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+<viewer:BaseWidget xmlns:fx=			"http://ns.adobe.com/mxml/2009"
+                   xmlns:s=				"library://ns.adobe.com/flex/spark"
+                   xmlns:mx=			"library://ns.adobe.com/flex/mx"
+				   xmlns:esri=			"http://www.esri.com/2008/ags"
+				   xmlns:viewer=		"com.esri.viewer.*"
+                   initialize=			"basewidget_initializeHandler()"
+                   widgetConfigLoaded=	"basewidget_widgetConfigLoaded()">
+	
+	<viewer:states>
+		<s:State name="printOptions"/>
+		<s:State name="legendOptions"/>
+	</viewer:states>
+	
+    <fx:Script>
+        <![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.events.ExtentEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.events.PrintEvent;
+			import com.esri.ags.events.ZoomEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.supportClasses.LOD;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.tasks.supportClasses.DataFile;
+			import com.esri.ags.tasks.supportClasses.JobInfo;
+			import com.esri.ags.tasks.supportClasses.LegendLayer;
+			import com.esri.ags.tasks.supportClasses.LegendOptions;
+			import com.esri.ags.tasks.supportClasses.ParameterValue;
+			import com.esri.ags.tasks.supportClasses.PrintServiceInfo;
+			import com.esri.viewer.BaseWidget;
+			import com.esri.viewer.components.HTMLPopup;
+			import com.esri.viewer.components.TitlebarButton;
+			import com.esri.viewer.utils.ErrorMessageUtil;
+			
+			import flash.net.navigateToURL;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.IList;
+			import mx.collections.XMLListCollection;
+			import mx.controls.Alert;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.events.IndexChangeEvent;
+			import spark.events.TextOperationEvent;
+			
+			
+			
+			/* WIDGET CONSTANTS
+			------------------------------------------------------------------------*/
+			
+			private const WIDGET_ICON_URL:String = "widgets/PrintEnhanced/assets/images/";
+			private const ICON_URL:String = "assets/images/";
+			private const MAP_ONLY:String = "MAP_ONLY";
+			private const CM_PER_INCH:Number = 2.54;
+			private const DOTS_PER_INCH:Number = 96;
+
+
+			
+			/* WIDGET VARIABLES
+			------------------------------------------------------------------------*/
+
+			[Bindable]
+			private var title:String; 
+			[Bindable]
+			private var author:String;
+			[Bindable]
+			private var copyright:String = "";
+			
+			[Bindable]
+			private var shouldShowTitle:Boolean;
+			[Bindable]
+			private var shouldShowAuthor:Boolean;
+			[Bindable]
+			private var shouldShowCopyright:Boolean;
+			[Bindable]
+			private var shouldShowUseScale:Boolean;
+			[Bindable]
+			private var shouldAllowCustomScale:Boolean = false;
+			[Bindable]
+			private var shouldShowTemplateOptions:Boolean;
+			[Bindable]
+			private var shouldShowFormatOptions:Boolean;
+            [Bindable]
+            private var shouldShowDPIOptions:Boolean;
+			[Bindable]
+			private var shouldShowLegendOptions:Boolean;
+
+			[Bindable]
+			private var useScale:Boolean = false;
+			
+			private var graphicsLayer:GraphicsLayer;
+			
+            [Bindable]
+            private var selectedDPI:Number;
+			[Bindable]
+            private var exportDPIs:IList;
+            
+			// Legend Layer Variables
+			[Bindable]
+			private var layersInLegend:XMLListCollection = new XMLListCollection();
+			private var excludeLayersFromLegend:Array;
+
+			// Protected Layers Variables
+			private var protectedLayers:Array;
+			[Bindable]
+			private var protectedLayerDetails:Array;
+			[Bindable]
+			private var warningLayerDetails:Array;
+			
+			private var protectedPopupBtnLabel:String
+			private var txtareaWidth:Number;
+			private var txtareaHeight:Number;
+			
+			
+			// Help URL
+			private var _helpLocation:String;
+			
+			
+						
+			/* WIDGET INITIALISATION
+			------------------------------------------------------------------------*/
+			
+			private function basewidget_initializeHandler():void
+            {
+                if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+                {
+                    this.percentWidth = this.percentHeight = 100;
+                    wTemplate.percentWidth = wTemplate.percentHeight = 100;
+                }
+                else
+                {
+                    wTemplate.width = 370;
+                    wTemplate.height = 312;
+                    wTemplate.minHeight = 168;
+                    wTemplate.maxHeight = 500;
+                }				
+            }
+			
+            private function basewidget_widgetConfigLoaded():void
+            {
+                if (configXML)
+                {
+					var layers:XMLList;
+					var n:Number;
+					
+					// Update list of layers to be excluded from the legend
+					excludeLayersFromLegend = [];
+					layers = configXML.legendLayers.excludelayer as XMLList;
+					for (n = 0; n < layers.length(); n++)
+					{
+						excludeLayersFromLegend.push( { url: layers[n].toString() });
+					}
+					
+					// Update list of layers that are protected or secured
+					protectedLayers = [];
+					layers = configXML.protectedLayers.layer as XMLList;
+					for (n = 0; n < layers.length(); n++)
+					{
+						protectedLayers.push( { url: layers[n].@url[0].toString(), method: layers[n].@protectionmethod[0].toString(), message: layers[n].@message[0].toString() });
+					}
+					
+					protectedPopupBtnLabel = configXML.labels.protectedpopupbtnlabel[0] || getDefaultString("okLabel");
+					txtareaWidth = configXML.protectedLayers[0].@popupwidth || 300;
+					txtareaHeight = configXML.protectedLayers[0].@popupheight || 300;					
+					
+					// Set the Print Task 
+					var hasTaskURL:Boolean = (configXML.taskurl.length() > 0);					
+					if (hasTaskURL)
+						printTask.url = configXML.taskurl;
+
+					var hasProxyURL:Boolean = (configXML.proxyurl.length() > 0);				
+					if (hasProxyURL)
+						printTask.proxyURL = configXML.proxyurl;
+					
+					printTask.getServiceInfo(); 
+
+					// Update the Print UI
+					printButton.label = configXML.labels.submitlabel[0] || getDefaultString("printSubmitLabel");
+
+					// Add the Print Options button
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_print.png", configXML.labels.printOptionsLabel || getDefaultString("printOptionsTooltip"), showStatePrintOptions);
+
+					// Set the default useScale checkbox option setting
+					useScale = configXML.useMapScale == "true";
+				}				
+				
+				// Add graphics layer to display printable area
+				graphicsLayer = new GraphicsLayer();
+				graphicsLayer.name = "Printable Area"; 
+				map.addLayer(graphicsLayer);
+
+				// Add handlers for layers beeing added and removed
+				map.addEventListener(MapEvent.LAYER_ADD, map_LayersChanged);
+				map.addEventListener(MapEvent.LAYER_REMOVE, map_LayersChanged);
+				map.addEventListener(MapEvent.LAYER_REMOVE_ALL, map_LayersChanged);
+				map.addEventListener(MapEvent.LAYER_REORDER, map_LayersChanged);
+				
+				// initialise the controls
+				updatePrintableArea();
+				updateDPIEnableStatus();
+            }
+			
+			private function wTemplate_widgetOpenedHandler(event:Event):void
+			{
+				map.addEventListener(ExtentEvent.EXTENT_CHANGE, map_extentChangeHandler);
+				map.addEventListener(ZoomEvent.ZOOM_END, map_zoomEndHandler);
+
+				if (graphicsLayer)
+				{
+					graphicsLayer.visible = true;
+				}				
+				
+				updatePrintableArea();
+			}
+
+			private function wTemplate_widgetClosedHandler(event:Event):void
+			{
+				map.removeEventListener(ExtentEvent.EXTENT_CHANGE, map_extentChangeHandler);
+				map.removeEventListener(ZoomEvent.ZOOM_END, map_zoomEndHandler);
+
+				if (graphicsLayer)
+				{
+					graphicsLayer.visible = false;
+				}
+			}
+			
+			/**
+			 * Called when layers in the map are added or removed.
+			 */
+			private function map_LayersChanged(event:MapEvent):void
+			{
+				// Refresh the TOC
+				initLegend();
+			}
+			
+			
+			/* WIDGET STATE CHANGES
+			------------------------------------------------------------------------*/
+
+			public function showStatePrintOptions():void
+			{
+				this.currentState = "printOptions";
+				wTemplate.selectedTitlebarButtonIndex = 0;
+			}
+			
+			public function showStateLegendOptions():void
+			{
+				this.currentState = "legendOptions";
+				wTemplate.selectedTitlebarButtonIndex = 1;
+			}
+
+			
+			
+			/* MAP EVENT HANDLERS
+			------------------------------------------------------------------------*/
+
+			private function map_extentChangeHandler(event:ExtentEvent):void
+			{
+				updatePrintableArea();
+				setLayersInLegendVisible(layersInLegend, map.scale);
+			}
+			
+			private function map_zoomEndHandler(event:ZoomEvent):void
+			{
+				updatePrintScale();
+			}
+			
+
+			
+			/* LAYOUT FUNCTIONS
+			------------------------------------------------------------------------*/
+
+			private function layoutTemplatesDDL_changeHandler(event:IndexChangeEvent):void
+			{
+				updatePrintableArea();
+				/* Change by Ryan Elley, 7/08/2013 - moved to standalone function
+				if ((layoutTemplatesDDL.selectedItem == null) || (MAP_ONLY == layoutTemplatesDDL.selectedItem))
+				{
+					dpiDDL.enabled = false;
+					selectedDPI = DOTS_PER_INCH;
+				}
+				else
+				{
+					dpiDDL.enabled = true;
+					selectedDPI = dpiDDL.selectedItem.toString();
+				}
+				*/ 
+				// Call for dpi update 
+				updateDPIEnableStatus();
+				
+				legendCheckbox.enabled = !((layoutTemplatesDDL.selectedItem == null) || (MAP_ONLY == layoutTemplatesDDL.selectedItem))
+			}
+
+            private function dpiDDL_changeHandler(event:IndexChangeEvent):void
+            {
+                selectedDPI = dpiDDL.selectedItem.toString();
+            }
+            
+			private function scaleCheckbox_clickHandler(event:MouseEvent):void
+			{
+				updatePrintableArea();
+			}
+			
+			private function legendButton_showLegendClickHandler(event:MouseEvent):void
+			{
+				showStateLegendOptions(); 
+			}
+
+			/* Added by Ryan Elley, 7/08/2013 - Bug fix to make sure dpi initialises correctly */
+			private function updateDPIEnableStatus():void
+			{
+				if ((layoutTemplatesDDL.selectedItem == null) || (MAP_ONLY == layoutTemplatesDDL.selectedItem))
+				{
+					dpiDDL.enabled = false;
+					selectedDPI = DOTS_PER_INCH;
+				}
+				else
+				{
+					dpiDDL.enabled = true;
+					
+					if (dpiDDL.selectedItem)
+					{
+						selectedDPI = dpiDDL.selectedItem.toString();
+					}
+				}
+			}
+			
+			
+
+			/* PRINT FUNCTIONS
+			------------------------------------------------------------------------*/
+
+			private function printButton_exportWebMapClickHandler(event:MouseEvent):void
+			{
+				// Update the protected layers list
+				if (!hasVisibleProtectedLayer())
+				{
+					swfMessage.visible = true;
+					layoutOptions.title = txtTitle.text;
+					layoutOptions.author = txtAuthor.text;
+					layoutOptions.copyright = txtCopyright.text;
+					layoutOptions.legendOptions = getLegendOptions();
+					
+					var oldscale:Number;
+					var oldLODs:Array;
+					if (scaleCheckbox.selected)
+					{
+						oldscale = map.scale;
+						oldLODs = map.lods;
+						
+						map.lods = null; //prevent LOD snapping
+						map.scale = Number(scaleInput.text);
+
+						// Check if map scale matches on of the lods 
+						var usingLOD:Boolean = false;
+						for each(var lod:LOD in oldLODs)
+						{
+							if (lod.scale == Number(scaleInput.text))
+							{
+								usingLOD = true;
+								break;
+							}
+						}
+					
+						if (!usingLOD && printTask.proxyURL)
+						{
+							// TO DO - add a flag for whther a printProxy is being used
+							
+							// Get a list of the visible tiled map services to attach to print parameters customParameters object for it to use to inject into the map
+							var customSettings:Object = {};
+							var tiledLayers:Array = [];
+							var visibleLayers:Array = [];
+							
+							for each (var layer:Layer in map.layers)
+							{
+								if (layer is ArcGISTiledMapServiceLayer && layer.visible)
+								{
+									var tLayer:Object = {};
+									tLayer.id = layer.id; 
+									tLayer.url = (layer as ArcGISTiledMapServiceLayer).url;
+									tLayer.title = layer.name;
+									
+									tiledLayers.push(tLayer);
+								}
+								
+								if (layer.visible && layer.name.indexOf("hiddenLayer_") < 0)
+								{
+									visibleLayers.push(layer.id);
+								}
+							}
+							
+							if (tiledLayers.length > 0)
+							{
+								customSettings.tiledLayers = tiledLayers;
+								customSettings.visibleLayers = visibleLayers;
+								printParameters.customParameters = customSettings;
+							}
+						}
+					}
+					
+					if (printTask.getServiceInfoLastResult.isServiceAsynchronous)
+					{
+						printTask.submitJob(printParameters);
+					}
+					else
+					{
+						printTask.execute(printParameters);
+					}
+					
+					if (scaleCheckbox.selected)
+					{
+						map.scale = oldscale;
+						map.lods = oldLODs;
+					}
+				}
+				else
+				{
+					// Create content string for the protected layers list 
+					var content:String = '<p align="center">';
+					content += '<font size="18"><b>This map contains sensitive layers</b></font>';
+					content += '</p><br>'; 
+					
+					content += '<textformat blockindent="20">';
+					content += generateProtectedLayerMessage();
+					content += '</textformat>';					
+					
+					// Show the popup message
+					HTMLPopup.show(content, protectedPopupBtnLabel, txtareaWidth, txtareaHeight);
+				}
+			}
+				
+			private function updatePrintScale():void
+			{
+				scaleInput.text = Math.round(map.scale).toString();
+			}
+			
+			private function updatePrintableArea():void
+			{
+				var templateMapWidth:Number = 0;
+				var templateMapHeight:Number = 0;
+
+				if (graphicsLayer)
+				{
+					if ((layoutTemplatesDDL.selectedItem == null) || (MAP_ONLY == layoutTemplatesDDL.selectedItem))
+					{
+						templateMapWidth = map.extent.width;
+						templateMapHeight = map.extent.height;							
+					}
+					else
+					{
+						for (var i:int = 0; i < configXML.printTemplates.printTemplate.length(); i++)
+						{
+							if (configXML.printTemplates.printTemplate[i].templateName == layoutTemplatesDDL.selectedItem) {
+								templateMapWidth = configXML.printTemplates.printTemplate[i].templateMapWidth;
+								templateMapHeight = configXML.printTemplates.printTemplate[i].templateMapHeight;
+								
+								break;
+							}
+						}
+					}
+					
+					if ((templateMapWidth != 0) && (templateMapHeight != 0)) 
+					{
+						var mapExtent:Extent = map.extent; 
+						var printableArea:Extent = null;
+
+						// calculate printable area
+						var mapRatio:Number = mapExtent.width / mapExtent.height;
+						var printRatio:Number = templateMapWidth / templateMapHeight;
+						
+						if (scaleCheckbox.selected)
+						{
+							// Calculate custom scale ratio
+							var scaleRatio:Number = parseInt(scaleInput.text)/map.scale;					
+							
+							if (scaleRatio) {
+								// calculate printable area for fixed scale
+								var printWidth:Number = (templateMapWidth / CM_PER_INCH) * DOTS_PER_INCH * scaleRatio;
+								var printHeight:Number = (templateMapHeight / CM_PER_INCH) * DOTS_PER_INCH * scaleRatio;
+								var newWidth:Number = mapExtent.width * (printWidth / map.getBounds(this).width);
+								var newHeight:Number = mapExtent.height * (printHeight / map.getBounds(this).height);
+															
+								printableArea = new Extent(mapExtent.center.x - (newWidth / 2.0), mapExtent.center.y - (newHeight / 2.0), mapExtent.center.x + (newWidth / 2.0), mapExtent.center.y + (newHeight / 2.0), map.spatialReference);
+							}
+						}
+						else 
+						{
+							// calculate printable area for preserve map bounds
+							if (printRatio >= mapRatio) 
+							{
+								var width:Number = mapExtent.height * printRatio;
+								printableArea = new Extent(mapExtent.center.x - (width / 2.0), mapExtent.ymin, mapExtent.center.x + (width / 2.0), mapExtent.ymax, map.spatialReference);
+							} 
+							else 
+							{
+								var height:Number = mapExtent.width / printRatio;
+								printableArea = new Extent(mapExtent.xmin, mapExtent.center.y - (height / 2.0), mapExtent.xmax, mapExtent.center.y + (height / 2.0), map.spatialReference);
+							}
+						}
+												
+						// display printable area
+						if (printableArea != null) 
+						{
+							graphicsLayer.clear();
+
+							var graphic:Graphic = new Graphic(printableArea);
+							graphic.checkForMouseListeners = false;
+							graphicsLayer.add(graphic);
+						}
+					}
+				}
+			}
+
+			
+			
+			/* PRINT TASK HANDLERS
+			------------------------------------------------------------------------*/
+			
+			private function printTask_executeCompleteHandler(event:PrintEvent):void
+			{
+				swfMessage.visible = false;
+				var paramValue:ParameterValue = event.executeResult.results[0];
+				var dataFile:DataFile = paramValue.value as DataFile;
+				navigateToURL(new URLRequest(dataFile.url));
+			}
+			
+			protected function printTask_faultHandler(event:FaultEvent):void
+			{
+				var errorMessage:String = printTask.getServiceInfoLastResult ?
+					createPrintExecutionErrorMessage(event.fault) : createPrintServiceInfoErrorMessage(event.fault);
+				showError(errorMessage);
+				swfMessage.visible = false;
+			}
+			
+			private function createPrintExecutionErrorMessage(fault:Fault):String
+			{
+				return getDefaultString("printTaskExecutionError", ErrorMessageUtil.makeHTMLSafe(fault.toString()));
+			}
+			
+			private function createPrintServiceInfoErrorMessage(fault:Fault):String
+			{
+				return getDefaultString("gpServiceConnectionError",
+					printTask.url,
+					ErrorMessageUtil.getKnownErrorCauseMessage(fault),
+					ErrorMessageUtil.makeHTMLSafe(fault.toString()));
+			}
+			
+			private function printTask_getResultDataCompleteHandler(event:PrintEvent):void
+			{
+				swfMessage.visible = false;
+				var dataFile:DataFile = event.parameterValue.value as DataFile;
+				navigateToURL(new URLRequest(dataFile.url));
+			}
+			
+			protected function printTask_getServiceInfoCompleteHandler(event:PrintEvent):void
+			{
+				initTitle();
+				initCopyright();
+				initAuthor();
+				initUseScale();
+				initLayoutTemplates(event.serviceInfo);
+				initFormats(event.serviceInfo);
+				initDPI();
+				initLegend(true);               
+				
+				printButton.enabled = true;
+			}
+			
+			private function printTask_jobCompleteHandler(event:PrintEvent):void
+			{
+				var jobInfo:JobInfo = event.jobInfo;
+				if (jobInfo.jobStatus == JobInfo.STATUS_SUCCEEDED)
+				{
+					printTask.getResultData(jobInfo.jobId);
+				}
+				else
+				{
+					showError(jobInfo.jobStatus);
+				}
+			}
+
+			
+			
+			/* CONTENT INITIALISATION FUNCTIONS
+			------------------------------------------------------------------------*/
+			
+			private function initTitle():void
+			{
+				shouldShowTitle = true;
+				titleFI.label = configXML.labels.titlelabel[0] || getDefaultString("printTitleLabel");
+				
+				if (configXML.title[0])
+				{
+					title = configXML.title[0] || getDefaultString("printTitle");
+					if (configXML.title[0].@visible[0] == "false")
+					{
+						shouldShowTitle = false;
+					}
+				}
+			}
+			
+			private function initCopyright():void
+			{
+				shouldShowCopyright = true;
+				copyrightFI.label = configXML.labels.copyrightlabel[0] || getDefaultString("printCopyrightLabel");
+				
+				if (configXML.copyright[0])
+				{
+					copyright = configXML.copyright.@defaultvalue[0] || configXML.copyright[0] || getDefaultString("printCopyright");
+					if (configXML.copyright[0].@visible[0] == "false")
+					{
+						shouldShowCopyright = false;
+					}
+				}
+			}
+			
+			private function initAuthor():void
+			{
+				shouldShowAuthor = true;
+				authorFI.label = configXML.labels.authorlabel[0] || getDefaultString("printAuthorLabel");
+				
+				if (configXML.author[0])
+				{
+					author = configXML.author[0] || getDefaultString("printAuthor");
+					if (configXML.author[0].@visible[0] == "false")
+					{
+						shouldShowAuthor = false;
+					}
+				}
+			}
+			
+			private function initUseScale():void
+			{
+				shouldShowUseScale = true;
+				scaleFI.label = configXML.labels.scalelabel[0] || getDefaultString("printScaleLabel");
+				updatePrintScale();
+				
+				if (configXML.usescale[0])
+				{
+					scaleCheckbox.selected = (configXML.usescale[0] == 'true');
+					
+					var scaleDefaultValue:Number = parseFloat(configXML.usescale[0].@defaultvalue);
+					if (!isNaN(scaleDefaultValue))
+					{
+						scaleInput.text = scaleDefaultValue.toString();
+					}
+					
+					if (configXML.usescale[0].@visible[0] == 'false')
+					{
+						shouldShowUseScale = false;
+					}
+				}
+				
+				// Set the custom scale change ability
+				shouldAllowCustomScale = false;
+				if (configXML.allowCustomScale[0])
+				{
+					shouldAllowCustomScale = configXML.allowCustomScale[0] == 'true';
+				}
+			}
+			
+			private function initLayoutTemplates(serviceInfo:PrintServiceInfo):void
+			{
+				var layoutTemplatesVisibility:Boolean = true;
+				layoutTemplatesFI.label = configXML.labels.layouttemplateslabel[0] || getDefaultString("printLayoutTemplatesLabel");
+				var layoutTemplates:IList = serviceInfo.layoutTemplates;
+				
+				if (configXML.layouttemplates[0])
+				{
+					var layoutTemplateWhitelist:Array = [];
+					for each (var layoutTemplateXML:XML in configXML.layouttemplates.layouttemplate)
+					{
+						layoutTemplateWhitelist.push(layoutTemplateXML.toString());
+					}
+					
+					if (layoutTemplateWhitelist.length > 0)
+					{
+						var totalLayoutTemplates:int = layoutTemplates.length;
+						var layoutTemplate:String;
+						
+						//removing backwards to avoid problems altering index & items
+						for (var i:int = totalLayoutTemplates - 1; i >= 0; i--)
+						{
+							layoutTemplate = layoutTemplates.getItemAt(i) as String;
+							if (layoutTemplateWhitelist.indexOf(layoutTemplate) == -1)
+							{
+								layoutTemplates.removeItemAt(i);
+							}
+						}
+					}
+					
+					var configDefaultLayoutTemplate:String = configXML.layouttemplates.@defaultvalue[0];
+					if (configDefaultLayoutTemplate && isContained(configDefaultLayoutTemplate, layoutTemplates))
+					{
+						printParameters.layoutTemplate = configDefaultLayoutTemplate;
+					}
+					
+					layoutTemplatesVisibility = configXML.layouttemplates[0].@visible[0] != "false";
+				}
+				shouldShowTemplateOptions = layoutTemplatesVisibility && (layoutTemplates && layoutTemplates.length > 1);
+				
+				var shouldUseServiceInfoDefault:Boolean = (!printParameters.layoutTemplate
+					&& serviceInfo.defaultLayoutTemplate
+					&& isContained(serviceInfo.defaultLayoutTemplate, layoutTemplates));
+				if (shouldUseServiceInfoDefault)
+				{
+					layoutTemplatesDDL.selectedItem = serviceInfo.defaultLayoutTemplate;
+				}
+				else if (printParameters.layoutTemplate)
+				{
+					layoutTemplatesDDL.selectedItem = printParameters.layoutTemplate;
+				}
+				else
+				{
+					layoutTemplatesDDL.selectedIndex = 0;
+				}
+
+				// Set the default print area on screen
+				updatePrintableArea();
+			}
+			
+			private function initFormats(serviceInfo:PrintServiceInfo):void
+			{
+				var formatsVisibility:Boolean = true;
+				formatsFI.label = configXML.labels.formatslabel[0] || getDefaultString("printFormatsLabel");
+				var formats:IList = serviceInfo.formats;
+				
+				if (configXML.formats[0])
+				{
+					var formatTemplateWhitelist:Array = [];
+					for each (var formatXML:XML in configXML.formats.format)
+					{
+						formatTemplateWhitelist.push(formatXML.toString());
+					}
+					
+					if (formatTemplateWhitelist.length > 0)
+					{
+						var totalFormats:int = formats.length;
+						var format:String;
+						//removing backwards to avoid problems altering index & items
+						for (var i:int = totalFormats - 1; i >= 0; i--)
+						{
+							format = formats.getItemAt(i) as String;
+							if (formatTemplateWhitelist.indexOf(format) == -1)
+							{
+								formats.removeItemAt(i);
+							}
+						}
+					}
+					
+					var configDefaultFormat:String = configXML.formats.@defaultvalue[0];
+					if (configDefaultFormat && isContained(configDefaultFormat, formats))
+					{
+						printParameters.format = configDefaultFormat;
+					}
+					
+					formatsVisibility = configXML.formats[0].@visible[0] != "false";
+				}
+				shouldShowFormatOptions = formatsVisibility && (formats && formats.length > 1);
+				
+				var shouldUseServiceInfoDefault:Boolean = (!printParameters.format
+					&& serviceInfo.defaultFormat
+					&& isContained(serviceInfo.defaultFormat, formats));
+				if (shouldUseServiceInfoDefault)
+				{
+					formatsDDL.selectedItem = serviceInfo.defaultFormat;
+				}
+				else if (printParameters.format)
+				{
+					formatsDDL.selectedItem = printParameters.format;
+				}
+			}
+
+            private function initDPI():void
+            {
+                if (configXML)
+                {
+                    dpiFI.label = configXML.labels.dpiLabel[0] || getDefaultString("dpiLabel");
+                    
+                    if ((configXML.exportOptions) && (configXML.exportOptions.resolutions)) 
+                    {
+                        exportDPIs = new ArrayCollection(configXML.exportOptions.resolutions.split(","));
+                    }
+                    else
+                    {
+                        exportDPIs = new ArrayCollection([String(DOTS_PER_INCH)]);
+                    }
+                    
+                    shouldShowDPIOptions = true;
+                }
+                
+                selectedDPI = DOTS_PER_INCH;
+				
+				updateDPIEnableStatus();
+            }
+            
+			
+			
+			/* LEGEND FUNCTIONS
+			------------------------------------------------------------------------*/
+			
+			private function checkLegendExcluded(url:String):Boolean
+			{
+				var exclude:Boolean = false;
+
+				// Handle if nulls are passed through (such as for feature layers based on collections).
+				if (url)
+				{
+					var loweredurl:String = url.toLowerCase();
+					for each (var layer:Object in this.excludeLayersFromLegend)
+					{
+						if (loweredurl == String(layer.url).toLowerCase())
+						{
+							exclude = true;
+							break;
+						}
+					}
+				}
+				return exclude;
+			}
+			
+			private function initLegend(addHelp:Boolean=false):void
+			{
+				var nodes:XMLListCollection;
+				var layerInfo:LayerInfo;
+				
+				// load legend layers
+                for each (var layer:Layer in map.layers)
+                {                    
+                    if (layer is ArcGISDynamicMapServiceLayer)
+                    {
+                        var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+                        
+						// Check if exlcuded from legend
+						if (!checkLegendExcluded(dLayer.url))
+						{
+							// Process the legend nodes
+							nodes = new XMLListCollection();
+	                        for each (layerInfo in dLayer.layerInfos)
+	                        {
+	                            if (layerInfo.parentLayerId == -1) 
+	                            {
+	                                nodes.addItem(createLayerInLegend(dLayer.name, layerInfo.parentLayerId, layerInfo.name, layerInfo.layerId, layerInfo.minScale, 
+										layerInfo.maxScale, layerInfo.defaultVisibility, "ArcGISDynamicMapServiceLayer"));                          
+	                            } 
+	                            else 
+	                            {
+	                                addLayerInLegendToParent(dLayer.name, layerInfo, nodes, "ArcGISDynamicMapServiceLayer");
+	                            }
+	                        }
+	                        layersInLegend.addAll(nodes);
+						}
+                    }
+					
+					if (layer is ArcGISTiledMapServiceLayer)
+					{
+						var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+
+						// Check if exlcuded from legend
+						if (!checkLegendExcluded(tLayer.url))
+						{
+							// Process the legend nodes
+							nodes = new XMLListCollection();
+							
+							for each (layerInfo in tLayer.layerInfos)
+							{
+								if (layerInfo.parentLayerId == -1) 
+								{
+									nodes.addItem(createLayerInLegend(tLayer.name, layerInfo.parentLayerId, layerInfo.name, layerInfo.layerId, layerInfo.minScale, 
+										layerInfo.maxScale, layerInfo.defaultVisibility, "ArcGISTiledMapServiceLayer"));                          
+								} 
+								else 
+								{
+									addLayerInLegendToParent(tLayer.name, layerInfo, nodes, "ArcGISTiledMapServiceLayer");
+								}
+							}
+							layersInLegend.addAll(nodes);
+						}
+					}
+					
+					if (layer is FeatureLayer)
+					{
+						var fLayer:FeatureLayer = layer as FeatureLayer;
+						if (fLayer.name.indexOf("hiddenLayer_") == -1 && !checkLegendExcluded(fLayer.url))
+						{
+							// Check for layer Details
+							if (fLayer.layerDetails)
+							{
+								nodes = new XMLListCollection();
+								nodes.addItem(createLayerInLegend(fLayer.name, -1, fLayer.name, fLayer.layerDetails.id, 
+									fLayer.layerDetails.minScale, fLayer.layerDetails.maxScale, fLayer.layerDetails.defaultVisibility, "FeatureLayer"));                          
+								layersInLegend.addAll(nodes);
+							}
+							else
+							{
+								// Deals with custom feature layers
+								nodes = new XMLListCollection();
+								nodes.addItem(createLayerInLegend(fLayer.name, -1, fLayer.name, 0, 
+									0, 0, fLayer.visible, "FeatureLayer"));                          
+								layersInLegend.addAll(nodes);
+								
+							}
+						}
+					}
+                }
+                        
+                setLayersInLegendVisible(layersInLegend, map.scale);
+                legendTree.dataProvider = layersInLegend;
+
+				
+				var legendLabel:String = configXML.labels.legendOptionsLabel || getDefaultString("legendOptionsTooltip")
+                if (configXML && getHeaderButton(legendLabel) == null)
+                {
+                    legendFI.label = configXML.labels.legendLabel[0] || getDefaultString("legendLabel");
+                    legendButton.label = configXML.labels.legendBtnLabel[0] || getDefaultString("legendBtnLabel");
+                    legendResetButton.label = configXML.labels.legendResetBtnLabel[0] || getDefaultString("legendResetBtnLabel");
+                    legendSelectAllButton.label = configXML.labels.legendSelectAllBtnLabel[0] || getDefaultString("legendSelectAllBtnLabel");
+                    legendSelectNoneButton.label = configXML.labels.legendSelectNoneBtnLabel[0] || getDefaultString("legendSelectNoneBtnLabel");
+                    legendDoneButton.label = configXML.labels.legendDoneBtnLabel[0] || getDefaultString("legendDoneBtnLabel");
+                    
+                    wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_legend.png", legendLabel, showStateLegendOptions);
+
+                    shouldShowLegendOptions = true;
+                }    
+				
+				// Initialise the help link - should be called only once
+				if (addHelp)
+				{
+					initHelp();
+				}
+			}
+
+			private function createLayerInLegend(mapLayer:String, parentId:Number, name:String, id:Number, minScale:Number, maxScale:Number, defaultVisibility:Boolean, layerType:String):XML
+			{
+				return <node mapLayer={mapLayer} parentId={parentId} layerName={name} layerId={id} minScale={minScale} maxScale={maxScale} defaultVisibility={defaultVisibility} selected={defaultVisibility} visible="false" layerType={layerType}></node>;
+			}
+			
+			private function addLayerInLegendToParent(mapLayer:String, layerInfo:LayerInfo, nodes:XMLListCollection, layerType:String):Boolean
+			{
+				if (nodes) 
+				{
+					for each (var node:XML in nodes)
+					{
+						if (node.@layerId == layerInfo.parentLayerId) 
+						{
+							node.appendChild(createLayerInLegend(mapLayer, layerInfo.parentLayerId, layerInfo.name, layerInfo.layerId, layerInfo.minScale, 
+								layerInfo.maxScale, layerInfo.defaultVisibility, layerType ));
+							return true;
+						}		
+						
+						if (addLayerInLegendToParent(mapLayer, layerInfo, new XMLListCollection(node.children()), layerType))
+						{
+							return true;
+						}
+					}
+				}
+				
+				return false;
+			}
+
+			/**
+			 * Returns the button from the widget's header control with the given label (if one exists)
+			 */
+			private function getHeaderButton(buttonLabel:String):TitlebarButton
+			{
+				var noChildren:int = wTemplate.headerToolGroup.numChildren;
+				for (var i:int = 0; i < noChildren; i++)
+				{
+					var chd:Object = wTemplate.headerToolGroup.getChildAt(i);
+					if (chd is TitlebarButton)
+					{
+						var btn:TitlebarButton = chd as TitlebarButton;
+						if (btn.toolTip == buttonLabel)
+						{
+							return btn;
+							//break;
+						}
+					}	
+				}
+				
+				// If you get to this point, return nothing
+				return null;
+			}
+			
+			/**
+			 * 
+			 */
+			private function setLayersInLegendDefaultSelected(nodes:XMLListCollection):void
+			{
+				if (nodes) 
+				{
+					for each (var node:XML in nodes)
+					{
+						node.@selected = node.@defaultVisibility;
+						setLayersInLegendDefaultSelected(new XMLListCollection(node.children()));
+					}
+				}
+			}
+
+			private function setLayersInLegendSelected(nodes:XMLListCollection, selected:Boolean):void
+			{
+				if (nodes) 
+				{
+					for each (var node:XML in nodes)
+					{
+						node.@selected = selected;
+						setLayersInLegendSelected(new XMLListCollection(node.children()), selected);
+					}
+				}
+			}
+
+			private function setLayersInLegendVisible(nodes:XMLListCollection, scale:Number):void
+			{
+				if (nodes)
+				{
+					for each (var node:XML in nodes)
+					{
+						node.@visible = (node.@maxScale == 0 || scale >= node.@maxScale) && (node.@minScale == 0 || scale <= node.@minScale);					
+						
+						setLayersInLegendVisible(new XMLListCollection(node.children()), scale);
+					}
+				}
+			}
+
+			protected function legendResetButton_clickHandler(event:MouseEvent):void
+			{
+				setLayersInLegendDefaultSelected(layersInLegend);
+			}
+			
+			protected function legendSelectAllButton_clickHandler(event:MouseEvent):void
+			{
+				setLayersInLegendSelected(layersInLegend, true);
+			}
+			
+			protected function legendSelectNoneButton_clickHandler(event:MouseEvent):void
+			{
+				setLayersInLegendSelected(layersInLegend, false);
+			}
+			
+			protected function legendDoneButton_clickHandler(event:MouseEvent):void
+			{
+				showStatePrintOptions();				
+			}
+			
+			private function getLegendOptions():LegendOptions
+			{
+				var result:LegendOptions = new LegendOptions();
+				result.legendLayers = getLegendOptionsForLayers([], layersInLegend);
+				return result;
+			}
+			
+			private function getLegendOptionsForLayers(legendLayers:Array, nodes:XMLListCollection):Array
+			{
+                if (legendCheckbox.selected)
+                {
+    				if (nodes)
+    				{				
+    					for each (var node:XML in nodes)
+    					{
+							if ((node.@selected == "true") && ((node.children() == null) || (node.children().length() == 0))) 
+    						{
+                                var legendLayer:LegendLayer = null;
+    
+                                for each (var layer:LegendLayer in legendLayers)
+                                {
+                                    if (layer.layerId == node.@mapLayer) 
+                                    {
+                                        legendLayer = layer;
+                                        break;
+                                    }
+                                }
+                                    
+    							if (legendLayer != null)
+    							{
+    							    // ensure parent layer id is added
+                                    if ((node.@parentId != -1) && (legendLayer.subLayerIds.indexOf(node.@parentId) == -1))
+                                    {
+                                        legendLayer.subLayerIds.push(int(node.@parentId));   
+                                    }							     
+	
+									if (node.@layerType != 'FeatureLayer')
+									{
+	    								legendLayer.subLayerIds.push(int(node.@layerId));
+									}
+								}
+    							else
+    							{
+    								legendLayer = new LegendLayer();
+    								legendLayer.layerId = node.@mapLayer;
+    								
+									if (node.@layerType != 'FeatureLayer')
+									{
+	    								if (node.@parentId != -1)
+	    								{
+	                                        legendLayer.subLayerIds = [int(node.@parentId), int(node.@layerId)];
+	    								}
+	    								else 
+	    								{
+	    								    legendLayer.subLayerIds = [int(node.@layerId)];
+	    								}
+									}
+    								legendLayers.push(legendLayer);							
+    							}
+    						}
+    						
+    						legendLayers = getLegendOptionsForLayers(legendLayers, new XMLListCollection(node.children()));
+    					}
+    				}
+				} 
+				
+				return legendLayers;
+			}
+
+			
+			
+			/* PROTECTED LAYER FUNCTIONS
+			------------------------------------------------------------------------*/
+			
+			/**
+			 * Checks to see if there are any protected layers in the map and if they are visible.
+			 */
+			private function hasVisibleProtectedLayer():Boolean
+			{
+				updateProtectedLayers();
+				return protectedLayerDetails.length > 0 || warningLayerDetails.length > 0;
+			}
+			
+			private function updateProtectedLayers():void
+			{
+				// Reset the detail arrays
+				protectedLayerDetails = [];
+				warningLayerDetails = [];
+				
+				// Iterate through the list of configured layers to check for
+				for each(var pLayer:Object in protectedLayers)
+				{
+					var pURL:String = (pLayer.url as String).toLowerCase(); 
+					var message:String = pLayer.message;
+					var method:String = pLayer.method;
+					
+					var layerObj:Object;
+					
+					// Iterate through the map layers looking for protected layers
+					var layers:ArrayCollection = map.layers as ArrayCollection;
+					for each (var layer:Layer in layers)
+					{
+						if (layer is ArcGISTiledMapServiceLayer)
+						{
+							var tLayer:ArcGISTiledMapServiceLayer = layer as ArcGISTiledMapServiceLayer;
+							if (tLayer.url.toLowerCase() === pURL && tLayer.visible)
+							{
+								layerObj = { layerName: tLayer.name, message: message };
+								break;
+							}
+						}
+						
+						if (layer is ArcGISDynamicMapServiceLayer)
+						{
+							var dLayer:ArcGISDynamicMapServiceLayer = layer as ArcGISDynamicMapServiceLayer;
+							var dURL:String = dLayer.url.toLowerCase();
+							if (dURL === pURL  && dLayer.visible)
+							{
+								layerObj = { layerName: dLayer.name, message: message };
+								break;
+							}
+							
+							// Check if a sublayer is protected
+							for each(var i:Number in dLayer.visibleLayers)
+							{
+								var info:LayerInfo = dLayer.layerInfos[i];
+								if (dURL + "/" + info.layerId === pURL && dLayer.visible )
+								{
+									layerObj = { layerName: info.name, message: message };
+									break;
+								}
+							}
+							
+						}
+						
+						if (layer is FeatureLayer)
+						{
+							var fLayer:FeatureLayer = layer as FeatureLayer;
+
+							if (fLayer.url)
+							{
+								// Check for the layer specifically && the parent map service
+								var mapService:String = fLayer.url.substr(0,fLayer.url.lastIndexOf("/")).toLowerCase().replace("featureserver","mapserver");
+								if ((fLayer.url.toLowerCase() === pURL || mapService === pURL) && fLayer.visible)
+								{
+									layerObj = { layerName: fLayer.name, message: message };
+									break;
+								}
+							}
+						}
+					}
+
+					if (layerObj)
+					{
+						if (method === "warning")
+						{
+							warningLayerDetails.push(layerObj);
+						}
+						else
+						{
+							protectedLayerDetails.push(layerObj);	
+						}
+					}
+				}
+			}
+			
+			private function generateProtectedLayerMessage():String
+			{
+				var result:String = "";
+
+				// Iterate through protected layers array
+				for each(var pLayer:Object in protectedLayerDetails)
+				{
+					result += '<p>The layer "' + pLayer.layerName + '" is visible.  The content of this layer is sensitive and as such it is not permitted to generate a map showing it.<br><br>';
+					result += pLayer.message;
+					result += '</p><br>';
+				}
+				
+				return result;
+			}
+			
+			
+			
+			/* HELP FUNCTIONS
+			------------------------------------------------------------------------*/
+
+			/** 
+			 * Initialises the help functionality
+			 */ 
+			private function initHelp():void 
+			{
+				if (configXML)
+				{
+					// Load help location
+					_helpLocation = configXML.helplocationurl;
+					if (_helpLocation)
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", "Help", showHelp, false);
+					}
+				}
+			}
+			
+			/** 
+			 * Help function 
+			 */ 
+			private function showHelp():void {
+				var urlRequest:URLRequest = new URLRequest(_helpLocation);
+				navigateToURL(urlRequest, "_blank");
+			}
+			
+			
+			
+			/* HELPER FUNCTIONS
+			------------------------------------------------------------------------*/
+			
+			private function isContained(item:*, list:IList):Boolean
+			{
+				var listContents:Array = list.toArray();
+				return listContents.indexOf(item) > -1;
+			}
+						
+			protected function scaleInput_changeHandler(event:TextOperationEvent):void
+			{
+				updatePrintableArea();
+			}
+			
+		]]>
+    </fx:Script>
+	
+	<fx:Declarations>
+		<esri:PrintTask id="printTask"
+						executeComplete="printTask_executeCompleteHandler(event)"
+						fault="printTask_faultHandler(event)"
+						getResultDataComplete="printTask_getResultDataCompleteHandler(event)"
+						getServiceInfoComplete="printTask_getServiceInfoCompleteHandler(event)"
+						jobComplete="printTask_jobCompleteHandler(event)"
+						showBusyCursor="true"
+						disableClientCaching="true" 
+						concurrency="single" />
+		
+		<esri:PrintParameters id="printParameters"
+							  format="{formatsDDL.selectedItem}"
+							  layoutTemplate="{layoutTemplatesDDL.selectedItem}"
+							  map="{map}"
+							  preserveScale="{scaleCheckbox.selected}" >
+ 
+			<esri:exportOptions>
+                <esri:ExportOptions id="exportOptions" dpi="{selectedDPI}"/>
+            </esri:exportOptions>
+
+			<esri:layoutOptions>
+				<esri:LayoutOptions id="layoutOptions"/>
+			</esri:layoutOptions>
+		</esri:PrintParameters>
+	</fx:Declarations>
+	
+    <viewer:WidgetTemplate id="wTemplate"
+						   open="wTemplate_widgetOpenedHandler(event)"
+						   closed="wTemplate_widgetClosedHandler(event)" >
+		<s:Group id="printOptions" 
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.printOptions="true">
+			
+			<mx:Form>			
+				<mx:FormItem id="titleFI"
+							 width="100%"
+							 includeInLayout="{shouldShowTitle}"
+							 visible="{shouldShowTitle}">
+					<s:TextInput id="txtTitle"
+								 width="100%"
+								 text="{title}"/>
+				</mx:FormItem>
+				
+				<mx:FormItem id="authorFI"
+							 width="100%"
+							 includeInLayout="{shouldShowAuthor}"
+							 visible="{shouldShowAuthor}">
+					<s:TextInput id="txtAuthor"
+								 width="100%"
+								 text="{author}"/>
+				</mx:FormItem>
+				
+				<mx:FormItem id="copyrightFI"
+							 width="100%"
+							 includeInLayout="{shouldShowCopyright}"
+							 visible="{shouldShowCopyright}">
+					<s:TextInput id="txtCopyright"
+								 width="100%"
+								 text="{copyright}"/>
+				</mx:FormItem>
+				
+				<mx:FormItem id="layoutTemplatesFI"
+							 width="100%"
+							 includeInLayout="{shouldShowTemplateOptions}"
+							 visible="{shouldShowTemplateOptions}">
+					<s:DropDownList id="layoutTemplatesDDL"
+									width="175"
+									dataProvider="{printTask.getServiceInfoLastResult.layoutTemplates}"
+									requireSelection="true"
+									change="layoutTemplatesDDL_changeHandler(event)"
+									typicalItem="{layoutTemplatesDDL.selectedItem}" />
+				</mx:FormItem>
+				
+				<mx:FormItem id="formatsFI"
+							 width="100%"
+							 includeInLayout="{shouldShowFormatOptions}"
+							 visible="{shouldShowFormatOptions}">
+					<s:DropDownList id="formatsDDL"
+									width="100"
+									dataProvider="{printTask.getServiceInfoLastResult.formats}"
+									requireSelection="true"
+								    typicalItem="{formatsDDL.selectedItem}"/>
+				</mx:FormItem>
+				
+                <mx:FormItem id="dpiFI"
+                             width="100%"
+                             includeInLayout="{shouldShowDPIOptions}"
+                             visible="{shouldShowDPIOptions}">
+                    <s:DropDownList id="dpiDDL" 
+                                    width="100"
+                                    selectedIndex="0"
+                                    requireSelection="true"
+                                    dataProvider="{exportDPIs}"
+                                    change="dpiDDL_changeHandler(event)"
+                                    enabled="false"
+									typicalItem="{dpiDDL.selectedItem}" >
+                    </s:DropDownList>
+                </mx:FormItem>
+    
+				<mx:FormItem id="scaleFI"
+							 width="100%"
+							 direction="horizontal"
+							 horizontalGap="0"
+							 includeInLayout="{shouldShowUseScale}"
+							 visible="{shouldShowUseScale}">
+					<s:CheckBox id="scaleCheckbox" click="scaleCheckbox_clickHandler(event)" selected="{useScale}" />
+					
+					<s:TextInput id="scaleInput"
+								 width="100%"
+								 enabled="{scaleCheckbox.selected}"
+								 editable="{shouldAllowCustomScale}"
+								 restrict="0-9"
+								 change="scaleInput_changeHandler(event)"  />
+				</mx:FormItem>
+				
+				<mx:FormItem id="legendFI"
+							 width="100%"
+							 direction="horizontal"
+							 horizontalGap="0"
+							 includeInLayout="{shouldShowLegendOptions}"
+							 visible="{shouldShowLegendOptions}">
+					<s:CheckBox id="legendCheckbox" 
+					           enabled="false"
+					           selected="true"/>
+					
+					<s:Button id="legendButton"
+							  click="legendButton_showLegendClickHandler(event)"
+							  enabled="true"/>
+				</mx:FormItem>
+							
+				<s:HGroup width="100%" horizontalAlign="center">
+					<s:Button id="printButton" 
+							  click="printButton_exportWebMapClickHandler(event)"
+							  enabled="false"/>
+					
+					<mx:Image id="swfMessage"
+							  source="assets/images/loader.swf"
+							  visible="false"/>
+				</s:HGroup>				
+			</mx:Form>			
+		</s:Group>
+
+		<s:Group id="legendOptions"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.legendOptions="true">
+			
+			<s:VGroup width="100%" height="100%">
+
+				<mx:Tree id="legendTree"
+						 width="100%" height="100%"
+						 itemRenderer="widgets.PrintEnhanced.LegendLayerTreeRenderer"
+						 labelField="@layerName">
+				</mx:Tree>
+
+				<s:HGroup width="100%" horizontalAlign="center">
+					<s:Button id="legendResetButton"
+							  click="legendResetButton_clickHandler(event)"
+							  enabled="true"/>
+					
+					<s:Button id="legendSelectAllButton"
+							  click="legendSelectAllButton_clickHandler(event)"
+							  enabled="true"/>
+					
+					<s:Button id="legendSelectNoneButton"
+							  click="legendSelectNoneButton_clickHandler(event)"
+							  enabled="true"/>
+
+					<s:Button id="legendDoneButton"
+							  click="legendDoneButton_clickHandler(event)"
+							  enabled="true"/>
+				</s:HGroup>	
+			</s:VGroup>
+		</s:Group>
+	</viewer:WidgetTemplate>
+
+</viewer:BaseWidget>

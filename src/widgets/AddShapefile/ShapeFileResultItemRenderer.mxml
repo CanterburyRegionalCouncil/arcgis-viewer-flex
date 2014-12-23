@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				xmlns:mx="library://ns.adobe.com/flex/mx"
+				autoDrawBackground="false"
+				click="itemrenderer_clickHandler(event)"
+				minHeight="30"
+				dataChange="itemrenderer1_dataChangeHandler(event)">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.symbols.Symbol;
+			
+			import flashx.textLayout.conversion.TextConverter;
+			
+			import mx.controls.Image;
+			import mx.events.FlexEvent;
+			
+			private const SHAPEFILE_RESULT_CLICK:String = "shapefileResultClick";
+			
+			private const SHAPEFILE_DELETE:String = "shapefileDelete";
+
+			[Bindable] private var shapeResult:ShapeFileResult;
+			
+			[Bindable] private var removeShape:String;
+			
+			private var lastResultSymbol:Symbol;
+			private var lastResultSwatch:UIComponent;
+			
+			private function itemrenderer_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new Event(SHAPEFILE_RESULT_CLICK, true)); // bubbles
+			}
+			
+			private function deleteShapefile(event:MouseEvent):void
+			{
+				event.stopPropagation(); // don't let this click event go up to the ItemRenderer
+				dispatchEvent(new Event(SHAPEFILE_DELETE, true)); // bubbles
+			}
+			
+			protected function itemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				shapeResult = data as ShapeFileResult;
+				
+				if (shapeResult){
+					removeShape = (shapeResult.removemsg != "")?shapeResult.removemsg:"Remove Shapefile";
+					if (lastResultSymbol !== shapeResult.symbol){
+						if (resultIcon.numChildren > 0){
+							resultIcon.removeChildAt(0);
+						}
+						lastResultSymbol = shapeResult.symbol;
+						lastResultSwatch = lastResultSymbol.createSwatch(20, 20);
+					}
+					lContent.textFlow = TextConverter.importToFlow(shapeResult.content, TextConverter.TEXT_FIELD_HTML_FORMAT);
+					resultIcon.addChild(lastResultSwatch);
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="hovered"/>
+		<s:State name="selected"/>
+	</s:states>
+	
+	<!-- border/background rectangle -->
+	<s:Rect left="0" right="0" top="0" bottom="0"
+			radiusX="4"
+			radiusY="4">
+		<s:stroke>
+			<mx:SolidColorStroke alpha="{getStyle('borderAlpha')}"
+								 color="{getStyle('borderColor')}"
+								 weight="1"/>
+		</s:stroke>
+		<s:fill>
+			<mx:SolidColor alpha="0.3"
+						   alpha.hovered="0.8"
+						   color.hovered="{getStyle('rollOverColor')}"
+						   alpha.selected="1"
+						   color.selected="{getStyle('rollOverColor')}"
+						   color.normal="{getStyle('contentBackgroundColor')}"/>
+		</s:fill>
+	</s:Rect>
+	<s:HGroup minHeight="30"
+			  paddingLeft="5"
+			  paddingRight="5"
+			  paddingBottom="5"
+			  paddingTop="7"
+			  verticalAlign="middle"
+			  width="100%">
+		<mx:UIComponent id="resultIcon"
+						width="100%" height="100%"
+						maxHeight="20"
+						maxWidth="20">
+			<mx:filters>
+				<mx:GlowFilter alpha="0.5"
+							   blurX="10"
+							   blurY="10"
+							   color="#000000"/>
+			</mx:filters>
+		</mx:UIComponent>
+		<s:VGroup width="100%" height="100%"
+				  verticalAlign="middle">
+			<s:Label width="100%"
+					 fontWeight="bold"
+					 maxDisplayedLines="1"
+					 text="{shapeResult.title}"/>
+			<s:RichText id="lContent"
+						fontWeight="normal"
+						width="100%"/>
+		</s:VGroup>
+		<s:Image width="20" height="20"
+				 right="15" useHandCursor="true" buttonMode="true"
+				 click="deleteShapefile(event)"
+				 toolTip="{removeShape}"
+				 source="assets/images/w_close_red.png"
+				 verticalCenter="0"/>
+	</s:HGroup>
+</s:ItemRenderer>

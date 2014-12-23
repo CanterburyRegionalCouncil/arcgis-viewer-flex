@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+<viewer:BaseWidget xmlns:fx=			"http://ns.adobe.com/mxml/2009"
+				   xmlns:s=				"library://ns.adobe.com/flex/spark"
+				   xmlns:mx=			"library://ns.adobe.com/flex/mx"
+				   xmlns:viewer=		"com.esri.viewer.*"
+				   layout=				"horizontal"
+				   widgetConfigLoaded=	"basewidget_widgetConfigLoadedHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.events.ZoomEvent;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.utils.WebMercatorUtil;
+			
+			import mx.formatters.NumberBaseRoundType;
+			import mx.utils.ColorUtil;
+			import mx.utils.StringUtil;
+			
+			/*  Widget variables
+			------------------------------------------------------------ */
+			
+			private var m_template:String;
+			private var m_func:Function = substitute;
+			
+			/* Added as part of consortium changes */ 
+			
+			// Scale label variable 
+			[Bindable]
+			private var m_scale:String;
+			private var _scaletemplate:String;
+			
+			[Bindable]
+			private var _showScale:Boolean = true; // Added by Ryan Elley (ECan) 09/01/2012 - Used to make displaying the scale an optional parameter.
+			
+			/* End of additions */
+			
+			
+			/*  Widget functions
+			------------------------------------------------------------ */
+			
+			protected function basewidget_widgetConfigLoadedHandler(event:Event):void
+			{
+				if (configXML)
+				{
+					// Number formatting properties
+					const decimalSeparator:String = configXML.numberformatter.@decimalseparator;
+					numberFormatter.decimalSeparatorTo = decimalSeparator ? decimalSeparator : ".";
+					
+					const thousandsSeparator:String = configXML.numberformatter.@thousandsseparator;
+					numberFormatter.thousandsSeparatorTo = thousandsSeparator ? thousandsSeparator : ",";
+					numberFormatter.useThousandsSeparator = configXML.numberformatter.@usethousandsseparator == "true";
+					numberFormatter.precision = parseFloat(configXML.numberformatter.@precision || "-1");
+					
+					const rounding:String = configXML.numberformatter.@rounding;
+					numberFormatter.rounding = rounding ? rounding : NumberBaseRoundType.NONE;
+					
+					// Label style properties					
+					const color:String = configXML.labelstyle.@color[0] || configXML.label.@color[0];
+					coords.setStyle("color", toNumber(color ? color : "0x000000"));
+					
+					const fontFamily:String = configXML.labelstyle.@fontfamily[0] || configXML.label.@fontfamily[0];
+					coords.setStyle("fontFamily", fontFamily ? fontFamily : "Verdana");
+					
+					const fontSize:String = configXML.labelstyle.@fontsize[0] || configXML.label.@fontsize[0];
+					coords.setStyle("fontSize", parseInt(fontSize ? fontSize : "9"));
+					
+					const fontWeight:String = configXML.labelstyle.@fontweight[0] || configXML.label.@fontweight[0];
+					coords.setStyle("fontWeight", fontWeight ? fontWeight : "bold");
+					
+					// If no template specified, show them with a space in between (except for special case below)
+					m_template = configXML.labels.template[0] || configXML.label.@template[0] || "{0} {1}";
+					
+					/* Addition by Ryan Elley (ECan) 09/01/2012 - Code to determine scale display status */
+					
+					// Scale display property
+					_showScale = configXML.scale.@showscale != "false";
+					
+					// Scale number formatting properties	
+					const scaledecimalSeparator:String = configXML.scale.@decimalseparator
+					scaleNumberFormatter.decimalSeparatorTo = scaledecimalSeparator.length ? scaledecimalSeparator : ".";
+					
+					const scalethousandsSeparator:String = configXML.scale.@thousandsseparator;
+					scaleNumberFormatter.thousandsSeparatorTo = scalethousandsSeparator.length ? scalethousandsSeparator : ",";
+					scaleNumberFormatter.useThousandsSeparator = configXML.scale.@usethousandsseparator == "true";
+					scaleNumberFormatter.precision = parseFloat(configXML.scale.@precision || "-1");
+					
+					const scalerounding:String = configXML.scale.@rounding;
+					scaleNumberFormatter.rounding = scalerounding.length ? scalerounding : NumberBaseRoundType.NONE;
+					
+					// Scale label style properties
+					scale.setStyle("color", toNumber(color.length ? color : "0x000000"));
+					scale.setStyle("fontFamily", fontFamily.length ? fontFamily : "Verdana");
+					scale.setStyle("fontSize", parseInt(fontSize.length ? fontSize : "9"));
+					scale.setStyle("fontWeight", fontWeight.length ? fontWeight : "bold");
+					
+					// If no scale template specified, a standard 1:xxxx 
+					_scaletemplate = configXML.scale.@template || "Scale 1:{0}";
+					
+					/* End of Additions */
+
+					
+					if (map.loaded)
+					{
+						map_loadHandler(null);
+					}
+					else
+					{
+						map.addEventListener(MapEvent.LOAD, map_loadHandler);
+					}
+				}
+				
+				function map_loadHandler(event:MapEvent):void
+				{
+					map.removeEventListener(MapEvent.LOAD, map_loadHandler);
+					const wkid:int = map.spatialReference.wkid;
+					m_func = substitute;
+					const outputUnit:String = configXML.outputunit;
+					if (outputUnit === "mercator")
+					{
+						if (wkid === 4326 || wkid === 4269 || wkid === 4267)
+						{
+							m_func = geographicToMercator;
+						}
+					}
+					else if (outputUnit === "geo")
+					{
+						if (wkid === 102100 || wkid === 102113 || wkid === 3857)
+						{
+							m_func = mercatorToGeographic;
+
+							// special default for geographic outputs
+							m_template = configXML.labels.template[0] || configXML.label.@template[0] || getDefaultString("latitudeLabel") + ":{1}   " + getDefaultString("longitudeLabel") + ":{0}";
+							numberFormatter.precision = parseFloat(configXML.numberformatter.@precisiongeo || "6");
+						}
+						else if (wkid === 4326 || wkid === 4269 || wkid === 4267)
+						{
+							// special default for geographic outputs
+							m_template = configXML.labels.template[0] || configXML.label.@template[0] || getDefaultString("latitudeLabel") + ":{1}   " + getDefaultString("longitudeLabel") + ":{0}";
+							numberFormatter.precision = parseFloat(configXML.numberformatter.@precisiongeo || "6");
+						}
+					}
+					else if (outputUnit === "dms")
+					{
+						if (wkid === 102100 || wkid === 102113 || wkid === 3857)
+						{
+							m_func = mercatorToDMS;
+						}
+						else if (wkid === 4326 || wkid === 4269 || wkid === 4267)
+						{
+							m_func = geographicToDMS;
+						}
+					}
+					map.addEventListener(MouseEvent.MOUSE_MOVE, map_mouseMoveHandler);
+					
+					/* Additional code as per consortium widget. */
+					
+					// Add a listener for zoom actions on the map
+					map.addEventListener(ZoomEvent.ZOOM_END, map_zoomEndHandler);
+					
+					// Assume map is loaded - set the scale properties to nothing by default.
+					setScaleValue();	
+					
+					/* End of additions */					
+				}
+			}
+			
+			
+			
+			/*  Coordinate string formatting functions
+			----------------------------------------------------------- */
+
+			/** 
+			 * Custom parse function for changing strings into integers
+			 */
+			private function toNumber(value:String):int
+			{
+				if (value.substr(0, 2) == "0x")
+				{
+					return parseInt(value, 16);
+				}
+				return parseInt(value, 10);
+			}
+			
+			/** 
+			 * Called when the map coordinates are in mercator and the output is decimal lat/long
+			 */ 
+			private function mercatorToGeographic(web:MapPoint):String
+			{
+				const geo:MapPoint = WebMercatorUtil.webMercatorToGeographic(web) as MapPoint;
+				return StringUtil.substitute(m_template,
+					numberFormatter.format(geo.x),
+					numberFormatter.format(geo.y));
+			}
+			
+			/** 
+			 * Called when the map coordinates are in mercator and the output is DMS
+			 */
+			private function mercatorToDMS(web:MapPoint):String
+			{
+				const geo:MapPoint = WebMercatorUtil.webMercatorToGeographic(web) as MapPoint;
+				return StringUtil.substitute(m_template, DegToDMS.format(geo.x, DegToDMS.LON), DegToDMS.format(geo.y, DegToDMS.LAT));
+			}
+			
+			/** 
+			 * Calculates the geographic coordinates in Degrees-Minutes-Seconds (DMS)
+			 */ 
+			private function geographicToMercator(geo:MapPoint):String
+			{
+				const web:MapPoint = WebMercatorUtil.geographicToWebMercator(geo) as MapPoint;
+				return StringUtil.substitute(m_template,
+					numberFormatter.format(web.x),
+					numberFormatter.format(web.y));
+			}
+			
+			private function substitute(mapPoint:MapPoint):String
+			{
+				return StringUtil.substitute(m_template,
+					numberFormatter.format(mapPoint.x),
+					numberFormatter.format(mapPoint.y));
+			}
+			
+			private function geographicToDMS(mapPoint:MapPoint):String
+			{
+				const x:String = DegToDMS.format(mapPoint.x, DegToDMS.LON);
+				const y:String = DegToDMS.format(mapPoint.y, DegToDMS.LAT);
+				return StringUtil.substitute(m_template, x, y);
+			}
+			
+			
+			/*  Map event functions
+			----------------------------------------------------------- */
+			
+			/** 
+			 * Handles updating the coordinate text when the mouse is moved over the map
+			 */ 
+			private function map_mouseMoveHandler(event:MouseEvent):void
+			{
+				const mapPoint:MapPoint = map.toMapFromStage(event.stageX, event.stageY);
+				coords.text = m_func(mapPoint);
+			}
+			
+			/**
+			 * Handles updating the scale text when the map scale changes
+			 */
+			private function map_zoomEndHandler(event:ZoomEvent):void
+			{
+				setScaleValue();	
+			}
+			
+			/* Consortium specific functions => START */
+			
+			/**
+			 * Updates the scale value in the bound scale string
+			 */
+			private function setScaleValue():void
+			{
+				if (_showScale)
+				{
+					// Format the scale number
+					const mapScale:String = scaleNumberFormatter.format(map.scale);
+					
+					// Set the scale text
+					m_scale = StringUtil.substitute(_scaletemplate, mapScale);
+				}
+			}
+			
+			/* End of additions */
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<mx:NumberFormatter id="numberFormatter"/>
+		
+		<!--- Scale number formatter - Added as part of the consortium code changes -->
+		<mx:NumberFormatter id="scaleNumberFormatter"/>
+	</fx:Declarations>
+
+	<viewer:filters>
+		<mx:GlowFilter alpha="1"
+					   blurX="3"
+					   blurY="3"
+					   color="0xFFFFFF"
+					   strength="7"/>
+	</viewer:filters>
+	<s:Label id="coords" color="0x000000"/>
+	
+	<!--- Scale display label - Added as part of the consortium code changes -->
+	<s:Label id="scale" color="0x000000" text="{m_scale}" paddingLeft="25" 
+			 visible="{_showScale}" includeInLayout="{_showScale}" />
+
+</viewer:BaseWidget>

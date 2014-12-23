@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="utf-8"?>
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=			"com.esri.viewer.*"
+				   widgetConfigLoaded=		"widgetConfigLoadedHandler(event)" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.adobe.serializers.json.*;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISImageServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.CSVLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.KMLLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.OpenStreetMapLayer;
+			import com.esri.ags.layers.WMSLayer;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.symbols.*;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.DatumTransform;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			
+			import flash.net.registerClassAlias;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.managers.CursorManager;
+			import mx.messaging.messages.SOAPMessage;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.AsyncToken;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.soap.LoadEvent;
+			
+			import restServices.WorkspaceWebServicePortal.WorkspaceWebServicePortal;
+			import restServices.WorkspaceWebServicePortal.valueobjects.WorkspaceDataItem;
+			
+			import widgets.supportClasses.WebMapResult;
+			import widgets.supportClasses.utils.LayerUtil;
+						
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+			
+			public static const LOADWORKSPACE_BY_ID_EVENT:String 		= "Workspace_Widget_LoadWorkspaceByID";
+			public static const LOADWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_LoadWorkspaceByObject";
+			public static const DELETEWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_DeleteWorkspaceByObject";
+			public static const EDITWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_EditWorkspaceByObject";
+			
+			public static const WORKSPACE_WIDGET_READY:String 			= "Workspace_Widget_WorkspaceReady";
+			
+			// Coordinate WKIDs
+			private const nzmgwkid:Number = 27200;
+			private const nztmwkid:Number = 2193;
+			private const wgs84wkid:Number = 4326;
+			private const webmercatorwkid:Number = 102100;
+			
+			//Transformation WKIDs
+			private const NZGD_1949_To_WGS_1984_2:Number = 1564;
+			private const NZGD_2000_To_WGS_1984_1:Number = 1565;
+			private const New_Zealand_1949_To_NZGD_2000_3_NTv2:Number = 1568;
+			
+			// Listings of the coordinate system used by this widget
+			private const spatialDetails:Array = [
+				{ inputWKID: nzmgwkid, outputWKID: nzmgwkid, datTransform: null, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: nztmwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: wgs84wkid, datTransform: NZGD_1949_To_WGS_1984_2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: webmercatorwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				
+				{ inputWKID: nztmwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: nztmwkid, outputWKID: nztmwkid, datTransform: null , transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: wgs84wkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: webmercatorwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				
+				{ inputWKID: wgs84wkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: wgs84wkid, datTransform: null , transformForward: true },
+				{ inputWKID: wgs84wkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true },
+				
+				{ inputWKID: webmercatorwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: wgs84wkid, datTransform: null, transformForward: true },
+				{ inputWKID: webmercatorwkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true }
+			];
+			
+			
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+			
+			[Bindable]
+			/** List of available workspaces - filtered subset of the full Workspace List*/
+			protected var _workspaceItems:ArrayCollection;
+			
+			/** Flex SharedObject for storing workspaces locally. Valid only when _StorageMode == STORAGE_MODE_SHARED_OBJECT */
+			protected var _WorkspacesSharedObject:SharedObject;
+			
+			/** webservice proxy object for storing workspaces in a Central Location. Valid only when _StorageMode == STORAGE_MODE_CENTRAL_REPO */
+			protected var _WorkspacesWebService:WorkspaceWebServicePortal;
+
+			// Flag for WSDL being loaded loaded from url
+			[Bindable]
+			private var _wsdlLoaded:Boolean = false;
+			
+			// Flag for workspace loaded from url
+			private var _urlWorkspaceLoaded:Boolean = false;
+
+			[Bindable]
+			private var msgVisible:Boolean = false;
+			
+			// Possible basemaps
+			private var _basemapPossibilities:Array = [];
+			
+			// File reference object for saving the files
+			private var _fr:FileReference;
+			
+			// JSON data storage point to be used to hold data prior to saving - cannot save directly from web service call because of sandbox issues
+			[Bindable]
+			private var _json:String;
+			
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				//register classes, that way when being persisted by SharedObject and ByteArray.writeObject() the objects are strongly typed.				
+				registerClassAlias("widgets.SaveWorkspace.WorkspaceData", WorkspaceData);
+				
+				registerClassAlias("widgets.SaveWorkspace.Polyline", Polyline);
+				registerClassAlias("widgets.SaveWorkspace.Polygon", Polygon);
+				registerClassAlias("widgets.SaveWorkspace.MapPoint", MapPoint);
+				registerClassAlias("widgets.SaveWorkspace.Extent", Extent);
+				
+				registerClassAlias("widgets.SaveWorkspace.SimpleMarkerSymbol", SimpleMarkerSymbol); 
+				registerClassAlias("widgets.SaveWorkspace.PictureMarkerSymbol", PictureMarkerSymbol); 
+				registerClassAlias("widgets.SaveWorkspace.TextSymbol", TextSymbol);
+				registerClassAlias("widgets.SaveWorkspace.InfoSymbol", InfoSymbol);
+				registerClassAlias("widgets.SaveWorkspace.CompositeSymbol", CompositeSymbol);
+				registerClassAlias("widgets.SaveWorkspace.SimpleLineSymbol", SimpleLineSymbol);
+				registerClassAlias("widgets.SaveWorkspace.CartographicLineSymbol", CartographicLineSymbol);
+				registerClassAlias("widgets.SaveWorkspace.SimpleFillSymbol", SimpleFillSymbol);
+				registerClassAlias("widgets.SaveWorkspace.PictureFillSymbol", PictureFillSymbol);
+				registerClassAlias("widgets.SaveWorkspace.TextFormat", TextFormat);
+				
+				registerClassAlias("widgets.SaveWorkspace.LayerInfo", LayerInfo);
+
+				// Load the basemaps possibilities and set up the geometry service
+				if (configXML)
+				{
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					var basemaps:XMLList = configXML.basemap;
+					for each (var basemap:XML in basemaps)
+					{
+						_basemapPossibilities.push(basemap.toString().toLowerCase());
+					}
+				}
+				
+				// Get the storage points
+				if (configXML
+					&& configXML.hasOwnProperty("CentralStorageEndpoint")
+					&& configXML.CentralStorageEndpoint != null
+					&& configXML.CentralStorageEndpoint[0] != "")
+				{
+					_WorkspacesWebService = new WorkspaceWebServicePortal();
+					_WorkspacesWebService.serviceControl.wsdl = configXML.CentralStorageEndpoint + "?wsdl";
+					_WorkspacesWebService.serviceControl.endpointURI = configXML.CentralStorageEndpoint;
+					_WorkspacesWebService.port = configXML.CentralStorageServicePort || "GISmoWebServicePortalSoap";
+					_WorkspacesWebService.service = configXML.CentralStorageServiceName || "GISmoWebServicePortal";
+					
+					_WorkspacesWebService.serviceControl.addEventListener(LoadEvent.LOAD, WorkspaceStorageWSDLLoaded);
+					_WorkspacesWebService.serviceControl.addEventListener(FaultEvent.FAULT, WorkspaceStorageWSDLFault);
+					
+					_WorkspacesWebService.serviceControl.loadWSDL();
+				}
+			}
+
+			/* NETWORK STORAGE MODE FUNCTIONALITY
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Called when the WorkspaceWebServicePortal Web Service WSDL has loaded.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LoadEvent]: </i>Event raised when the workspace soap service details finish loading.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWSDLLoaded(event:LoadEvent):void
+			{
+				_wsdlLoaded = true;
+				
+				//var token:AsyncToken = _WorkspacesWebService.GetWorkspaces();
+				//token.addResponder(new AsyncResponder(WorkspaceStorageWebGetWorkspaces_resultHandler, WorkspaceStorageWebGetWorkspaces_faultHandler));
+			}	
+			
+			/**
+			 * Called if a fault is thrown while connecting to the WorkspaceWebServicePortal Web Service WSDL.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LoadEvent]: </i>Event raised when the workspace soap service returns a fault while loading the wsdl details.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWSDLFault(event:FaultEvent):void
+			{
+				showMessage("There was an issue connecting to the central workspace repository.  Changing to use the local workspace repository.  Please contact the GIS Administractor if this issue continues.", false);
+			}			
+		
+			/**
+			 * Called when then Workspace Web Storage Service returns workspace items.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaulEvent]: </i>Fault event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebGetWorkspaces_resultHandler(event:ResultEvent, token:Object=null ):void
+			{					
+				var wrkspaces:ArrayCollection = new ArrayCollection();
+				for each (var webWorkspace:WorkspaceDataItem in event.result)
+				{
+					var newWorkspaceItem:WorkspaceData = WorkspaceStorageWorkspaceWebItemToDataItem(webWorkspace);
+					wrkspaces.addItem(newWorkspaceItem);
+				}
+				
+				// Update the workspace items list
+				_workspaceItems = wrkspaces;
+			}
+			
+			/**
+			 * Called when then Workspace Web Storage Service returns a sepecific workspace item.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [ResultEvent]: </i>Event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebGetWorkspaceByID_resultHandler(event:ResultEvent, token:Object=null ):void
+			{					
+				var wdi:WorkspaceDataItem = event.result as WorkspaceDataItem;
+				if (wdi != null)
+				{					
+					var r:WorkspaceData = WorkspaceStorageWorkspaceWebItemToDataItem(wdi);
+
+					// Get the extent from the workspace and start projection to WGS84
+					var extent:Extent = new Extent(r.MapExtent[0],r.MapExtent[1],r.MapExtent[2],r.MapExtent[3],new SpatialReference(r.MapExtent[4]));
+					
+					// Set the projection parameters
+					var projParam:ProjectParameters = getProjectParams(extent.spatialReference.wkid,wgs84wkid);
+					projParam.geometries = [extent.toPolygon()];
+					
+					// Call the projection task
+					geometryService.project(projParam, new AsyncResponder( workspaceExtentProject_resultHandler, project_faultHandler, r)); 
+				}
+			}
+			
+			private function workspaceExtentProject_resultHandler(result:Object, token:Object = null):void
+			{
+				if (result)
+				{
+					var geometry:Geometry = (result as Array)[0];
+					processWorkspaceToWebMap(token as WorkspaceData,geometry.extent);
+				}
+			}
+			
+			private function project_faultHandler(fault:Fault, token:Object = null):void
+			{
+				// Show the error message
+				CursorManager.removeBusyCursor();
+				Alert.show(fault.faultString + "\n\n" + fault.faultDetail, "project Fault " + fault.faultCode);
+			}
+			
+			
+			private function processWorkspaceToWebMap(workspace:WorkspaceData, wgs84Extent:Extent):void
+			{
+				// Create the webmap
+				var webmap:WebMapResult = WorkspaceConverterUtil.ConvertToWebMapResult(workspace, wgs84Extent.xmin, wgs84Extent.ymin, wgs84Extent.xmax, wgs84Extent.ymax, this._basemapPossibilities);
+				
+				// Convert to a json file
+				var js:JSONEncoder = new JSONEncoder();
+				_json = js.encode(webmap);
+			}
+			
+			private function getProjectParams(inputWKID:int, targetWKID:int):ProjectParameters
+			{
+				// Create a new project parameters
+				var projParam:ProjectParameters = new ProjectParameters();
+				projParam.outSpatialReference = new SpatialReference(targetWKID);
+				
+				// Create a datam transformation
+				var datTransform:DatumTransform = new DatumTransform();
+				
+				for (var i:int =0; i < spatialDetails.length; i++)
+				{
+					var sd:Object = spatialDetails[i];
+					if (sd.inputWKID == inputWKID &&
+						sd.outputWKID == targetWKID) {
+						datTransform.wkid = sd.datTransform;
+						projParam.datumTransform = datTransform;
+						projParam.transformForward = sd.transformForward;
+						break;
+					}
+				}
+				return projParam;
+			}
+			
+			/**
+			 * Called if there is a fault getting the workspaces from the web service.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaulEvent]: </i>Fault event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebGetWorkspaces_faultHandler(event:FaultEvent, token:Object=null ):void
+			{
+				showMessage("FAULT: " + event.fault.message,false );
+			}		
+		
+			/** 
+			 * Deserialises a web storage object to a workspace data object. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>webWorkspace [WorkspaceDataItem]: </i>Workspace data object to be reconstituted.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWorkspaceWebItemToDataItem(webWorkspace:WorkspaceDataItem):WorkspaceData
+			{
+				if (webWorkspace == null)
+				{
+					return null;
+				}
+				var newWorkspaceItem:WorkspaceData = new WorkspaceData();
+				newWorkspaceItem.WorkspaceID = webWorkspace.WorkspaceID;
+				newWorkspaceItem.Title = webWorkspace.Title;
+				newWorkspaceItem.Description = webWorkspace.Description;
+				newWorkspaceItem.MapExtent = webWorkspace.MapExtent.source;
+				
+				if (webWorkspace.GraphicLayers != null &&
+					webWorkspace.GraphicLayers.length > 0)
+				{
+					newWorkspaceItem.GraphicLayers = webWorkspace.GraphicLayers.readObject() as Array;
+				}
+				
+				if (webWorkspace.MapServices != null &&
+					webWorkspace.MapServices.length > 0)
+				{
+					newWorkspaceItem.MapServices = webWorkspace.MapServices.readObject() as Array;
+				}
+				
+				newWorkspaceItem.CreatedTime = DateFormatter.parseDateString(webWorkspace.CreatedTime);
+				newWorkspaceItem.LastModified = DateFormatter.parseDateString(webWorkspace.LastModified);
+				return newWorkspaceItem;
+			}			
+			
+			
+			/** 
+			 * Show a processing message.  Optionally including a working animation.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [String]: </i>Message to be displayed in the message area.</li>
+			 * <li><i>swfVisible [Boolean]: </i>Flag as to whether the working animation should be displayed when the message is shown.</li>
+			 * </ul>
+			 * </p>			 
+			 */ 			
+			private function showMessage(message:String, swfVisible:Boolean):void
+			{
+ 				// Set the message text
+				txtMessage.text = message;
+				
+				// Set the swirl animation visiblity
+				swfMessage.visible = swfVisible;
+				swfMessage.includeInLayout = swfVisible;
+				
+				// Set the message block visibility
+				msgVisible = true; 
+			}			
+			
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				// Get the workspace item
+				var token:AsyncToken = _WorkspacesWebService.GetWorkspaceByID(WorkspaceIDInput.text);
+				token.addResponder(new AsyncResponder(WorkspaceStorageWebGetWorkspaceByID_resultHandler, WorkspaceStorageWebGetWorkspaces_faultHandler, WorkspaceIDInput.text));
+			}
+			
+			protected function saveButton_clickHandler(event:MouseEvent):void
+			{
+				if (!_fr)
+				{
+					_fr = new FileReference();
+				}
+				var filename:String = WorkspaceIDInput.text + ".json";
+				_fr.save(_json,filename);			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<mx:DateFormatter id="_storageDateFormatter" formatString="YYYY-MM-DDTHH:NN:SS" />
+		<esri:GeometryService id="geometryService" showBusyCursor="true" />
+	</fx:Declarations>
+
+	<viewer:WidgetTemplate id="wTemplate"
+						   width="480" height="240"
+						   minWidth="480" minHeight="240" >
+		
+		<viewer:layout>
+			<s:VerticalLayout gap="5" />
+		</viewer:layout>
+		
+		
+		<s:TextInput id="WorkspaceIDInput" width="100%" prompt="Enter Workspace ID" text="5F0183F1-A4FE-8D2D-A40E-65E7F14A2ECD" />
+		
+		<s:HGroup width="100%" verticalAlign="middle" >		
+			<s:Button click="button1_clickHandler(event)" enabled="{_wsdlLoaded &amp;&amp; WorkspaceIDInput.text.length > 0}"
+				  label="Process Workspace" id="processButton" />
+			<s:Button click="saveButton_clickHandler(event)" enabled="{_json != null}"
+					  label="Save Workspace as JSON" id="saveButton" />
+		</s:HGroup>
+		
+		<!--<s:List id="WorkspaceList"
+				dataProvider="{_workspaceItems}"
+				width="100%" height="100%" 
+				alternatingItemColors="[#CCCCCC, #999999]" 
+				rollOverColor="{getStyle('rollOverColor')}" 
+				selectionColor="{getStyle('focusColor')}"
+				labelField="Title" >
+			<s:scroller>
+				<s:Scroller horizontalScrollPolicy="auto" verticalScrollPolicy="on"/>
+			</s:scroller>
+		</s:List>-->
+		
+		<!--- Message box area -->
+		<s:HGroup id="boxMessage" visible="{msgVisible}" includeInLayout="{msgVisible}" 
+				  width="100%" verticalAlign="middle" >
+			<mx:SWFLoader id="swfMessage" source="assets/images/loader.swf" />
+			<s:Label id="txtMessage" text="" width="100%" paddingRight="5" paddingLeft="5" maxDisplayedLines="20" />
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+</viewer:BaseWidget>

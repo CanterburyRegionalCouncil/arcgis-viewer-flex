@@ -1,0 +1,2400 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY				: This widget allows users to identify features in dynamic layers, tiled layers,
+					  feature service layers, and image service layers.  These results are displayed in
+					  an interactive inspector shown in the widget.  
+
+SOURCE				: Parts of this widget are based on the code from the Draw Widget supplied 
+					  with the ArcGIS Viewer for Flex.	
+
+DEVELOPED BY 		: Ryan Elley, ECan.
+
+CREATED				: 9/07/2012
+DEPENDENCIES		: 
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan) 	| 9/07/2011 	| Initial Development.
+Ryan Elley (ECan) 	| 29/01/2013 	| Flex Viewer Port 3.1 API and 3.1 viewer
+Ryan Elley (ECan) 	| 14/06/2013 	| Flex Viewer Port 3.3 API and 3.3 viewer
+Ryan Elley (ECan) 	| 02/11/2013 	| Bug fix for "all layers" and "visible layers" option when using proxied or token layers.
+Ryan Elley (ECan) 	| 21/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer
+
+-->
+
+<viewer:BaseWidget xmlns:esri=			"http://www.esri.com/2008/ags"
+				   xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=		"com.esri.viewer.*"
+				   xmlns:components=	"widgets.Identify.components.*"
+				   creationComplete=	"creationCompleteHandler(event)"
+				   widgetConfigLoaded=	"widgetConfigLoadedHandler(event)"
+				   initialize=			"basewidget_initializeHandler(event)" >
+
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.FeatureSet;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.ImageServiceIdentifyEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISImageServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.ArcIMSMapServiceLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.supportClasses.AllDetails;
+			import com.esri.ags.layers.supportClasses.Field;
+			import com.esri.ags.layers.supportClasses.LayerDetails;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.symbols.FillSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.IdentifyTask;
+			import com.esri.ags.tasks.ImageServiceIdentifyTask;
+			import com.esri.ags.tasks.QueryTask;
+			import com.esri.ags.tasks.supportClasses.IdentifyParameters;
+			import com.esri.ags.tasks.supportClasses.IdentifyResult;
+			import com.esri.ags.tasks.supportClasses.ImageServiceIdentifyParameters;
+			import com.esri.ags.tasks.supportClasses.ImageServiceIdentifyResult;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			import com.esri.ags.tasks.supportClasses.Query;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.ags.tools.NavigationTool;
+			import com.esri.ags.utils.WebMercatorUtil;
+			import com.esri.viewer.AppEvent;
+			
+			import flash.events.KeyboardEvent;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.graphics.GradientBase;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.UIDUtil;
+			
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			import spark.primitives.supportClasses.FilledElement;
+			
+			import widgets.Identify.components.IdentifyFeatureInspector;
+			import widgets.Identify.components.supportClasses.IdentifyFeature;
+			import widgets.Identify.skins.IdentifyWidgetIdentifyToolToggleButtonSkin;
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.MapUtil;
+
+			
+			/* --------------------------------------------------------------------
+			Widget constants
+			-------------------------------------------------------------------- */
+			
+			// Geographic coordinate WKID
+			private const EPSG_GEOGRAPHIC:Number = 4326;
+			
+			// Icon location constants
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/Identify/assets/images/";
+
+			
+			/* --------------------------------------------------------------------
+			Widget variables
+			-------------------------------------------------------------------- */
+			
+			[Bindable]
+			[Embed(source="widgets/Identify/assets/cursors/p_info.png")]
+			private var infoIcon:Class;
+			private var cursorID:int;
+			
+			private var dispatched_DeactivateDrawTool:Boolean = false
+			
+			private var _drawStartPt:MapPoint;
+			private var _drawEndPt:MapPoint;
+			private var _drawToolActive:Boolean = false;
+			
+			private var _lastID:String;
+			private var _idTaskCount:int = 0;
+			private var _idResultCount:int = 0;
+			
+			private var _idTolerance:int = 3;
+			
+			[Bindable]
+			private var _graphicsLayer:GraphicsLayer;
+			
+			[Bindable]
+			private var _drawnGraphicsLayer:GraphicsLayer;
+			
+			private var _disablePanZoomNavigationWidget:Boolean;
+			
+			private var _results:ArrayCollection = new ArrayCollection();
+			private var _activeFeature:IdentifyFeature;
+						
+			private var _inspectorWidth:Number;
+			private var _inspectorHeight:Number;
+			
+			[Bindable]
+			private var _layerCache:ArrayCollection =  new ArrayCollection();
+			
+			private var _lastNavigationTool:String = "";
+			
+			[Bindable]
+			private var _dateFormatPattern:String = "EEEE, MMMM dd, yyyy h:mm:ss a";
+
+			// Labels
+			private var _helpLabel:String;
+
+			// Help file URL 
+			private var _helpLocation:String;
+
+			
+			/* --------------------------------------------------------------------
+			Widget functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the widget componet is initialised
+			 */
+			protected function basewidget_initializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}
+			
+			/**
+			 * Called when the widget closes.
+			 */ 
+			protected function wTemplate_closedHandler(event:Event):void
+			{
+				// Disable the select tool
+				if (identifyToolToggleButton.selected)
+				{
+					identifyToolToggleButton.selected = false;	
+				}
+				
+				// remove the event listeners
+				widgetRemoveEventListeners()
+			}
+			
+			/**
+			 * Called when the widget opens.
+			 */ 
+			protected function wTemplate_openHandler(event:Event):void
+			{
+				// Add the event listeners
+				widgetAddEventListeners();
+			}
+			
+			/** 
+			 * Called when the widget object has beem created
+			 */ 
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				// Add the event listeners
+				widgetAddEventListeners();
+			}
+			
+			/**
+			 * Called when the widget config  has complted loading.
+			 */
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				// Hide map infowindow if any
+				map.infoWindow.hide();
+				
+				if (configXML)
+				{
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Create graphics layer for map
+					var graphicsLayerName:String = configXML.graphicsLayerName || "IdentifyResultGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "Identify Result Graphics";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName,map,graphicsLayerAlias);
+					
+					// Check for drawn graphics in the map
+					var drawnGraphicsLayerName:String = configXML.drawnGraphicsLayerName;
+					if (drawnGraphicsLayerName)
+					{
+						var drawnGraphicsLayerAlias:String = configXML.drawnGraphicsLayerName.@alias;
+						_drawnGraphicsLayer = MapUtil.checkGraphicLayer(drawnGraphicsLayerName,map,drawnGraphicsLayerAlias);
+						
+						// Set the drawn graphics layer property of the results inpsector
+						inspector.drawnGraphicsLayer = _drawnGraphicsLayer;
+					}
+					
+					// Get the graphic inspector properties
+					inspector.map = map;
+					inspector.graphicsLayer = _graphicsLayer;
+					inspector.showSendButton = configXML.allowSearchPropagation == "true";
+					
+					// Set the format properties
+					if (configXML.formats.date )
+					{
+						_dateFormatPattern = configXML.formats.date;
+					}
+					
+					// Set the search widget name
+					var searchWidgetName:String = configXML.searchWidgetName;
+					if (searchWidgetName != "")
+					{
+						inspector.searchWidgetName = searchWidgetName;
+					}
+					
+					// Load the label settings
+					_helpLabel = configXML.labels.helplabel || "Help";
+					
+					// Add show help item
+					_helpLocation = configXML.helplocationurl;
+					if (_helpLocation != "")
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+					}					
+				}
+				
+				// Check if there are any op layers
+				updateLayerCache(getCurrentOperationalLayers());
+				
+				// Add listeners for shared data amd navigation tool changes
+				AppEvent.addListener(AppEvent.DATA_PUBLISH, sharedDataUpdated);
+				AppEvent.addListener(AppEvent.SET_MAP_NAVIGATION, sharedNavigationChange);
+				
+				// Add listeners for layer changes;
+				if (map)
+				{
+					map.addEventListener(MapEvent.LAYER_ADD, onLayerAdd, false, 0, true);
+					map.addEventListener(MapEvent.LAYER_REMOVE, onLayerRemove, false, 0, true);
+					map.addEventListener(MapEvent.LAYER_REMOVE_ALL, onLayerRemoveAll, false, 0, true);
+				}
+			}
+			
+			
+			/* --------------------------------------------------------------------
+			Widget functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Opens the help file assoicated with this widget.
+			 */
+			private function showHelp():void
+			{
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_helpLocation),"_blank");
+			}
+
+			/**
+			 * Registers the new map layer in the layer cache.
+			 */
+			private function onLayerAdd(event:MapEvent):void
+			{
+				var layer:Layer = event.layer;
+				if (!(layer is GraphicsLayer) || layer is FeatureLayer)
+				{
+					generateLayerCache(layer);
+				}
+			}
+			
+			/**
+			 * Removes the layer cache object(s) associated with removed layer.
+			 */
+			private function onLayerRemove(event:MapEvent):void
+			{
+				// Find the layer in the cache
+				var layer:Layer = event.layer;
+				
+				if (!(layer is GraphicsLayer) || layer is FeatureLayer)
+				{
+					var url:String;
+					var layertype:String;
+					
+					if (layer is ArcGISDynamicMapServiceLayer)
+					{
+						var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+						url = dLayer.url;
+						layertype = 'ArcGISDynamicMapServiceLayer';
+					}
+					
+					if (layer is ArcGISTiledMapServiceLayer)
+					{
+						var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+						url = tLayer.url;
+						layertype = 'ArcGISTiledMapServiceLayer';
+					}
+					
+					if (layer is FeatureLayer)
+					{
+						var fLayer:FeatureLayer = FeatureLayer(layer);
+						if (fLayer.url) 
+						{
+							url = fLayer.url;
+							layertype = 'FeatureLayer';
+						}
+						else 						
+						{
+							url = fLayer.id;
+							layertype = 'FeatureCollection';
+						}
+					}
+					
+					if (layer is ArcGISImageServiceLayer)
+					{
+						var iLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+						url = iLayer.url;
+						layertype = 'ArcGISImageServiceLayer';
+					}
+					
+					// Remove the layer deyails
+					removeCacheDetails(url,layertype);
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+			}
+			
+			/**
+			 * Clears the all the layer cache objects.
+			 */
+			private function onLayerRemoveAll(event:MapEvent):void
+			{
+				// Clear the cache
+				_layerCache.removeAll();
+				
+				// Refresh the layer list
+				populateLayerList();
+			}
+			
+			/**
+			 * Updates the cache of layer settings related to all the operational layers currently in the map.
+			 */
+			private function updateLayerCache(layers:Array):void
+			{
+				if (layers)
+				{
+					// Iterate through the layer list
+					for each (var layer:Layer in layers)
+					{
+						generateLayerCache(layer);
+					}
+				}					
+			}
+			
+			/**
+			 * Updates the cache of layer settings related to the specified layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layer [Layer]: </i>Layer to be used to generate the cache object.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function generateLayerCache(layer:Layer):void
+			{
+				if (layer && layer.name.indexOf("hiddenLayer_") == -1)
+				{
+					// Check if the layer has loaded
+					if (!layer.loaded)
+					{
+						layer.addEventListener(LayerEvent.LOAD,function (event:LayerEvent):void {generateLayerCache(event.layer);});
+						return;
+					}
+					
+					var layerUrl:String;
+					var layerXML:XMLList;
+					
+					if (layer is ArcGISDynamicMapServiceLayer)
+					{
+						var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+						
+						// Check that the layer is queryable
+						if (dLayer.loaded && dLayer.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = dLayer.url;
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl,'ArcGISDynamicMapServiceLayer'))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = configXML.mapLayers.mapLayer.(@url == layerUrl);
+								
+								// Populate the layer objects for the map service
+								dLayer.getAllDetails(new AsyncResponder(populateDynamicDetails,detailsFault,{layer:dLayer, xml:layerXML }));
+							}
+						}
+					}
+					
+					if (layer is ArcGISTiledMapServiceLayer)
+					{
+						var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+						
+						// Check that the layer is queryable
+						if (tLayer.loaded && tLayer.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = tLayer.url;
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl,'ArcGISTiledMapServiceLayer'))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = configXML.mapLayers.mapLayer.(@url == layerUrl);
+								
+								// Populate the layer objects for the map service
+								tLayer.getAllDetails(new AsyncResponder(populateTiledDetails,detailsFault,{layer:tLayer, xml:layerXML }));
+							}
+						}
+					}
+					
+					if (layer is FeatureLayer)
+					{
+						var fLayer:FeatureLayer = FeatureLayer(layer);
+						
+						// Check that the layer is queryable
+						if (fLayer.url && 
+							fLayer.layerDetails.capabilities &&
+							fLayer.layerDetails.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = fLayer.url;
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl,'FeatureLayer'))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = configXML.mapLayers.mapLayer.(@url == layerUrl);
+								
+								// Populate the layer objects for the map service
+								populateFeatureDetails(fLayer, layerXML);
+							}
+						}
+						else
+						{
+							if (!checkforLayerInCache(fLayer.id,"FeatureCollection"))
+							{
+								populateFeatureCollectionDetails(fLayer);
+							}				
+						}
+					}
+					
+					if (layer is ArcGISImageServiceLayer)
+					{
+						var iLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+						layerUrl = iLayer.url;
+						
+						// Check if layer details are already in cache
+						if (!checkforLayerInCache(layerUrl,'ArcGISImageServiceLayer'))
+						{
+							// Check for details in the config specific to these layers
+							layerXML = configXML.mapLayers.mapLayer.(@url == layerUrl);
+							
+							// Populate the layer objects for the map service
+							populateImageServiceDetails(iLayer);
+						}
+					}
+				}
+				
+				// Generates the settings object for a dynamic layer				
+				function populateDynamicDetails(details:AllDetails, token:Object = null):void
+				{
+					var layer:ArcGISDynamicMapServiceLayer = token.layer as ArcGISDynamicMapServiceLayer;
+					
+					var info:LayerInfo;
+					
+					// Populate the default layer ids
+					var includedIDs:Array = [];
+					for each (info in layer.layerInfos)
+					{
+						if (info.subLayerIds == null)
+						{
+							includedIDs.push(info.layerId);
+						}
+					}
+					
+					// Check the xml for configured layer id's
+					var layerXML:XMLList = token.xml;
+					if (layerXML.length() > 0)
+					{
+						var id:String;
+						if (layerXML[0].idLayers[0].@type == 'include' && layerXML[0].idLayers[0] != 'all')
+						{
+							includedIDs = [];
+							for each (id in layerXML[0].idLayers[0].split(","))
+							{
+								includedIDs.push(Number(id));	
+							}
+						} 
+						else if (layerXML[0].idLayers[0].@type == 'exclude' )
+						{
+							// Check if exclude should be all features
+							if (layerXML[0].idLayers[0] == 'all')
+							{
+								includedIDs = [];
+							}
+							else
+							{
+								// Iterate throught list and make sure it contains the correct values
+								var excludeIDs:Array = layerXML[0].idLayers[0].toString().split(",");
+								for each (id in excludeIDs)
+								{
+									var index:int = includedIDs.indexOf(Number(id));
+									if (index >= 0)
+									{
+										includedIDs.splice(index,1);
+									}
+								}
+							}
+						}
+					}
+					
+					// Iterate through the layer infos for each layer in the dynamic map service
+					for each (info in layer.layerInfos)
+					{
+						// Check that layer is in the included list
+						if (includedIDs.indexOf(info.layerId) >= 0)
+						{
+							var layerObj:Object = { layertype:'ArcGISDynamicMapServiceLayer' };
+							layerObj.info = info;
+							layerObj.name = info.name;
+							layerObj.url = layer.url;
+							layerObj.layerID = info.layerId;
+							
+							if (layer.proxyURL)
+								layerObj.proxy = layer.proxyURL;
+							
+							if (layer.token)
+								layerObj.token = layer.token;
+							
+							for each (var layerDetail:LayerDetails in details.layersDetails)
+							{
+								if (layerDetail.name == info.name)
+								{
+									layerObj.details = layerDetail;
+									break;
+								}
+							}
+							
+							// Check for field link and image setting
+							layerObj.fields = "";
+							layerObj.links = [];
+							layerObj.sort = null;
+							layerObj.image = null;
+							if (layerXML && layerXML.length() > 0)
+							{
+								// Populate the summary fields attribute
+								var fields:XMLList = layerXML[0].layerSummaryFields.layer.(@id == info.layerId);
+								if (fields.length() > 0)
+								{
+									layerObj.fields = fields[0];	
+								}
+								
+								// Populate the hyperlinks list
+								var links:XMLList = layerXML[0].layerLinks.layer.(@id == info.layerId);
+								if (links.length() > 0)
+								{
+									for each (var link:XML in links)
+									{
+										var linkObj:Object = { url:link.toString(), linkfield:link.@linkField.toString(), label:link.@linkButtonLabel.toString()};
+										layerObj.links.push(linkObj);
+									}
+								}
+								
+								var images:XMLList = layerXML[0].imageLinks.layer.(@id == info.layerId);
+								if (images.length() > 0)
+								{
+									layerObj.image = { url:images[0].toString(), linkfield:images[0].@linkField.toString() };
+								}
+							}
+							
+							// Add the layer details to the cache
+							_layerCache.addItem(layerObj);
+						}
+					}
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+				
+				function populateTiledDetails(details:AllDetails, token:Object = null):void
+				{
+					var layer:ArcGISTiledMapServiceLayer = token.layer as ArcGISTiledMapServiceLayer;
+					
+					var info:LayerInfo;
+					
+					// Populate the default layer ids
+					var includedIDs:Array = [];
+					for each (info in layer.layerInfos)
+					{
+						if (info.subLayerIds == null)
+						{
+							includedIDs.push(info.layerId);
+						}
+					}
+					
+					// Check the xml for configured layer id's
+					var layerXML:XMLList = token.xml;
+					if (layerXML.length() > 0)
+					{
+						var id:String;
+						if (layerXML[0].idLayers[0].@type == 'include' && layerXML[0].idLayers[0] != 'all')
+						{
+							includedIDs = [];
+							for each (id in layerXML[0].idLayers[0].split(","))
+							{
+								includedIDs.push(Number(id));	
+							}
+						} 
+						else if (layerXML[0].idLayers[0].@type == 'exclude' )
+						{
+							// Check if exclude should be all features
+							if (layerXML[0].idLayers[0] == 'all')
+							{
+								includedIDs = [];
+							}
+							else
+							{
+								// Iterate throught list and make sure it contains the correct values
+								var excludeIDs:Array = layerXML[0].idLayers[0].toString().split(",");
+								for each (id in excludeIDs)
+								{
+									var index:int = includedIDs.indexOf(Number(id));
+									if (index >= 0)
+									{
+										includedIDs.splice(index,1);
+									}
+								}
+							}
+						}
+					}
+					
+					// Iterate through the layer infos for each layer in the dynamic map service
+					for each (info in layer.layerInfos)
+					{
+						// Check that layer is in the included list
+						if (includedIDs.indexOf(info.layerId) >= 0)
+						{
+							var layerObj:Object = { layertype:'ArcGISTiledMapServiceLayer' };
+							layerObj.info = info;
+							layerObj.name = info.name;
+							layerObj.url = layer.url;
+							layerObj.layerID = info.layerId;
+							
+							if (layer.proxyURL)
+								layerObj.proxy = layer.proxyURL;
+							
+							if (layer.token)
+								layerObj.token = layer.token;
+							
+							for each (var layerDetail:LayerDetails in details.layersDetails)
+							{
+								if (layerDetail.name == info.name)
+								{
+									layerObj.details = layerDetail;
+									break;
+								}
+							}
+							
+							// Check for field, link, sort and image settings
+							layerObj.fields = "";
+							layerObj.links = [];
+							layerObj.sort = null;
+							layerObj.image = null;
+							if (layerXML && layerXML.length() > 0)
+							{
+								// Populate the summary fields attribute
+								var fields:XMLList = layerXML[0].layerSummaryFields.layer.(@id == info.layerId);
+								if (fields.length() > 0)
+								{
+									layerObj.fields = fields[0];	
+								}
+								
+								// Populate the hyperlinks list
+								var links:XMLList = layerXML[0].layerLinks.layer.(@id == info.layerId);
+								if (links.length() > 0)
+								{
+									for each (var link:XML in links)
+									{
+										var linkObj:Object = { url:link.toString(), linkfield:link.@linkField.toString(), label:link.@linkButtonLabel.toString() };
+										layerObj.links.push(linkObj);
+									}
+								}
+								
+								// Populate the image attribute
+								var images:XMLList = layerXML[0].imageLinks.layer.(@id == info.layerId);
+								if (images.length() > 0)
+								{
+									layerObj.image = { url:images[0].toString(), linkfield:images[0].@linkField.toString() };
+								}
+							}
+							
+							// Add the layer details to the cache
+							_layerCache.addItem(layerObj);
+						}
+					}
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+				
+				function populateFeatureDetails(layer:FeatureLayer, layerXML:XMLList = null):void
+				{
+					if (layer.url)
+					{
+						var layerObj:Object = { layertype:'FeatureLayer' };
+						layerObj.layer = layer;
+						layerObj.name = layer.name;
+						
+						var ftObject:Object = splitServiceUrl(layer.url);
+						
+						layerObj.url = layer.url;
+						layerObj.layerID = ftObject.layerID;
+						
+						layerObj.details = layer.layerDetails;
+						
+						if (layer.proxyURL)
+							layerObj.proxy = layer.proxyURL;
+						
+						if (layer.token)
+							layerObj.token = layer.token;
+						
+						// Check for field link and image setting
+						layerObj.fields = "";
+						layerObj.links = [];
+						layerObj.sort = null;
+						layerObj.image = null;
+						if (layerXML && layerXML.length() > 0)
+						{
+							// Populate the summary fields attribute
+							var fields:XMLList = layerXML[0].layerSummaryFields.layer.(@id == ftObject.layerID);
+							if (fields.length() > 0)
+							{
+								layerObj.fields = fields[0];	
+							}
+							
+							// Populate the hyperlinks list
+							var links:XMLList = layerXML[0].layerLinks.layer.(@id == ftObject.layerID);
+							if (links.length() > 0)
+							{
+								for each (var link:XML in links)
+								{
+									var linkObj:Object = { url:link.toString(), linkfield:link.@linkField.toString(), label:link.@linkButtonLabel.toString() };
+									layerObj.links.push(linkObj);
+								}
+							}
+							
+							var images:XMLList = layerXML[0].imageLinks.layer.(@id == info.layerId);
+							if (images.length() > 0)
+							{
+								layerObj.image = { url:images[0].toString(), linkfield:images[0].@linkField.toString() };
+							}
+						}
+						
+						// Add the layer details to the cache
+						_layerCache.addItem(layerObj);
+						
+						// Refresh the layer list
+						populateLayerList();
+					}
+				}
+				
+				function populateFeatureCollectionDetails(layer:FeatureLayer):void
+				{
+					var layerObj:Object = { layertype:'FeatureCollection' };
+					layerObj.layer = layer;
+					layerObj.name = layer.name;
+					
+					// Add the layer id to uniquely ID this layer in the cahce since it doesn't have a url
+					layerObj.id = layer.id;
+					
+					layerObj.details = layer.layerDetails;
+					
+					// Check for field link and image setting
+					layerObj.fields = "";
+					layerObj.links = [];
+					layerObj.sort = null;
+					layerObj.image = null;
+					
+					// Add the layer details to the cache
+					_layerCache.addItem(layerObj);
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+
+				
+				function populateImageServiceDetails(layer:ArcGISImageServiceLayer):void
+				{
+					var layerObj:Object = { layertype:'ArcGISImageServiceLayer' };
+					layerObj.layer = layer;
+					layerObj.name = layer.name;
+					layerObj.url = layer.url;
+					
+					// Add a fake layer id placeholder
+					layerObj.layerID = 0;
+					
+					if (layer.proxyURL)
+						layerObj.proxy = layer.proxyURL;
+					
+					if (layer.token)
+						layerObj.token = layer.token;
+					
+					layerObj.fields = "";
+					layerObj.links = [];
+					layerObj.sort = null;
+					layerObj.image = null;
+					
+					// Add the layer details to the cache
+					_layerCache.addItem(layerObj);
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+				
+				function detailsFault(error:Object, layer:Object = null):void
+				{
+					Alert.show(error.toString());
+				}
+				
+				function checkforLayerInCache(url:String, layertype:String):Boolean
+				{
+					var found:Boolean = false;
+					
+					for each (var layer:Object in _layerCache)
+					{
+						if (layer.layertype == "FeatureCollection")
+						{
+							// Use the layer ID as the feature collections don't have URLS
+							if (layer.id == url && layer.layertype == layertype)
+							{
+								found = true;
+								break;
+							}
+						}
+						else
+						{
+							if (layer.url == url && layer.layertype == layertype)
+							{
+								found = true;
+								break;
+							}
+						}
+					}
+					
+					return found;
+				}
+			}
+			
+			/**
+			 * Updates the list of layers shown in the layers dropdown list
+			 */
+			private function populateLayerList():void
+			{
+				var ac:ArrayCollection = new ArrayCollection();
+				
+				// Add default objects
+				var visObj:Object = {
+					name:'Visible Layers',
+					url:''
+				};
+				ac.addItem(visObj);
+				
+				var allObj:Object = {
+					name:'All Layers',
+					url:''
+				};
+				ac.addItem(allObj);
+				
+				for each (var obj:Object in _layerCache)
+				{
+					ac.addItem(obj);
+				}
+				
+				opLayersDropdown.dataProvider = ac;
+				opLayersDropdown.labelField = "name";
+				opLayersDropdown.selectedIndex = -1;
+				opLayersDropdown.selectedIndex = 0;
+			}
+			
+
+			/* --------------------------------------------------------------
+			GENERAL WIDGET FUNCTIONS
+			-------------------------------------------------------------  */
+
+			/**
+			 * Called when request operation layers action returns a result.
+			 */
+			private function getOpLayers(event:AppEvent):void
+			{
+				if (event.data && event.data.length > 0)
+				{
+					updateLayerCache(event.data as Array);
+				}
+			}
+			
+			/**
+			 * Returns an array of the non-basemap layers currently in the map. 
+			 */ 
+			public function getCurrentOperationalLayers(includeGraphicsLayers:Boolean = false):Array
+			{
+				var layers:Array = [];
+				var basemaps:Array = [];
+				
+				// Get the list of basemap layers
+				for each (var basemap:Object in configData.basemaps)
+				{
+					basemaps.push(basemap.label);
+				}
+				
+				// Check the current list of non-basemap layers
+				for each (var layer:Layer in map.layers)
+				{
+					if (basemaps.indexOf(layer.id) == -1 && basemaps.indexOf(layer.name) == -1)
+					{
+						layers.push(layer);
+					}
+				}
+				
+				return layers; 
+			}			
+			
+			/**
+			 * Called when the shared data update is published by other components in the viewer.
+			 */
+			private function sharedDataUpdated(event:AppEvent):void
+			{
+				var data:Object = event.data;
+				
+				if (data.key == "Deactivate_DrawTool")
+				{
+					if (identifyToolToggleButton.selected && !dispatched_DeactivateDrawTool)
+					{
+						identifyToolToggleButton.selected = false;
+						deactivateIDTool();
+					}
+					else if (identifyToolToggleButton.selected && dispatched_DeactivateDrawTool)
+					{
+						dispatched_DeactivateDrawTool = false;
+					}
+				}
+			}
+			
+			/**
+			 * Called when the navigation tools are activated.
+			 */
+			private function sharedNavigationChange(event:AppEvent):void
+			{
+				if (_drawToolActive)
+				{
+					identifyToolToggleButton.selected = false;
+					deactivateIDTool();
+				}
+			}
+
+			/**
+			 * Retrieves the configuration details from the layer cache for the given layer connection details
+			 */
+			private function getCacheDetails(url:String, layerID:int):Object
+			{
+				var cacheObject:Object;
+				
+				for each (var layer:Object in _layerCache)
+				{
+					if (layer.layertype == "FeatureCollection")
+					{
+						if (layer.id == url)
+						{
+							cacheObject = layer;
+							break;
+						}					}
+					else 
+					{
+						if (layer.url == url && layer.layerID == layerID)
+						{
+							cacheObject = layer;
+							break;
+						}
+					}
+				}
+				return cacheObject;
+			}
+			
+			/**
+			 * Removes the given map service details from the layer cache. 
+			 */
+			private function removeCacheDetails(url:String, layertype:String):void
+			{
+				// Iterate through the each of the aach objects and check if it has the correct url and layer type
+				for (var i:int = _layerCache.length - 1; i > -1; i--)
+				{
+					var layer:Object = _layerCache.getItemAt(i);
+					if (layertype == "FeatureCollection")
+					{
+						// There is no URL for a featurecollection, so use the ID instead
+						if (layer.id == url && layer.layertype == layertype)
+						{
+							_layerCache.removeItemAt(i);
+						}
+					}
+					else 
+					{
+						if (layer.url == url && layer.layertype == layertype)
+						{
+							_layerCache.removeItemAt(i);
+						}
+					}
+				}
+			}
+			
+			/* Identify action fucntions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the identify tool toggle button is clicked.
+			 */
+			protected function identifyToolToggleButton_changeHandler(event:Event):void
+			{
+				//var skn:IdentifyWidgetIdentifyToolToggleButtonSkin = identifyToolToggleButton.skin as IdentifyWidgetIdentifyToolToggleButtonSkin;
+				if (identifyToolToggleButton.selected)
+				{
+					// Activate the identify tool
+					activateIDTool();
+				} 
+				else 
+				{
+					// Deactivate the tool
+					deactivateIDTool();
+				}		
+			}
+			
+			/**
+			 * Called when the identify tool toggle button is toggled off, another widget calls the
+			 * draw tool, or the user presses the escape key.  Deactivates the identify tool and 
+			 * switches the map back into navigation mode.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>navTool [String] (optional): </i>Navigation tool to make active.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function deactivateIDTool(navTool:String = NavigationTool.PAN):void
+			{
+				// Deactivate the draw tool to stop the identify process
+				drawTool.deactivate();
+				_drawToolActive = false;
+				
+				// Reactivate map navigation - trick navigation into being enabled 
+				_disablePanZoomNavigationWidget = false;
+				addSharedData("Edit_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				setMapNavigation(NavigationTool.PAN,getDefaultString("panLabel"));
+			}
+			
+			/**
+			 * Called when the user clicks the identify tool toggle button.  Activates the Idnetify tool so that
+			 * the user can start drawing an area of interest.
+			 */
+			private function activateIDTool():void
+			{
+				// Dispatch a deactivate draw too message
+				dispatched_DeactivateDrawTool = true;
+				addSharedData("Deactivate_DrawTool", null); // to be able to deactivate drawTool on other widgets
+				
+				// Trick navigation into being disabled 
+				_disablePanZoomNavigationWidget = true;
+				addSharedData("Edit_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				
+				// Activate the draw tool to start the identify process
+				drawTool.activate(DrawTool.EXTENT);	
+				_drawToolActive = true;
+				
+				// Change the current viewer status message
+				AppEvent.setStatus("Identify Features");
+			}
+			
+			/**
+			 * Called when the drawTool draw action first starts. Records the initial position of the mouse
+			 * which is to determine whether the user has drawn an extent or done a point click.  
+			 */
+			protected function drawTool_drawStartHandler(event:DrawEvent):void
+			{
+				// Set the start draw position
+				_drawStartPt = map.toMapFromStage(map.mouseX, map.mouseY);
+			}
+			
+			/**
+			 * Called when the drawTool draw action is completed. Compares the final position of the mouse
+			 * to the initial position.  If they coincide, the assumption is the user has clicked a point
+			 * rather than drawn an extent.  The identify action is then called, passing the drawn geometry
+			 * as the search geometry.   
+			 */			
+			protected function drawTool_drawEndHandler(event:DrawEvent):void
+			{
+				// Set the end draw position
+				_drawEndPt = map.toMapFromStage(map.mouseX, map.mouseY);
+				
+				var geo:Geometry;
+				
+				// Check if an extent was drawn or a point
+				if (event.graphic && event.graphic.geometry)
+				{
+					if (_drawEndPt.x == _drawStartPt.x && _drawEndPt.y == _drawStartPt.y)
+					{
+						geo = event.graphic.geometry.extent.center;	
+					}
+					else
+					{
+						geo = event.graphic.geometry;	
+					}
+				}
+				else
+				{
+					// Get mouse position as point
+					geo = _drawEndPt;
+				}
+				
+				// Start identification process
+				startIdentify(geo);
+			}
+			
+			/**
+			 * Called to start the identify action.  Clears the previous search results
+			 * and then determines the kind of serach (visible layers, all layers, or a 
+			 * specific layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>geometry [Geometry]: </i>Geometry to use as the identification shape.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function startIdentify(geometry:Geometry):void
+			{
+				// Create a unique identifier
+				var guid:String = UIDUtil.createUID();
+				
+				// Reset the task and result count 
+				_idTaskCount = 0;
+				_idResultCount = 0;
+				
+				var layerObj:Object;
+				
+				// Clear the inspector
+				inspector.clearResults();
+				
+				// Add close listener to popup
+				map.infoWindow.addEventListener(Event.CLOSE,popupClosed);
+				map.infoWindow.label = "Identify Features";
+				
+				var info:LayerInfo;
+				var id:int;
+				var layer:Layer;
+				var i:int;
+				
+				// Get the current selection target
+				switch(opLayersDropdown.selectedItem.name)
+				{
+					case "Visible Layers":
+					{
+						for each (layer in map.layers)
+						{
+							// Check if layer visible
+							if (layer.visible)
+							{
+								var vislyrObject:Object = null;
+								var visLayers:ArrayCollection = new ArrayCollection();
+								
+								// Check type of layer
+								if (layer is ArcGISDynamicMapServiceLayer )
+								{
+									// Check for visible sublayers
+									var dynLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+									if (dynLayer.visibleLayers.length > 0)
+									{
+										for (i = 0; i < dynLayer.visibleLayers.length; i++)
+										{
+											id = int(dynLayer.visibleLayers.getItemAt(i));
+											
+											// Check scale range
+											for each (info in dynLayer.layerInfos)
+											{
+												if (info.layerId == id)
+												{
+													// Check if layer has been excluded or is out of display scale
+													if (inDisplayScale(info) && getCacheDetails(dynLayer.url,id))
+													{
+														visLayers.addItem(id);	
+														break;
+													}
+												}
+											}
+										}
+										
+										// Final check for visible layers
+										if (visLayers.length > 0)
+										{
+											// Create the settings object to use
+											vislyrObject = {
+												layertype:"Group",
+												url:dynLayer.url,
+												layerIDs:visLayers
+											};
+										}
+									}
+								}
+								
+								if (layer is ArcGISTiledMapServiceLayer)
+								{
+									// Check for visible sublayers
+									var tilLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+									if (tilLayer.layerInfos.length > 0)
+									{
+										// Check scale range
+										for each (info in tilLayer.layerInfos)
+										{
+											// Check if layer has been excluded or is out of display scale
+											if (inDisplayScale(info) && getCacheDetails(tilLayer.url,info.layerId))
+											{
+												visLayers.addItem(info.layerId);	
+											}
+										}
+										
+										// Final check for visible layers
+										if (visLayers.length > 0)
+										{
+											// Create the settings object to use
+											vislyrObject = {
+												layertype:"Group",
+												url:tilLayer.url,
+												layerIDs:visLayers
+											};
+										}
+									}									
+								}
+								
+								if (layer is FeatureLayer)
+								{
+									var ftLayer:FeatureLayer = FeatureLayer(layer);
+									if (ftLayer.url)
+									{
+										/// Get service url and layer id
+										var ftService:Object = splitServiceUrl(ftLayer.url);
+										if (ftService.layerID)
+										{
+											// Check scale range
+											if (inDisplayScale(ftLayer) && getCacheDetails(ftLayer.url, ftService.layerID))
+											{
+												// Create the settings object to use
+												vislyrObject = getCacheDetails(ftLayer.url, ftService.layerID);
+											}
+										}
+									}
+									else
+									{
+										
+										// Check scale range
+										if (inDisplayScale(ftLayer) && getCacheDetails(ftLayer.id, 0))
+										{
+											// Create the settings object to use
+											vislyrObject = getCacheDetails(ftLayer.id, 0);
+										}
+									}
+								}
+								
+								if (layer is ArcGISImageServiceLayer)
+								{
+									var imLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+									
+									// Check scale range
+									if (inDisplayScale(imLayer) && getCacheDetails(imLayer.url,0))
+									{
+										// Create the settings object to use
+										vislyrObject = getCacheDetails(imLayer.url,0);
+									}
+								}
+								
+								// Execute the ID if a valid object has been created
+								if (vislyrObject)
+								{
+									if (layer is ArcGISImageServiceLayer)
+									{
+										// Execute the identify task
+										executeImageIdentify(vislyrObject,geometry,guid);
+									}
+									else
+									{
+										// Execute the identify task
+										executeIdentify(vislyrObject,geometry,guid);
+									}
+								}
+							}
+						}
+						
+						break;
+					}
+						
+					case "All Layers":
+					{
+						for each (layer in map.layers)
+						{
+							var alllyrObject:Object = null;
+							var allLayers:ArrayCollection = new ArrayCollection();
+							
+							// Check type of layer
+							if (layer is ArcGISDynamicMapServiceLayer )
+							{
+								// Check for visible sublayers
+								var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+								for each (info in dLayer.layerInfos)
+								{
+									if (getCacheDetails(dLayer.url,info.layerId))
+									{
+										allLayers.addItem(info.layerId);	
+									}
+								}
+								
+								if (allLayers.length > 0)
+								{
+									// Create the settings object to use
+									alllyrObject = {
+										layertype:"Group",
+										url:dLayer.url,
+										layerIDs:allLayers,
+										proxy:dLayer.proxyURL,
+										token:dLayer.token
+									};
+								}
+							}
+							
+							if (layer is ArcGISTiledMapServiceLayer)
+							{
+								// Check for visible sublayers
+								var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+								for each (info in tLayer.layerInfos)
+								{
+									if (getCacheDetails(tLayer.url,info.layerId))
+									{
+										allLayers.addItem(info.layerId);	
+									}
+								}
+								
+								// Final check for visible layers
+								if (allLayers.length > 0)
+								{
+									// Create the settings object to use
+									alllyrObject = {
+										layertype:"Group",
+										url:tLayer.url,
+										layerIDs:allLayers,
+										proxy:tLayer.proxyURL,
+										token:tLayer.token
+									};
+								}									
+							}
+							
+							if (layer is FeatureLayer)
+							{
+								var fLayer:FeatureLayer = FeatureLayer(layer);
+								if (fLayer.url)
+								{
+									/// Get service url and layer id
+									var fService:Object = splitServiceUrl(fLayer.url);
+									if (fService.layerID)
+									{
+										// Check scale range
+										if (getCacheDetails(fLayer.url,fService.layerID))
+										{
+											// Create the settings object to use
+											alllyrObject = getCacheDetails(fLayer.url,fService.layerID);
+										}
+									}
+								}
+								else
+								{
+									// Possible feature collection - check chache using the layers id
+									if (getCacheDetails(fLayer.id,0))
+									{
+										// Create the settings object to use
+										alllyrObject = getCacheDetails(fLayer.id,0);
+									}
+								}
+							}
+							
+							if (layer is ArcGISImageServiceLayer)
+							{
+								var iLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+								
+								// Check scale range
+								if (getCacheDetails(iLayer.url,0))
+								{
+									// Create the settings object to use
+									alllyrObject = getCacheDetails(iLayer.url,0);
+								}
+							}
+							
+							// Execute the ID if a valid object has been created
+							if (alllyrObject)
+							{
+								if (layer is ArcGISImageServiceLayer)
+								{
+									// Execute the identify task
+									executeImageIdentify(alllyrObject,geometry,guid);
+								}
+								else
+								{
+									// Execute the identify task
+									executeIdentify(alllyrObject,geometry,guid);
+								}
+							}
+						}
+						
+						break;
+					}
+						
+					default:
+					{
+						layerObj = opLayersDropdown.selectedItem;
+						if (layerObj)
+						{
+							// Select the layer type							
+							switch (layerObj.layertype)
+							{
+								case 'ArcGISDynamicMapServiceLayer':
+								case 'ArcGISTiledMapServiceLayer':
+								case 'FeatureLayer':
+								case 'FeatureCollection':
+								{
+									// Execute the identify task
+									executeIdentify(layerObj,geometry,guid);
+									break;
+								}
+									
+								case 'ArcGISImageServiceLayer':
+								{
+									// Execute the identify task
+									executeImageIdentify(layerObj,geometry,guid);
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			/**
+			 * Calls the identify task for a specific map service and search set. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerObj [Object]: </i>Layer settings object for the layer being searched.</li>
+			 * <li><i>geometry [Geometry]: </i>Geometry to use as the identification shape.</li>
+			 * <li><i>guid [String]: </i>Unique identifier being used for this search.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function executeIdentify(layerObj:Object, geometry:Geometry, guid:String):void
+			{
+				// Show working message
+				var extent:Extent;
+				var pt:MapPoint;
+				var isPt:Boolean = geometry is MapPoint;
+				if (isPt)
+				{
+					pt = geometry as MapPoint;
+					extent = GeometryUtil.createExtentAroundMapPoint(pt, _idTolerance, this.map);
+				}
+				else
+				{
+					pt = geometry.extent.center;
+					extent = geometry.extent;
+				}
+				
+				_idTaskCount += 1;
+				showWorking(pt);
+							
+				if (layerObj.layertype == 'FeatureCollection')
+				{					
+					// Query the feature collection and prepare a result set
+					var flayer:FeatureLayer = layerObj.layer as FeatureLayer;
+					
+					var displayField:String = flayer.layerDetails.displayField;
+					if (!displayField)
+					{
+						// Get the first string field in the list
+						for each (var field:Field in flayer.layerDetails.fields)
+						{
+							if (field.type == Field.TYPE_STRING)
+							{
+								displayField = field.name;
+								break;
+							}
+						}
+					}
+					
+					var results:Array = [];
+					for each(var graphic:Graphic in flayer.featureCollection.featureSet.features)
+					{
+						if (extent.contains(graphic.geometry) || extent.intersects(graphic.geometry))
+						{
+							var idResult:IdentifyResult = new IdentifyResult();
+							idResult.layerId = 0;
+							idResult.layerName = flayer.name;
+							idResult.feature = graphic;
+							
+							if (displayField)
+							{
+								idResult.displayFieldName = displayField;
+								idResult.value = graphic.attributes[displayField].toString();
+							}
+							else
+							{
+								idResult.displayFieldName = "";
+								idResult.value = "";
+							}
+							results.push(idResult);
+						}
+					}
+					
+					// Call the show results method
+					showIDResults(results,{uniqueID:guid, layer:layerObj});
+				}
+				else
+				{
+					// Initialise the idTask
+					var idTask:IdentifyTask;
+					
+					if (layerObj.layertype == 'FeatureLayer')
+					{
+						// Set the layer url
+						var url:String = layerObj.url.replace("/" + layerObj.layerID,"");
+						
+						// Check if this is a feature layer based on a Feature Servicce
+						if (url.indexOf("FeatureServer") > -1)
+						{
+							url = url.replace("FeatureServer","MapServer");
+						}
+						
+						idTask = new IdentifyTask(url);
+					}
+					else
+					{
+						idTask = new IdentifyTask(layerObj.url);
+					}
+					
+					// Check for security token
+					if (layerObj.token)
+						idTask.token = layerObj.token;
+					
+					// Check for proxyurl
+					if (layerObj.proxy)
+						idTask.proxyURL = layerObj.proxy;			
+					
+					// Initialise the idTask Parameter
+					var idParam:IdentifyParameters = new IdentifyParameters();
+					idParam.geometry = geometry;
+					idParam.spatialReference = map.spatialReference;
+					idParam.mapExtent = map.extent;
+					idParam.width = map.width;
+					idParam.height = map.height;
+					idParam.tolerance = _idTolerance;
+					
+					idParam.returnGeometry = true;
+					
+					if (layerObj.layerIDs)
+					{
+						idParam.layerOption = 'all';
+						idParam.layerIds = ArrayCollection(layerObj.layerIDs).toArray();
+					}
+					else
+					{
+						idParam.layerOption = 'all';
+						idParam.layerIds = [layerObj.layerID];
+					}
+					
+					// Execute the task
+					idTask.execute(idParam, new AsyncResponder(showIDResults,showFaultMessage,
+						{uniqueID:guid, layer:layerObj}));
+				}
+				
+				function showIDResults(results:Array,layer:Object = null):void
+				{
+					// Get the search ID
+					var idGuid:String; 
+					if (layer)
+					{
+						idGuid = layer.uniqueID;
+					}
+					
+					if (idGuid != _lastID)
+					{
+						// Reset the result set
+						inspector.clearResults();
+						
+						// Set the new search id
+						_lastID = idGuid; 
+					}
+					
+					// Set the display position point
+					var positionPt:MapPoint = layer.positionPt as MapPoint;
+					
+					// Sort the graphics based on layer object settings
+					
+					// Update the result count;
+					_idResultCount += results.length;
+					
+					// Add to the current result set
+					for each (var id:IdentifyResult in results)
+					{
+						prepareIdentifyResult(id, layer, null);
+					}
+					
+					// Remove 1 from the task counter
+					_idTaskCount -= 1;
+					if (_idTaskCount == 0 && _idResultCount == 0)
+					{
+						// Remove the working message and re-enable navigation
+						finishWorking();
+					}
+				}
+				
+				function showFaultMessage(error:Object, layer:Object = null):void
+				{
+					// Remove 1 from the task counter
+					_idTaskCount -= 1;
+					if (_idTaskCount == 0)
+					{
+						// Remove the working message and re-enable navigation
+						finishWorking();
+					}
+					
+					// Show the alert message
+					Alert.show(String(error), "Identify Error");
+				}
+				
+				function prepareIdentifyResult(id:IdentifyResult, layer:Object, geometry:Geometry = null, displayPt:MapPoint = null, searchExtent:Geometry = null):void
+				{
+					var result:IdentifyFeature = new IdentifyFeature();
+					
+					// Check for a supplied geometry 
+					if (geometry == null)
+					{
+						geometry = id.feature.geometry;
+					}
+					
+					// Check the spatial reference of the geometry matches the geometry of the map 
+					if (geometry.spatialReference.wkid != map.spatialReference.wkid)
+					{
+						var projParam:ProjectParameters = new ProjectParameters();
+						projParam.geometries = [geometry];
+						projParam.outSpatialReference = map.spatialReference;
+						
+						// Call the project function to convert geometry to match the map spatial reference
+						geometryService.project(projParam, 
+							new AsyncResponder(
+								function(geometries:Array, token:Object = null):void
+								{ 
+									// Call Prepare ID Result 
+									if (token && geometries.length > 0)
+										prepareIdentifyResult(token.id as IdentifyResult, token.layer, geometries[0] as Geometry, null, token.searchExtent); 
+								},
+								function(fault:FaultEvent, token:Object = null):void
+								{
+									// Do nothing
+								},
+								{ layer:layer, id:id, searchExtent:searchExtent }
+							)
+						);
+						return;
+					}
+					else
+					{
+						// Update the graphic geometry to match the supplied geometry
+						id.feature.geometry = geometry;
+					}
+					
+					result.graphic = id.feature;
+					result.geometry = geometry;
+					
+					if (layer.layer.layertype == "FeatureCollection")
+					{
+						// this is a feature collection (no url)
+						result.source = layer.layer.layer.id;
+					}
+					else
+					{
+						result.source = layer.layer.url;
+					}
+					
+					// Check if this is a group layer - use the name from result otherwise use name from setting
+					if (layer.layer.layertype == "Group")
+					{
+						result.layername = id.layerName;
+					}
+					else
+					{
+						result.layername = layer.layer.name;
+					}
+					
+					result.layerID = id.layerId;
+					
+					var layerDetails:LayerDetails;
+					var fields:String;
+					var links:Array;
+					var image:Object;
+					//var titlefield:String;
+					var objectIdField:String;
+					
+					if (layer.layer.layertype == "Group")
+					{
+						var cacheObj:Object = getCacheDetails(layer.layer.url,id.layerId);
+						layerDetails = cacheObj.details;
+						fields = cacheObj.fields;
+						links = cacheObj.links;
+						image = cacheObj.image;
+						
+						//titlefield = layerDetails.displayField;
+						objectIdField = layerDetails.objectIdField;
+					}
+					else
+					{
+						layerDetails = layer.layer.details;
+						fields = layer.layer.fields;
+						links = layer.layer.links;
+						image = layer.layer.image;
+						
+						//titlefield = layerDetails.displayField;
+						objectIdField = layerDetails.objectIdField;
+					}
+					
+					// Determine the location point
+					if (geometry is MapPoint)
+					{
+						result.point = geometry as MapPoint;
+					}
+					else
+					{
+						if (displayPt) 
+						{
+							result.point = displayPt;					
+						}
+						else 
+						{
+							// Get a point from the shape that intersects the searchExtent
+							
+							
+							
+							result.point = geometry.extent.center;
+						}
+					}
+					
+					// Populate the result attributes
+					result.title = id.value;
+					result.attributes = prepareResult(id.feature,layerDetails,fields);
+					result.objectIdField = objectIdField;
+					//result.titlefield = titlefield;
+					result.titlefield = id.displayFieldName;
+					
+					var value:String;
+					
+					// Check for links
+					result.links = [];
+					if (links.length > 0)
+					{
+						for each (var linkObj:Object in links)
+						{
+							// Get the linkfield value
+							value = id.feature.attributes[linkObj.linkfield];
+							if (value && linkObj.url)
+							{
+								var linkUrl:String = String(linkObj.url).replace("[value]",value);
+								result.links.push({ url:linkUrl, label:linkObj.label});
+							}
+						}
+					}
+					
+					// Check for image 
+					if (image)
+					{
+						// Get the linkfield value
+						value = id.feature.attributes[image.linkfield];
+						if (value && image.url)
+						{
+							result.image = String(image.url).replace("[value]",value);
+						}
+					}
+					
+					// Add to the results list
+					inspector.addResult(result);
+					
+					// Remove 1 from the result counter
+					_idResultCount -= 1;
+					if (_idTaskCount == 0 && _idResultCount == 0)
+					{
+						// Remove the working message and re-enable navigation
+						finishWorking();
+					}
+				}
+			}
+			
+			/**
+			 * Calls the image service identify task for a specific image service and search set. 
+			 */
+			private function executeImageIdentify(layerObj:Object, geometry:Geometry, guid:String):void
+			{
+				// Initialise the idTask
+				var idTask:ImageServiceIdentifyTask = new ImageServiceIdentifyTask(layerObj.url);
+				
+				if (geometry is Extent)
+				{
+					geometry = Extent(geometry).toPolygon();	
+				}
+				
+				// Check for security token
+				if (layerObj.token)
+					idTask.token = layerObj.token;
+				
+				// Check for proxyurl
+				if (layerObj.proxy)
+					idTask.proxyURL = layerObj.proxy;
+				
+				// Initialise the idTask Parameter
+				var idParam:ImageServiceIdentifyParameters = new ImageServiceIdentifyParameters();
+				idParam.geometry = geometry;
+				
+				// Show working message
+				var pt:MapPoint;
+				
+				if (geometry is MapPoint)
+				{
+					pt = geometry as MapPoint;
+				}
+				else
+				{
+					pt = geometry.extent.center;
+				}
+				
+				_idTaskCount += 1;
+				showWorking(pt);
+				
+				// Execute the task
+				idTask.execute(idParam, new AsyncResponder(showIDResults,showFaultMessage,
+					{uniqueID:guid, layer:layerObj}));
+				
+				function showIDResults(iresult:ImageServiceIdentifyResult, layer:Object = null):void
+				{
+					// Get the search ID
+					var idGuid:String;
+					if (layer)
+					{
+						idGuid = layer.uniqueID;
+					}
+					
+					if (idGuid != _lastID )
+					{
+						// Reset the result set
+						inspector.clearResults();
+						
+						// Set the new search id
+						_lastID = idGuid; 
+					}
+					
+					var result:IdentifyFeature = new IdentifyFeature();
+					result.graphic = null;
+					
+					var location:MapPoint;
+					
+					var wkid:Number = iresult.location.spatialReference.wkid;
+					if (wkid != map.spatialReference.wkid)
+					{
+						location = reprojectGeometry(iresult.location as Geometry) as MapPoint;
+					}
+					else
+					{
+						location = iresult.location as MapPoint;
+					}
+					
+					result.geometry = location;
+					result.source = layer.layer.url;
+					result.layername = layer.layer.name;
+					result.layerID = layer.layer.layerID;
+					result.point = location;
+					
+					// Populate the result attributes
+					result.title = iresult.name;
+					result.attributes = [{ field:"Location X", value:doubleFormatter.format(location.x) },
+						{ field:"Location Y", value:doubleFormatter.format(location.y) },
+						{ field:"Pixel Value", value:iresult.value }];
+					
+					// Populate remaining values
+					result.links = [];
+					result.image = "";
+					
+					// Add to the results list
+					inspector.addResult(result);
+					
+					if (iresult.catalogItems && iresult.catalogItems.features.length > 0)
+					{
+						var i:int = 0;
+						for each (var graphic:Graphic in iresult.catalogItems.features)
+						{
+							var catgeo:Geometry;
+							
+							if (graphic.geometry.spatialReference.wkid != map.spatialReference.wkid)
+							{
+								catgeo = reprojectGeometry(graphic.geometry);
+							}
+							else
+							{
+								catgeo = graphic.geometry;
+							}
+							
+							var catresult:IdentifyFeature = new IdentifyFeature();
+							catresult.graphic = graphic;
+							catresult.graphic.geometry = catgeo;
+							catresult.geometry = catgeo;
+							catresult.source = layer.layer.url;
+							catresult.layername = layer.layer.name;
+							catresult.layerID = layer.layer.layerID;
+							catresult.point = location;
+							
+							// Populate the result attributes
+							catresult.title = "Catalog Item";
+							catresult.attributes = [{ field:"Location X", value:doubleFormatter.format(location.x) },
+								{ field:"Location Y", value:doubleFormatter.format(location.y) },
+								{ field:"Pixel Value", value:iresult.properties.Values[i] },
+								{ field:"Visibility Level", value:iresult.catalogItemVisibilities[i] }];
+							
+							for (var field:String in graphic.attributes)
+							{
+								catresult.attributes.push({ field:field, value:graphic.attributes[field]} );
+							}
+							
+							catresult.links = [];
+							catresult.image = "";
+							
+							// Add to the results list
+							inspector.addResult(catresult);
+							
+							i += 1;
+						}
+					}
+					
+					// Remove 1 from the task counter
+					_idTaskCount -= 1;
+					if (_idTaskCount == 0)
+					{
+						// Remove the working message and re-enable navigation
+						finishWorking();
+					}
+				}
+				
+				function showFaultMessage(error:Object, layer:Object = null):void
+				{
+					// Remove 1 from the task counter
+					_idTaskCount -= 1;
+					if (_idTaskCount == 0)
+					{
+						// Remove the working message and re-enable navigation
+						finishWorking();
+					}
+					
+					// Show the alert message
+					Alert.show(String(error), "Identify Error");
+				}
+			}
+			
+			/**
+			 * Determines whether the provided spatial reference ID represents a web mercator coordinate system. 
+			 */
+			private function isWebMercator(wkid:Number):Boolean
+			{
+				return wkid == 102100 || wkid == 3857 || wkid == 102113;
+			}
+			
+			/**
+			 * Reprojects the geometry to match the map spatial reference.
+			 */
+			private function reprojectGeometry(geometry:Geometry):Geometry
+			{
+				var geo:Geometry;
+				
+				if (geometry.spatialReference.wkid == EPSG_GEOGRAPHIC && 
+					isWebMercator(map.spatialReference.wkid))
+				{
+					geo = WebMercatorUtil.geographicToWebMercator(geometry);
+				}
+				else if (map.spatialReference.wkid == EPSG_GEOGRAPHIC && 
+					isWebMercator(geometry.spatialReference.wkid))
+				{
+					geo = WebMercatorUtil.webMercatorToGeographic(geometry);	
+				}
+				else
+				{
+					// Call the project task
+					geo = geometry;				
+				}
+				
+				return geo;
+			}
+			
+			/**
+			 * Formats and orders the attributes of a result for display in the record inspector. 
+			 */
+			private function prepareResult(graphic:Graphic,details:LayerDetails,fieldNames:String = ""):Array
+			{
+				var atts:Array = [];
+				var field:Field;
+				var displayFields:Array;
+				if (fieldNames != "")
+				{
+					var nameList:Array = fieldNames.split(",");
+					displayFields = [];
+					
+					for each (var fieldName:String in nameList)
+					{
+						for each (field in details.fields)
+						{
+							if (field.name == fieldName)
+							{
+								displayFields.push(field);
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					displayFields = details.fields;
+				}
+				
+				for each (field in displayFields)
+				{
+					// Get the field alias since this is what identify returns
+					var obj:Object = {};
+					var fldName:String = field.alias;
+					
+					// Remove any underscores or other special charcters from the fieldname
+					fldName = fldName.replace(/_/gi, " "); 
+					obj.field = fldName;
+					obj.fieldtype = field.type;
+					
+					// Check field type
+					switch (field.type)
+					{
+						case Field.TYPE_DATE:
+						{
+							var dateMS:Number = Date.parse(graphic.attributes[field.alias]);
+							//var dateMS:Number = Number(graphic.attributes[field.alias]);
+							if (!isNaN(dateMS))
+							{
+								//value = msToDate(dateMS, dateFormat, useUTC);
+								//var date:Date = dateFormatter.format(dateMS);
+								obj.value =  dateFormatter.format(dateMS); //date.toLocaleString();
+							}
+							break;
+						}
+							
+						case Field.TYPE_DOUBLE:
+						case Field.TYPE_SINGLE:
+						{
+							obj.value = doubleFormatter.format(graphic.attributes[field.alias]);
+							break;
+						}
+							
+						case Field.TYPE_INTEGER:
+						case Field.TYPE_SMALL_INTEGER:
+						{
+							obj.value = integerFormatter.format(graphic.attributes[field.alias]);
+							break;
+						}
+							
+						default:
+						{
+							obj.value = graphic.attributes[field.alias];
+						}
+					}
+					
+					// Add value to the results
+					atts.push(obj);
+				}
+				
+				return atts;
+			}
+			
+			/** 
+			 * Determines whether a layers is within the displayable scale range
+			 */
+			private function inDisplayScale(info:Object):Boolean
+			{
+				/* NOTE: Confusing minScale and maxScale */
+				// Define the return variable
+				var inScaleRange:Boolean = true;
+				
+				// Get the current scale settings
+				var mapScale:Number = map.scale;
+				var maxScale:Number;	// This is the "lowest" (not the highest) scale the map will display at. If 0, the layer displays above the minScale value.
+				var minScale:Number;   // This is the first scale that the
+				
+				if (info is LayerInfo)
+				{
+					var layerInfo:LayerInfo = LayerInfo(info);
+					maxScale = layerInfo.maxScale;	
+					minScale = layerInfo.minScale;
+				}
+				else if (info is FeatureLayer)
+				{
+					var fLayer:FeatureLayer = FeatureLayer(info);
+					maxScale = fLayer.maxScale;
+					minScale = fLayer.minScale;
+				}
+				
+				// Check if a minimum display scale has been set on the layer 
+				if (minScale == 0)
+				{
+					// No minimum display scale set - check for a maximum display scale
+					if (maxScale > 0)
+					{
+						// Maximum display scale is defined - check if map is currently within this scale 
+						if (mapScale < maxScale)
+						{
+							inScaleRange = false;
+						}
+					} 
+				} else {
+					// Minimum scale is set to a value - check for a maximum display scale
+					if (maxScale > 0)
+					{
+						// Both a minimum and maximum scale is set - determine if current map scale is outside the range
+						if (minScale < mapScale || maxScale > mapScale)
+						{
+							inScaleRange = false;
+						}
+					} else {
+						// Only a minimum scale is set - check if map is currently within this scale 
+						if (mapScale > minScale)
+						{
+							inScaleRange = false;
+						}
+					}
+				}
+				
+				// Return the determined scale
+				return inScaleRange;
+			}
+
+			
+			/* --------------------------------------------------------------------
+			Working mode fucntions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Displays the result inspector in the map infoPopup and sets it to working mode.
+			 */
+			private function showWorking(pt:MapPoint = null):void
+			{
+				// Check if tasks already running
+				if (_idTaskCount == 1)
+				{
+					map.cursorManager.setBusyCursor();	
+				}
+				
+				inspector.showWorking();
+			}
+			
+			/**
+			 * Called after all of the identify actions have been completed and sets the result inspector into display mode.
+			 */
+			private function finishWorking():void
+			{
+				map.cursorManager.removeBusyCursor();	
+				inspector.showResults();
+			}
+
+			
+			/* Listener functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Activates listeners for specific events related to functionality 
+			 * while the widget is visible.
+			 */
+			private function widgetAddEventListeners():void
+			{
+				// Add Keypress Up listener
+				systemManager.addEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			/**
+			 * Removes listeners for specific events related to functionality so 
+			 * that they are not called when the widget is closed or minimised.
+			 */
+			private function widgetRemoveEventListeners():void
+			{
+				// Remove Keypress Up listener
+				systemManager.removeEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			/**
+			 * Called when a key pressed by the user presses comes up
+			 */
+			private function widgetKeyPressUpHandler(event:KeyboardEvent):void
+			{
+				// Check the keycode of the button pressed
+				switch(event.keyCode)
+				{
+					case Keyboard.ESCAPE: // Escape key
+					{
+						// Deactivate the widget
+						
+						if (identifyToolToggleButton.selected)
+						{
+							identifyToolToggleButton.selected = false;
+							deactivateIDTool();
+						}
+						
+						break;
+					}
+						
+					case 73: // i key
+					{
+						if (event.altKey && !identifyToolToggleButton.selected)
+						{
+							identifyToolToggleButton.selected = true;
+						}
+						break;
+					}
+				}
+			}			
+			
+			/**
+			 * Called when the map popup window is closed by the user.
+			 */
+			private function popupClosed(event:Event):void
+			{
+				// Remove the listener
+				map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+				map.infoWindow.label = "";
+				
+				// Clear the identification selection
+				inspector.clearResults();
+			}
+			
+			/**
+			 * Function which splits the given url into the map service url and the layer id value. 
+			 */
+			private function splitServiceUrl(url:String):Object
+			{
+				var service:Object = { baseUrl:null, layerID:null };
+				
+				var parts:Array = url.split("/");
+				if (parts.length > 1)
+				{
+					var featurelayerID:String = parts[parts.length - 1];
+					
+					// Confirm this is numeric
+					if (is_numeric(featurelayerID))
+					{
+						service.layerID = Number(featurelayerID);
+						service.baseUrl = url.replace('/' + featurelayerID,''); 
+					}
+				}
+				
+				return service;
+				
+				function is_numeric(val:String):Boolean 
+				{
+					if (!isNaN(Number(val))) {
+						return true;
+					}
+					return false;
+				}
+			}
+		
+			/**
+			 * Calledwhen the clear results button is clicked.
+			 */
+			protected function clearIdentifyResultsButton_clickHandler(event:MouseEvent):void
+			{
+				inspector.clearResults();
+			}
+			
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+		<esri:DrawTool id="drawTool" map="{map}" 
+					   drawStart="drawTool_drawStartHandler(event)"
+					   drawEnd="drawTool_drawEndHandler(event)"
+					   showDrawTips="false" />
+		
+		<!-- Geometry service for drawing processes -->
+		<esri:GeometryService id="geometryService" 
+							  url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"
+							  showBusyCursor="true" />
+		
+		<s:NumberFormatter id="doubleFormatter"
+						    useGrouping="true"
+						 	groupingSeparator=","
+ 							groupingPattern="0,000"
+							fractionalDigits="3" />
+		
+		<s:NumberFormatter id="integerFormatter"
+						   useGrouping="true"
+						   groupingSeparator=","
+						   groupingPattern="0,000"
+						   fractionalDigits="0" />
+		
+		<s:DateTimeFormatter id="dateFormatter" 
+							 dateTimePattern="{_dateFormatPattern}" 
+							 useUTC="false" />	
+	</fx:Declarations>
+
+	<viewer:WidgetTemplate id="wTemplate"
+						   width="500" height="350"
+						   closed="wTemplate_closedHandler(event)"
+						   minHeight="300"
+						   minWidth="420"
+						   open="wTemplate_openHandler(event)">
+		<viewer:layout>
+			<s:VerticalLayout gap="0" paddingLeft="0" paddingRight="0"/>
+		</viewer:layout>
+	
+		<s:Label id="instructionLabel" text="Click button to start identification process." width="100%" paddingBottom="3" />
+		
+		<s:HGroup id="toolContainer" gap="5"                            
+				  verticalAlign="middle" horizontalAlign="center" width="100%">
+						
+			<s:ToggleButton id="identifyToolToggleButton" toolTip="Click to toggle Identify Tool on/off" 
+							height="40" width="40" useHandCursor="true" buttonMode="true"
+							change="identifyToolToggleButton_changeHandler(event)"
+							skinClass="widgets.Identify.skins.IDWidgetIdentifyToolToggleButtonSkin2" />
+			
+			<s:Label id="layersLabel" text="Select Target:" height="100%" verticalAlign="middle"/>
+			
+			<s:DropDownList id="opLayersDropdown" prompt="Select an identify option" 
+							minWidth="200" width="100%" 
+							skinClass="widgets.Identify.skins.IdentifyLayersDropDownListSkin" />
+		
+			<s:Button id="clearIdentifyResultsButton" toolTip="Click to clear current results"
+					  height="40" width="40" click="clearIdentifyResultsButton_clickHandler(event)"
+					  enabled="{inspector.dataProvider.length &gt; 0}" useHandCursor="true" buttonMode="true"
+					  skinClass="widgets.Identify.skins.IDWidgetClearResultsButtonSkin2" />
+		</s:HGroup>		
+		
+		<components:IdentifyFeatureInspector id="inspector" width="100%" height="100%" useInfoWindow="false" />
+		
+	</viewer:WidgetTemplate>
+
+</viewer:BaseWidget>

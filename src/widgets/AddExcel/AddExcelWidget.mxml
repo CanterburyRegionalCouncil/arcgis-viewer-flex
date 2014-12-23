@@ -1,0 +1,467 @@
+<?xml version="1.0" encoding="utf-8"?>
+<viewer:BaseWidget xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+				   xmlns:s=					"library://ns.adobe.com/flex/spark"
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx"
+				   xmlns:viewer=			"com.esri.viewer.*" 
+				   xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:text=				"flash.text.*"
+				   xmlns:Locate=			"widgets.AddExcel.*"
+				   widgetConfigLoaded=		"init()">
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.geometry.Extent;
+			import com.as3xls.xls.ExcelFile;
+			import com.as3xls.xls.Sheet;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.FlareEvent;
+			import com.esri.ags.events.FlareMouseEvent;
+			import com.esri.ags.events.GraphicEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.portal.PopUpRenderer;
+			import com.esri.ags.portal.supportClasses.PopUpInfo;
+			import com.esri.ags.portal.supportClasses.PopUpMediaInfo;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+            import com.esri.ags.symbols.TextSymbol;
+			import com.esri.ags.utils.GeometryUtil;
+			import com.esri.ags.utils.GraphicUtil;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.TextArea;
+			
+			import spark.components.supportClasses.ItemRenderer;
+			import spark.core.NavigationUnit;
+			
+			private const WIDGET_ICON_URL:String = "widgets/AddExcel/assets/images/";
+			private const ICON_URL:String = "assets/images/";
+
+			//file reference to access local file
+			private var fr:FileReference = new FileReference;
+			//array to store header of the xls file, first row
+			private var tempHead:Array = new Array;
+			
+			private var layerNumber:Number = new Number(0);
+			private var ac:ArrayCollection = new ArrayCollection();
+			private var XField:String = new String("");
+			private var YField:String = new String("");
+			private var TitleField:String = new String("");
+			private var LinkField:String;
+			private var LinkAlias:String;
+			private var zoomScale:Number = 50000;
+			[Bindable] private var Message:String = new String("");
+			[Bindable] private var ResultAC:ArrayCollection = new ArrayCollection();
+			
+			// Labels
+			private var _helpLabel:String;
+			
+			private var popUpRenderer:PopUpRenderer = new PopUpRenderer();
+			
+			// Help Application URL location
+			[Bindable]
+			private var _helpLocation:String;
+			
+			protected function init():void
+			{
+				if (configXML)
+				{
+					XField = configXML.xfield || getDefaultString("Longitude");
+					YField = configXML.yfield  || getDefaultString("Latitude");
+					TitleField = configXML.titlefield || getDefaultString("Title");
+					LinkField = configXML.linkfield || "";
+					LinkAlias = configXML.linkalias || "";
+					Message = configXML.message || getDefaultString("");
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_excel.png", "Search", showStateExcelInput);
+					wTemplate.addTitlebarButton(ICON_URL + "i_table.png", "Results", showStateResults);
+					
+					// Aad the help link
+					_helpLocation = configXML.helplocationurl;
+					_helpLabel= configXML.labels.helplabel[0] || "Help";
+
+					// Add show help item
+					if (_helpLocation != "")
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+					}
+					
+					if (Number(configXML.zoomscale) > 0)
+					{
+						zoomScale = Number(configXML.zoomscale);
+					}
+				}
+			}
+			
+			/** 
+			 * Used to change widget window between input and results
+			 */ 
+			private function showStateExcelInput():void
+			{
+				this.currentState = "ExcelInput";
+				wTemplate.selectedTitlebarButtonIndex = 0;
+			}
+			
+			/** 
+			 * Used to change widget window between input and results
+			 */ 
+			private function showStateResults():void
+			{
+				this.currentState = "resultsList";
+				wTemplate.selectedTitlebarButtonIndex = 1;
+			}
+			
+			/** 
+			 * Called when the help button on the widget menu is clicked
+			 */
+			private function showHelp():void 
+			{
+				var urlRequest:URLRequest = new URLRequest(_helpLocation);
+				navigateToURL(urlRequest, "_blank");
+			}
+			
+			protected function xlsUpload(event:MouseEvent):void
+			{
+				//filter to only uplad .xls files
+				var fileFilter:FileFilter = new FileFilter(".xls Files Only", "*.xls");
+				fr.browse([fileFilter]);
+				fr.addEventListener(Event.SELECT, xlsFileSelected);
+				fr.addEventListener(Event.COMPLETE, uploadCompleteHandler);
+			}
+			
+			protected function xlsFileSelected(event:Event):void
+			{
+				//upload select file
+				fr.load();
+			}
+			
+			protected function uploadCompleteHandler(event:Event):void
+			{
+				if(!ClearButton.visible){
+					ClearButton.visible =  true;
+				}	
+				var graphicsLayer1:GraphicsLayer = new GraphicsLayer();
+				graphicsLayer1.name = "hiddenLayer_" + String(layerNumber);
+						
+				var myByteArray:ByteArray =  new ByteArray();
+
+				// Get uploaded file as ByteArray
+				myByteArray = fr.data as ByteArray;
+				
+				// Create new xls file
+				var myxls:ExcelFile = new ExcelFile();
+				myxls.loadFromByteArray(myByteArray);
+				
+				// Get first sheet from .xls wookbook
+				var mySheet:Sheet = myxls.sheets[0];
+				
+				// Remove header of the .xls file
+				var tempData:ArrayCollection = new ArrayCollection();
+				tempData = mySheet.values;
+				
+				// Array to store xls Headers
+				var tempHeader:Array = new Array();
+				tempHeader = tempData[0];
+				var headers:Array = new Array();
+				
+				for ( var a:int = 0; a < tempHeader.length;a++)
+				{
+					if (tempHeader[a].toString().toUpperCase() == YField.toUpperCase())
+					{
+						var latNumb:int = a;
+					}
+					if (tempHeader[a].toString().toUpperCase() == XField.toUpperCase())
+					{
+						var longNumb:int = a;
+					}
+					headers.push(tempHeader[a].toString());
+				}
+				
+				var attrib:Object = tempHeader;
+				tempData.removeItemAt(0);
+				
+				// Set information in the search result window
+				var locateResult:LocateResult = new LocateResult();
+				locateResult.title = fr.name;
+				locateResult.content = "Number of Features: " + (tempData.length - 1).toString();
+				locateResult.icon = ICON_URL + "i_excel.png";
+				locateResult.layerID = String(layerNumber);
+				
+				for(var i:int = 0;i<tempData.length - 1;i++){
+					var graphicAttr:String = new String("");
+					var Title:String = new String();
+					var link:String = "";
+					var linkAlias:String = "";
+					
+					for(var n:int = 0;n<tempHeader.length;n++){
+						attrib[n] = tempData.getItemAt(i)[n];
+						
+						if(headers[n].toString().toUpperCase() != TitleField.toUpperCase() && 
+							headers[n].toString().toUpperCase() != XField.toUpperCase() && 
+							headers[n].toString().toUpperCase() != YField.toUpperCase() &&
+							headers[n].toString().toUpperCase() != LinkField.toUpperCase()){
+							graphicAttr = graphicAttr + "<b>" + headers[n] + ":</b><i> " + tempData.getItemAt(i)[n] + "</i><br />";
+						}
+						if(headers[n].toString().toUpperCase() == TitleField.toUpperCase()){
+							Title = tempData.getItemAt(i)[n];
+						}
+						if(headers[n].toString().toUpperCase() == LinkField.toUpperCase()){
+							link = tempData.getItemAt(i)[n];
+							linkAlias = LinkAlias;
+						}
+					}
+					var long:Number = Number(tempData.getItemAt(i)[longNumb].value);
+					var lat:Number = Number(tempData.getItemAt(i)[latNumb].value);
+					var gmapPoint:MapPoint = new MapPoint(long,lat,new SpatialReference(2193));
+					
+					var myGraphics:Graphic = new Graphic(gmapPoint,new SimpleMarkerSymbol(markerStyle.selectedItem.style, numMarkerSize.value, cpMarker.selectedColor, numMarkerAlpha.value, 0, 0, numMarkerAngle.value));
+					var attribs:Object = {
+						title: Title,
+						content: graphicAttr,
+						link: (link) ? link : null,
+						linkalias: linkAlias
+					};
+					myGraphics.attributes = attribs;
+					myGraphics.checkForMouseListeners = false;
+
+					graphicsLayer1.add(myGraphics);
+					graphicsLayer1.clusterer = clusterer;
+					
+					// label graphic - requires removing of clusterer above 
+//					var labelSymbol:TextSymbol = new TextSymbol(Title);
+//					labelSymbol.placement = TextSymbol.PLACEMENT_START;
+//                  var labelGraphics:Graphic = new Graphic(gmapPoint, labelSymbol);
+//					graphicsLayer1.add(labelGraphics);
+					
+					// infoWindowRenderer on each graphic
+					var infoWindowRenderer:ClassFactory = new ClassFactory(PopUpRenderer);
+					infoWindowRenderer.properties = {popUpInfo:configurePopUpInfo(link, linkAlias)};
+					myGraphics.infoWindowRenderer = infoWindowRenderer;
+				}
+				
+				if (graphicsLayer1.numGraphics == 1)
+				{
+					locateResult.point = Graphic(graphicsLayer1.graphicProvider[0]).geometry as MapPoint;
+					locateResult.geometry = Graphic(graphicsLayer1.graphicProvider[0]).geometry;
+				}
+				else
+				{
+					var graphicsExtent:Extent = GraphicUtil.getGraphicsExtent((graphicsLayer1.graphicProvider as ArrayCollection).source);
+					if(graphicsExtent)
+					{
+						locateResult.point = graphicsExtent.center;
+						locateResult.geometry = graphicsExtent;
+					} 
+					else
+					{
+						var mp2:MapPoint = Graphic(graphicsLayer1.graphicProvider[0]).geometry as MapPoint;
+						locateResult.point = mp2;
+						locateResult.geometry = mp2;
+					}
+				}
+				ResultAC.addItem(locateResult);
+				ac.addItem(graphicsLayer1);
+				map.addLayer(ac[layerNumber]);
+				
+				layerNumber++;
+				showStateResults();
+			}
+			
+			private function configurePopUpInfo(link:String, alias:String = null):PopUpInfo
+			{
+				var popUpInfo:PopUpInfo = new PopUpInfo;
+				
+				popUpInfo.title = "{title}";
+				popUpInfo.description = "{content}";
+				
+				if (link){
+					var pos:Number = link.length - 4;
+					var sfx:String = link.substr(pos, 4).toLowerCase();
+					var isImageLink:Boolean = (sfx == ".jpg") || (sfx == ".png") || (sfx == ".gif");
+					
+					if (isImageLink){
+						var popUpMediaInfo:PopUpMediaInfo = new PopUpMediaInfo;
+						popUpMediaInfo.imageLinkURL = link;
+						popUpMediaInfo.imageSourceURL = link;
+						popUpMediaInfo.type = "image";
+						popUpInfo.popUpMediaInfos = [ popUpMediaInfo ];
+					}else{
+						var linkText:String = alias ? alias : "{link}";
+						popUpInfo.description += "<br/><a href='{link}'>" + linkText + "</a>"
+					}
+				}
+				
+				return popUpInfo;
+			}
+			
+			protected function changeGraphicVis(event:Event):void
+			{
+				var locateResult1:LocateResult = ItemRenderer(event.target).data as LocateResult;
+				ac[locateResult1.layerID].alpha = event.target.hSlider.value;
+			}
+			
+			protected function clearAllResults():void
+			{
+				for(var i1:Number = 0; i1 < ac.length;i1++)
+				{
+					map.removeLayer(ac[i1]);
+				}
+				
+				for (var i:Number = 0; i < ResultAC.length;)
+				{
+					ResultAC.removeItemAt(i);
+				}
+				
+				ClearButton.visible =  false;
+				map.infoWindow.hide();
+				showStateExcelInput();
+			}
+			
+			protected function locateDG_locateResultDeleteHandler(event:Event):void
+			{
+				map.infoWindow.hide();
+				var locateResult:LocateResult = ItemRenderer(event.target).data as LocateResult;
+				for (var i:Number = 0; i < ResultAC.length;)
+				{
+					if (ResultAC.getItemAt(i) === locateResult)
+					{
+						ResultAC.removeItemAt(i);
+						map.removeLayer(ac[locateResult.layerID]);
+						
+						if (ResultAC.length == 0)
+						{
+							ClearButton.visible =  false;
+							showStateExcelInput();
+							// showInfoWindow(null); causes Title and Content (from Info tool) to be displayed top right of map
+						}
+						else
+						{
+							// if a selected item is deleted, show the 1st one, by default
+							if (locateResult.selected)
+							{
+								ResultAC.getItemAt(0).selected = true;
+								//scroll to the top
+								locateResultDG.verticalScrollPosition = locateResultDG.layout.getVerticalScrollPositionDelta(NavigationUnit.HOME);
+							}
+						}
+						break;
+					} 
+					else 
+					{
+						i++;
+					}
+				}
+			}
+			
+			protected function locateDG_locateResult(event:Event):void
+			{
+				var locateResult:LocateResult = ItemRenderer(event.target).data as LocateResult;
+				if (locateResult.geometry){
+					if (locateResult.geometry.type == Geometry.MAPPOINT){
+						if (map.scale > zoomScale)
+						{
+							map.scale = zoomScale;
+						}
+						map.centerAt(locateResult.point);
+					}
+					else
+					{
+						map.extent = locateResult.geometry.extent;
+						if (!map.extent.contains(locateResult.geometry))
+						{
+							map.level--;
+						}
+					}
+				}
+			}
+		]]>
+		
+	</fx:Script>
+	
+	<fx:Declarations>
+		<text:TextFormat id="tf" font="Arial" size="10" color="0x777777" />
+		<esri:FlareSymbol id="flareSymbol" backgroundAlphas="[0.5,1.0]" backgroundColors="[0x00FF00,0xFF0000]" flareMaxCount="30" flareSizeIncOnRollOver="5" sizes="[20,30]" weights="[30,1000000]" textFormat="{tf}"/>
+		<esri:WeightedClusterer id="clusterer" symbol="{flareSymbol}" sizeInPixels="7" />
+		<s:VGroup id="test" width="270" height="300">
+			<mx:TextArea id="titleText" borderVisible="false" contentBackgroundAlpha="0" width="100%"  editable="false" height="20" />
+			<s:Line id="titleLine" width="95%" >
+				<s:stroke>
+					<s:SolidColorStroke id="titleLineSymbol" color="0xFFFFFF" weight="1"/>
+				</s:stroke>
+			</s:Line>
+			<mx:TextArea id="text" borderVisible="false" contentBackgroundAlpha="0" width="100%" height="250" editable="false" />
+		</s:VGroup>
+	</fx:Declarations>
+	
+	<viewer:states>
+		<s:State name="ExcelInput"/>
+		<s:State name="resultsList"/>
+	</viewer:states>
+	
+	<viewer:WidgetTemplate id="wTemplate" width="400" height="240" minHeight="240" minWidth="400">
+		<s:Group id="ExcelInput" width="100%" height="100%" visible="false" visible.ExcelInput="true">
+			<s:VGroup paddingTop="15">
+				<s:HGroup width="100%" gap="24" verticalAlign="middle">
+					<mx:Label text="Marker Colour"/>
+					<mx:ColorPicker id="cpMarker" selectedColor="0x3FAFDC"/>
+					<mx:Label text="Marker Style"/>
+					<s:DropDownList id="markerStyle"
+									labelField="name"
+									selectedIndex="0">
+						<s:ArrayList>
+							<fx:Object name="{getDefaultString('markerStyleCircle')}" style="{SimpleMarkerSymbol.STYLE_CIRCLE}"/>
+							<fx:Object name="{getDefaultString('markerStyleCross')}" style="{SimpleMarkerSymbol.STYLE_CROSS}"/>
+							<fx:Object name="{getDefaultString('markerStyleDiamond')}" style="{SimpleMarkerSymbol.STYLE_DIAMOND}"/>
+							<fx:Object name="{getDefaultString('markerStyleSquare')}" style="{SimpleMarkerSymbol.STYLE_SQUARE}"/>
+							<fx:Object name="{getDefaultString('markerStyleTriangle')}" style="{SimpleMarkerSymbol.STYLE_TRIANGLE}"/>
+							<fx:Object name="{getDefaultString('markerStyleX')}" style="{SimpleMarkerSymbol.STYLE_X}"/>
+						</s:ArrayList>
+					</s:DropDownList>
+				</s:HGroup>
+				<s:HGroup width="100%" gap="7"  verticalAlign="middle">
+					<mx:Label text="Marker Size"/>
+					<mx:NumericStepper id="numMarkerSize"
+									   maximum="50"
+									   minimum="0"
+									   value="15"/>
+					<s:Label text="Alpha"/>
+					<mx:NumericStepper id="numMarkerAlpha"
+									   maximum="1"
+									   minimum="0"
+									   stepSize="0.1"
+									   value="1"/>
+					<s:Label text="Rotation"/>
+					<mx:NumericStepper id="numMarkerAngle"
+									   maximum="360"
+									   minimum="-360"
+									   stepSize="1"
+									   value="0"
+									   width="50"/>
+				</s:HGroup>
+				<s:HGroup width="100%" horizontalAlign="center" paddingTop="20">	
+					<s:Button id="xlsUpLoad" label="Upload" click="xlsUpload(event)" />
+				</s:HGroup>
+				<s:HGroup  width="90%" horizontalAlign="center" paddingTop="20">
+					<s:Label text="{Message}" textAlign="center" />
+				</s:HGroup>
+			</s:VGroup>
+		</s:Group>
+		<s:Group id="resultsList" width="100%" height="100%" visible="false" visible.resultsList="true">
+			<s:layout>
+				<s:VerticalLayout gap="1"/>
+			</s:layout>
+			<s:HGroup width="100%" horizontalAlign="right">
+				<s:Button label="Clear All Layers" id="ClearButton" click="clearAllResults()" visible="false"  width.resultsList="118" x.resultsList="-12"/>
+			</s:HGroup>
+			<s:Scroller width="100%" height="100%" horizontalScrollPolicy="off">
+				<Locate:LocateResultDataGroup id="locateResultDG" dataProvider="{ResultAC}"
+											  locateResultClick="locateDG_locateResult(event)"
+											  locateResultDelete="locateDG_locateResultDeleteHandler(event)"
+											  LayerVisiblity="changeGraphicVis(event)">
+					<Locate:layout>
+						<s:VerticalLayout gap="2" horizontalAlign="justify" useVirtualLayout="true"/>
+					</Locate:layout>
+				</Locate:LocateResultDataGroup>
+			</s:Scroller>
+		</s:Group>
+	</viewer:WidgetTemplate>	
+</viewer:BaseWidget>

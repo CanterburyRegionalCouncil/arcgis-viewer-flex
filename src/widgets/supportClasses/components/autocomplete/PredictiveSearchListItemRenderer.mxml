@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY		: 	This component is used to render the predictive text selectable results.
+
+SOURCE		: 	Ryan Elley, ECan.
+
+DEVELOPED BY : 	Ryan Elley, ECan.
+
+CREATED		: 	1/08/2011
+DEPENDENCIES	: 	
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan) 	| 1/08/2011 	| Initial Development.
+Ryan Elley (ECan)	| 15/12/2011	| Changed to include states for mouse over hovering and selected (to better differentiate the display).  
+Ryan Elley (ECan)	| 07/01/2012	| Version 2.5 API and Viewer port.  Change to better handle binding.  Change to spark components.
+Ryan Elley (ECan)	| 12/06/2013	| Version 3.3 API and Viewer port.
+
+-->
+<s:ItemRenderer xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+				xmlns:s=			"library://ns.adobe.com/flex/spark" 
+				xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+				autoDrawBackground=	"false"
+				dataChange=			"itemrenderer_dataChangeHandler(event)" >
+	
+	<s:layout>
+		<s:HorizontalLayout gap="2" paddingLeft="2" paddingRight="2" paddingTop="1" paddingBottom="1" 
+							verticalAlign="middle" />
+	</s:layout>
+	
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="hovered" />
+		<s:State name="selected" />
+	</s:states>
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			/**
+			 * Called when the data item for the renderer changes.
+			 */
+			protected function itemrenderer_dataChangeHandler(event:FlexEvent):void
+			{
+				// Set the display icon in the item
+				if (data.icon)
+				{
+					typeIcon.source = data.icon;
+				}
+				else
+				{
+					typeIcon.source = "";
+				}
+				
+				// Set the icon tooltip text
+				if (data.keydescription)
+				{
+					typeIcon.toolTip = data.keydescription;
+				}
+				else
+				{
+					typeIcon.toolTip = "";
+				}
+
+				// Set the item text
+				if (data.searchtext)
+				{
+					itemTextLabel.text = data.searchtext;
+				}
+				else
+				{
+					itemTextLabel.text = "";
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<!-- Display Details -->
+	<s:Image id="typeIcon" width="20" height="20" />
+	<s:Label id="itemTextLabel" width="100%" fontWeight="normal" fontWeight.selected="bold" 
+			 fontWeight.hovered="bold" color.selected="{getStyle('focusColor')}" />
+	
+</s:ItemRenderer>

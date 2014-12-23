@@ -1,0 +1,2618 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+SUMMARY					: This widget allows users to a snapshot state of the current map position,
+						  drawn graphics and current map layers. The widget has two storage modes, 
+						  persisting the workspace data to either Flash SharedObjects or a Central 
+						  repository accessed by SOAP WebServices.
+
+SOURCE					:
+
+DEVELOPED BY 			: Matthew Simmons, Geographic Business Solutions.
+
+CREATED					: 18/02/2011
+DEPENDENCIES			: WorkspaceWebServicePortal Web Service 
+
+CHANGES 
+Change By 				| Change Date 	| Change Description
+Matthew Simmons (GBS) 	| 18/02/2011	| Initial Development.
+Matthew Simmons (GBS) 	| 06/04/2011	| Only persist a configured set of graphic layers;
+										  when loading, remove layers not in workspace;
+										  allow title and description editing.
+Ryan Elley (ECan)		| 14/04/2011	| Addition of fault handler on the WSDL load action in config, 
+										  plus addition of message area.  Endpoint Port and Service 
+										  are now configurable items.
+Ryan Elley (ECan) 		| 17/06/2011 	| Flex Viewer Port 2.3.1 API and 2.3.1 viewer
+Ryan Elley (ECan)		| 01/08/2011	| Flex Viewer Port 2.4 API and 2.4 viewer
+Ryan Elley (ECan)		| 21/12/2011	| Bug fix for incorrectly setting sublayer visibility when 
+										  loading dynamic map services from workspace.  
+										  Bug fix for not setting feature layer output field settings
+										  loading feature layers from workspace.  
+										  Addition of functionality for saving/loading popup settings 
+										  in a workspace.
+Ryan Elley (ECan)		| 09/01/2012	| Flex Viewer Port 2.5 API and 2.5 viewer
+										  Cleanup of unnecessary code.
+Ryan Elley (ECan)		| 23/05/2012	| Style change for display grid - text colour changed to black 
+										  for bettter reading]
+Ryan Elley (ECan)		| 26/06/2012	| Addition of clear feaures button - allows users to add a 
+										  workspace's contents to the map without clearing the existing 
+										  contents
+Ryan Ellet (ECan)		| 15/07/2012	| Minimum size attributes set on the widget template to prevent 
+										  resizing to a smaller sizee.
+Ryan Elley (ECan)		| 03/02/2013	| Flex Viewer Port 3.1 API and 3.1 viewer
+Ryan Elley (ECan)		| 25/05/2013	| Flex Viewer Port 3.3 API and 3.3 viewer
+										  Change to use an item renderer for the workspaces
+										  Expansion to the details shown in the workspaces when selected in the list
+										  Addition of filtering functionality for workspaces
+										  Maximum length filters added to title and desctiption text input boxes
+										  Change to loading mechanism when called from the WorkspaceURLHnadler.  
+										  Now uses addSharedData mechanism for communication. 
+Ryan Elley (ECan)		| 28/07/2013	| Bug fix to save new button action not firing properly.
+										  Addition of support for saving Virtual Earth & ArcGSImageSrevice layers in workspaces
+										  Addition of properties for token and proxy settings on ArcGIS server layers
+Ryan Elley (ECan)		| 18/08/2013	| Change to add a check when loading dynamic services that the visible layer items match the layer.  
+										  Added to handle issues when the map service changes and no longer matchs what was originally saved. 
+Ryan Elley (ECan)		| 02/11/2013	| Search result layers now excluded from save layers.  
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2008 - 2009 ESRI
+//
+// All rights reserved under the copyright laws of the United States.
+// You may freely redistribute and use this software, with or
+// without modification, provided you include the original copyright
+// and use restrictions.  See use restrictions in the file:
+// <install location>/FlexViewer/License.txt
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+				   xmlns:s=					"library://ns.adobe.com/flex/spark"
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx"
+				   xmlns:viewer=			"com.esri.viewer.*"
+				   widgetConfigLoaded=		"init()" >
+	
+	<viewer:states>
+		<s:State name="LoadingWorkspaces"/>
+		<s:State name="Main"/>
+		<s:State name="SaveNew"/>
+		<s:State name="EditExisting"/>
+	</viewer:states>
+	
+	<fx:Declarations>
+		<mx:DateFormatter id="_storageDateFormatter" formatString="YYYY-MM-DDTHH:NN:SS" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISImageServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.CSVLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.KMLLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.OpenStreetMapLayer;
+			import com.esri.ags.layers.WMSLayer;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.symbols.*;
+			import com.esri.ags.utils.DateUtil;
+			import com.esri.ags.utils.JSONUtil;
+			import com.esri.ags.virtualearth.VETiledLayer;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			import com.esri.viewer.components.TitlebarButton;
+			
+			import flash.net.navigateToURL;
+			import flash.net.registerClassAlias;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.formatters.DateFormatter;
+			import mx.messaging.messages.SOAPMessage;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.AsyncToken;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.soap.LoadEvent;
+			import mx.utils.StringUtil;
+			import mx.utils.UIDUtil;
+			
+			import restServices.WorkspaceWebServicePortal.WorkspaceWebServicePortal;
+			import restServices.WorkspaceWebServicePortal.valueobjects.WorkspaceDataItem;
+			
+			import spark.events.TextOperationEvent;
+			
+			import widgets.supportClasses.utils.LayerUtil;
+
+			
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+			
+			public static const LOADWORKSPACE_BY_ID_EVENT:String 		= "Workspace_Widget_LoadWorkspaceByID";
+			public static const LOADWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_LoadWorkspaceByObject";
+			public static const DELETEWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_DeleteWorkspaceByObject";
+			public static const EDITWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_EditWorkspaceByObject";
+			
+			public static const WORKSPACE_WIDGET_READY:String 			= "Workspace_Widget_WorkspaceReady";
+			
+			// Icon location constants
+			private const ICON_URL:String 								= "assets/images/";
+			private const WIDGET_ICON_URL:String 						= "widgets/Workspace/assets/images/";
+			
+			/** Mode for storing workspaces as Flex SharedObjects (like 'cookies') */
+			protected const STORAGE_MODE_SHARED_OBJECT:String 			= "SAVE_WORKSPACE_STORAGE_MODE_SHARED_OBJECT";
+			
+			/** The identifying name used for accessing the SharedObject*/
+			protected const SAVE_WORKSPACE_SHARED_OBJECT_NAME:String 	= "GISmoSaveWorkspaceSharedObject";
+			
+			/** Mode for storing workspaces into a central database, accessed via web services */	 
+			protected const STORAGE_MODE_CENTRAL_REPO:String 			= "SAVE_WORKSPACE_STORAGE_MODE_CENTRAL_REPO";
+
+
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+			
+			/** Flag used for testing the application. */
+			private var _debug:Boolean = false;
+			
+			[Bindable]
+			/** List of available workspaces - filtered subset of the full Workspace List*/
+			protected var _workspaceItems:ArrayCollection;
+			
+			/** Flex SharedObject for storing workspaces locally. Valid only when _StorageMode == STORAGE_MODE_SHARED_OBJECT */
+			protected var _WorkspacesSharedObject:SharedObject;
+			
+			/** webservice proxy object for storing workspaces in a Central Location. Valid only when _StorageMode == STORAGE_MODE_CENTRAL_REPO */
+			protected var _WorkspacesWebService:WorkspaceWebServicePortal;
+			
+			
+			/** Storage method used to persist the workspaces. Either STORAGE_MODE_SHARED_OBJECT or STORAGE_MODE_CENTRAL_REPO */
+			[Bindable]
+			protected var _StorageMode:String 							= STORAGE_MODE_SHARED_OBJECT;
+			
+			[Bindable]
+			protected var _LoadingWorkspacesLabel:String;
+			[Bindable]
+			protected var _OpenButtonLabel:String;			
+			[Bindable]
+			protected var _EmailButtonLabel:String;			
+			[Bindable]
+			protected var _DeleteButtonLabel:String;			
+			[Bindable]
+			protected var _SaveButtonLabel:String;
+			[Bindable]
+			protected var _NewButtonLabel:String;
+			[Bindable]
+			protected var _NewTitleLabel:String;
+			[Bindable]
+			protected var _NewDescriptionLabel:String;
+			[Bindable]
+			protected var _NewIncludeGroupLabel:String;
+			[Bindable]
+			protected var _NewIncludeGraphicsLabel:String;
+			[Bindable]
+			protected var _NewIncludeMapLayersLabel:String;
+			[Bindable]
+			protected var _NewSaveButtonLabel:String;
+			[Bindable]
+			protected var _OpeningWorkspaceMessage:String;
+			
+			/* Added by Ryan Elley (ECan) 26/06/2012 - Labels for clear features checkbox */
+			[Bindable]
+			protected var _ClearFeaturesLabel:String;
+			[Bindable]
+			protected var _ClearFeaturesTooltip:String;
+			[Bindable]
+			protected var _ClearFeatures:Boolean = false;
+			/* End of addition */
+			
+			[Bindable]
+			protected var _NewCancelButtonLabel:String;			
+			protected var _SaveOverConfirmationText:String;
+			protected var _SaveOverConfirmationTitle:String;
+			
+			protected var _DeleteConfirmationText:String;
+			protected var _DeleteConfirmationTitle:String;
+			
+			/* Added by Ryan Elley (ECan) 26/05/2013 - Labels for label options for the filter functionality */
+			[Bindable]
+			private var _FilterListLabel:String;
+			[Bindable]
+			private var _FilterListPrompt:String;
+			[Bindable]
+			private var _FilterClearLabel:String;
+			/* End of addition */
+
+			// Label for help button
+			private var _helpLabel:String;
+			
+			
+			/** A list of Strings of GraphicLayer ids that are saved within the workspace. 
+			 * This is filled from the configuration MXL. Graphic layers not in this list are ignored */
+			protected var _GraphicLayerIDsToPersist:ArrayCollection = new ArrayCollection([]);
+			
+			[bindable]
+			protected var _ExistingWorkspaceItemToEdit:WorkspaceData = null;
+			
+			[Bindable]
+			private var msgVisible:Boolean = false;
+			
+			/* Added by Ryan Elley (ECan) 16/07/2012 - Labels for changing storage mode */
+			protected var _switchModeLocalLabel:String 					= "Click to switch to local save mode";
+			protected var _switchModeNetworkLabel:String 				= "Click to switch to network save mode";
+			protected var _inLocalMode:Boolean = false;
+			/* End of addition */
+			
+			// Help file URL 
+			private var _helpLocation:String;
+			
+			// Flag for workspace loaded from url
+			private var _urlWorkspaceLoaded:Boolean = false;
+			
+			
+			
+			/* WIDGET EVENT HANDLERS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the widget config has loaded.  Initialises the widget and checks for any workspace parameters in the application's calling url.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised when the config has finished loading.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function init():void
+			{
+				if (configXML)
+				{
+					// Get the debug setting
+					_debug = configXML.debug == "true";
+					
+					// Set the default clear features option					
+					_ClearFeatures = configXML.clearfeaturesdefault[0] == "true";
+				}
+				
+				debug("WorkspaceWidget","init");
+				
+				//register classes, that way when being persisted by SharedObject and ByteArray.writeObject() the objects are strongly typed.				
+				registerClassAlias("widgets.SaveWorkspace.WorkspaceData", WorkspaceData);
+				
+				registerClassAlias("widgets.SaveWorkspace.Polyline", Polyline);
+				registerClassAlias("widgets.SaveWorkspace.Polygon", Polygon);
+				registerClassAlias("widgets.SaveWorkspace.MapPoint", MapPoint);
+				registerClassAlias("widgets.SaveWorkspace.Extent", Extent);
+				
+				registerClassAlias("widgets.SaveWorkspace.SimpleMarkerSymbol", SimpleMarkerSymbol); 
+				registerClassAlias("widgets.SaveWorkspace.PictureMarkerSymbol", PictureMarkerSymbol); 
+				registerClassAlias("widgets.SaveWorkspace.TextSymbol", TextSymbol);
+				registerClassAlias("widgets.SaveWorkspace.InfoSymbol", InfoSymbol);
+				registerClassAlias("widgets.SaveWorkspace.CompositeSymbol", CompositeSymbol);
+				registerClassAlias("widgets.SaveWorkspace.SimpleLineSymbol", SimpleLineSymbol);
+				registerClassAlias("widgets.SaveWorkspace.CartographicLineSymbol", CartographicLineSymbol);
+				registerClassAlias("widgets.SaveWorkspace.SimpleFillSymbol", SimpleFillSymbol);
+				registerClassAlias("widgets.SaveWorkspace.PictureFillSymbol", PictureFillSymbol);
+				registerClassAlias("widgets.SaveWorkspace.TextFormat", TextFormat);
+				
+				registerClassAlias("widgets.SaveWorkspace.LayerInfo", LayerInfo);
+				
+				
+				// Set overridden labels
+				if (configXML && configXML.labels != null)
+				{
+					//drawPointLabel = configXML.labels.drawpointlabel || getDefaultString("drawPointLabel");
+					_LoadingWorkspacesLabel = configXML.labels.loadingworkspaceslabel || "Loading Workspaces...";
+					_OpenButtonLabel = configXML.labels.openbutton || "Open";
+					_EmailButtonLabel = configXML.labels.emailbutton || "Email";
+					_DeleteButtonLabel = configXML.labels.deletebutton || "Delete";
+					_SaveButtonLabel = configXML.labels.savebutton || "Save";
+					_NewButtonLabel = configXML.labels.newbutton || "New...";
+					_NewTitleLabel = configXML.labels.newtitle || "Name:";
+					_NewDescriptionLabel = configXML.labels.newdescription || "Description:";
+					_NewIncludeGroupLabel = configXML.labels.includegroup || "Include:";
+					_NewIncludeGraphicsLabel = configXML.labels.includegraphics || "Drawn Graphics";
+					_NewIncludeMapLayersLabel = configXML.labels. includemaplayers|| "Map Layers";
+					_NewSaveButtonLabel = configXML.labels.newsavebutton || "Save";
+					_NewCancelButtonLabel = configXML.labels.newcancelbutton || "Cancel";
+					_SaveOverConfirmationText = configXML.labels.saveconfirmationtext || "Are you sure you want to replace this workspace?";
+					_SaveOverConfirmationTitle = configXML.labels.saveconfirmationtitle || "Confirm";
+					_DeleteConfirmationText = configXML.labels.deleteconfirmationtext || "Are you sure you want to delete this workspace?";
+					_DeleteConfirmationTitle = configXML.labels.deleteconfirmationtitle || "Confirm";
+					_OpeningWorkspaceMessage = configXML.labels.openingworkspacelabel || "Opening workspace..."; 
+					
+					/* Added by Ryan Elley (ECan) 26/06/2012 - Labels for clear features checkbox */
+					_ClearFeaturesLabel = configXML.labels.clearfeatureslabel || "Clear";
+					_ClearFeaturesTooltip = configXML.labels.clearfeaturestootip || "When ticked, any layers currently in the map that are not also within a workspace that is being loaded will be removed.";
+					/* End of addition */
+					
+					/* Added by Ryan Elley (ECan) 26/05/2013 - Labels for label options for the filter functionality */
+					_FilterListLabel = configXML.labels.filterlisttext || "Filter Workspaces";
+					_FilterListPrompt = configXML.labels.filterlistprompt || "Enter keywords";
+					_FilterClearLabel = configXML.labels.filterlistclear || "Clear";
+					/* End of addition */
+					
+					_helpLabel = configXML.labels.helplabel || getDefaultString("help");
+				}
+				
+				if (configXML
+					&& configXML.hasOwnProperty("graphicLayersToSave")
+					&& configXML.graphicLayersToSave != null)
+				{
+					for each (var gLayerToSaveElement:XML in configXML.graphicLayersToSave.graphicsLayerName)
+					{
+						_GraphicLayerIDsToPersist.addItem(new String(gLayerToSaveElement));
+					}
+				}
+				
+				if (configXML
+					&& configXML.hasOwnProperty("CentralStorageEndpoint")
+					&& configXML.CentralStorageEndpoint != null
+					&& configXML.CentralStorageEndpoint[0] != "")
+				{
+					debug("WorkspaceWidget", "Try CentralStorageEndpoint call");
+					
+					_WorkspacesWebService = new WorkspaceWebServicePortal();
+					_WorkspacesWebService.serviceControl.wsdl = configXML.CentralStorageEndpoint + "?wsdl";
+					_WorkspacesWebService.serviceControl.endpointURI = configXML.CentralStorageEndpoint;
+					_WorkspacesWebService.port = configXML.CentralStorageServicePort || "GISmoWebServicePortalSoap";
+					_WorkspacesWebService.service = configXML.CentralStorageServiceName || "GISmoWebServicePortal";
+					
+					_WorkspacesWebService.serviceControl.addEventListener(LoadEvent.LOAD, WorkspaceStorageWSDLLoaded);
+					_WorkspacesWebService.serviceControl.addEventListener(FaultEvent.FAULT, WorkspaceStorageWSDLFault);
+					
+					_WorkspacesWebService.serviceControl.loadWSDL();
+					
+					//var token:AsyncToken = _WorkspacesWebService.GetWorkspaces();
+					//token.addResponder(new AsyncResponder(WorkspaceStorageWebGetWorkspaces_resultHandler, WorkspaceStorageWebGetWorkspaces_faultHandler));
+					
+					// Add option to switch to local mode
+					_inLocalMode = false;
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_modeLocal.png", _switchModeLocalLabel, showLocalStorage, false);
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_modeNetwork.png", _switchModeNetworkLabel, showNetworkStorage, false);
+					
+					// Show the local storage button
+					toggleTitleButton(_switchModeLocalLabel, true);
+					toggleTitleButton(_switchModeNetworkLabel, false);
+				}
+				else
+				{
+					_inLocalMode = true;
+					InitAsSharedObjectMode();
+				}
+				
+				/* Added by Ryan Elley (ECan) 08/06/2014 - Functionality for configuring whether to show the contents of a workspace */
+				WorkspaceItemRenderer.ShowWorkspaceContents = configXML.showworkspacecontents[0] != "false";	
+				/* End of addition */
+				
+				// Add show help item
+				_helpLocation = configXML.helplocationurl;
+				if (_helpLocation != "" && _helpLocation != null)
+				{
+					wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+				}	
+			}
+						
+
+			
+			/* STORAGE MODE
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Opens the widget in Local Storage Mode.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showLocalStorage():void
+			{
+				_inLocalMode = true;
+				toggleTitleButton(_switchModeNetworkLabel, true);
+				toggleTitleButton(_switchModeLocalLabel, false);
+				
+				InitAsSharedObjectMode();
+			}
+			
+			/**
+			 * Opens the widget in Network Storage Mode.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showNetworkStorage():void
+			{
+				_inLocalMode = false;
+				toggleTitleButton(_switchModeLocalLabel, true);
+				toggleTitleButton(_switchModeNetworkLabel, false);
+				
+				_StorageMode = STORAGE_MODE_CENTRAL_REPO;
+				
+				_WorkspacesWebService = new WorkspaceWebServicePortal();
+				_WorkspacesWebService.serviceControl.wsdl = configXML.CentralStorageEndpoint + "?wsdl";
+				_WorkspacesWebService.serviceControl.endpointURI = configXML.CentralStorageEndpoint;
+				_WorkspacesWebService.port = configXML.CentralStorageServicePort || "GISmoWebServicePortalSoap";
+				_WorkspacesWebService.service = configXML.CentralStorageServiceName || "GISmoWebServicePortal";
+				
+				_WorkspacesWebService.serviceControl.addEventListener(LoadEvent.LOAD, WorkspaceStorageWSDLLoaded);
+				_WorkspacesWebService.serviceControl.addEventListener(FaultEvent.FAULT, WorkspaceStorageWSDLFault);
+				
+				_WorkspacesWebService.serviceControl.loadWSDL();
+			}
+			
+			/**
+			 * Toggles the visibility of the title bar buttons that matches the name supplied.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>buttonLabel [String]: </i>Label string on the tooltip of the toolbar button to be hidden or shown.</li>
+			 * <li><i>isVisible [Boolean]: </i>State that visible is to be set to.  True=Show the button, False=Hide the button.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function toggleTitleButton(buttonLabel:String, isVisible:Boolean = false):void
+			{
+				var noChildren:int = wTemplate.headerToolGroup.numChildren;
+				for (var i:int = 0; i < noChildren; i++)
+				{
+					var chd:Object = wTemplate.headerToolGroup.getChildAt(i);
+					if (chd is TitlebarButton)
+					{
+						var btn:TitlebarButton = chd as TitlebarButton;
+						if (btn.toolTip == buttonLabel)
+						{
+							btn.visible = btn.includeInLayout = isVisible;
+							break;
+						}
+					}
+				}
+			}
+			
+			
+			
+			/* NETWORK STORAGE MODE FUNCTIONALITY
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Called when the WorkspaceWebServicePortal Web Service WSDL has loaded.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LoadEvent]: </i>Event raised when the workspace soap service details finish loading.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWSDLLoaded(event:LoadEvent):void
+			{
+				debug("Workspace widget", "WSDL loaded");
+				var token:AsyncToken = _WorkspacesWebService.GetWorkspaces();
+				token.addResponder(new AsyncResponder(WorkspaceStorageWebGetWorkspaces_resultHandler, WorkspaceStorageWebGetWorkspaces_faultHandler));
+			}	
+			
+			/**
+			 * Called if a fault is thrown while connecting to the WorkspaceWebServicePortal Web Service WSDL.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [LoadEvent]: </i>Event raised when the workspace soap service returns a fault while loading the wsdl details.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWSDLFault(event:FaultEvent):void
+			{
+				debug("Workspace widget", "WSDL Fault - " + event.fault.message);
+				
+				showMessage("There was an issue connecting to the central workspace repository.  Changing to use the local workspace repository.  Please contact the GIS Administractor if this issue continues.", false);
+				
+				// Switch to use the local storage option.  Init as SharedObject instead
+				InitAsSharedObjectMode();
+			}	
+			
+			/**
+			 * Called when then Workspace Web Storage Service returns workspace items.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaulEvent]: </i>Fault event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebGetWorkspaces_resultHandler(event:ResultEvent, token:Object=null ):void
+			{	
+				// Clear the working message
+				clearMessage();
+				
+				debug("Workspace widget", "WorkspaceStorageWebGetWorkspaces_resultHandler");
+				
+				var wrkspaces:ArrayCollection = new ArrayCollection();
+				for each (var webWorkspace:WorkspaceDataItem in event.result)
+				{
+					var newWorkspaceItem:WorkspaceData = WorkspaceStorageWorkspaceWebItemToDataItem(webWorkspace);
+					wrkspaces.addItem(newWorkspaceItem);
+				}
+				
+				// Update the workspace items list
+				_workspaceItems = sortWorkspaces(wrkspaces);
+				
+				// Apply the filter
+				applyFilter();
+				
+				_StorageMode = STORAGE_MODE_CENTRAL_REPO;
+				currentState = "Main";
+				
+				AppEvent.addListener(LOADWORKSPACE_BY_OBJECT_EVENT, LoadWorkspaceByObjectClick);
+				AppEvent.addListener(DELETEWORKSPACE_BY_OBJECT_EVENT, DeleteWorkspaceByObjectClick);
+				AppEvent.addListener(EDITWORKSPACE_BY_OBJECT_EVENT, EditWorkspaceByObjectClick);
+
+				// Check if a workspace has already been loaded from the url parameter
+				if (!_urlWorkspaceLoaded)
+				{
+					// Check for a queued workspace opon
+					AppEvent.addListener(AppEvent.DATA_SENT, getQueuedWorkspace);
+					
+					// Request the any shared data for a queuedworkspace open.
+					AppEvent.dispatch(AppEvent.DATA_FETCH, { key: "WorkspaceWidget_QueueWorkspace" });
+				}
+			}
+			
+			/**
+			 * Called if there is a fault getting the workspaces from the web service.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaulEvent]: </i>Fault event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebGetWorkspaces_faultHandler(event:FaultEvent, token:Object=null ):void
+			{
+				debug("Workspace widget", "WorkspaceStorageWebGetWorkspaces Fault - " + event.fault.message);
+				
+				showMessage("FAULT: " + event.fault.message,false );
+				
+				// Init as SharedObject instead
+				InitAsSharedObjectMode();
+			}
+			
+			
+			
+			/* WORKSPACE LOAD FUNCTIONALITY
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Called when the user clicks the load workspace button
+			 */
+			protected function LoadWorkspaceByObjectClick(event:AppEvent):void
+			{
+				if (event != null &&
+					event.data != null &&
+					event.data is WorkspaceData)
+				{
+					// Set the working message
+					showMessage(_OpeningWorkspaceMessage,true);
+					
+					// Load the workspace
+					LoadWorkspaceItem(event.data as WorkspaceData);
+				}
+			}
+			
+			/**
+			 * Listens for the data fetch to return any queued workspace request from the URL handler. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the Data_Fetch call.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function getQueuedWorkspace(event:AppEvent):void
+			{
+				// Update the loaded flag
+				_urlWorkspaceLoaded = true;				
+				
+				// Check the event
+				if (event.data &&  event.data.key == "WorkspaceWidget_QueueWorkspace")
+				{
+					// Removed the handler - this should only be called once.
+					AppEvent.removeListener(AppEvent.DATA_SENT, getQueuedWorkspace);
+					
+					var queueAC:ArrayCollection = event.data.collection as ArrayCollection;
+					if (queueAC && queueAC.length > 0)
+					{
+						var workspaceID:String = queueAC.getItemAt(0) as String;
+						if (_StorageMode != STORAGE_MODE_CENTRAL_REPO || workspaceID == "")
+						{
+							return;
+						};
+						
+						debug("Workspace widget", "loadByWorkspaceIDFromQueryString wsid = " + (event.data as String));
+						
+						// Set the working message
+						showMessage(_OpeningWorkspaceMessage,true);
+						
+						var token:AsyncToken = _WorkspacesWebService.GetWorkspaceByID(workspaceID);
+						token.addResponder(new AsyncResponder(getWorkspaceByID_complete, getWorkspaceByID_fault));
+					}
+				}
+			}
+			
+			/**
+			 * Handles responses from the workspace service for queued workspace requests. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [ResultEvent]: </i>Event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details sed for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function getWorkspaceByID_complete (event:ResultEvent, token:Object=null ):void
+			{
+				debug("Workspace widget", "getWorkspaceByID_complete");
+				
+				var wdi:WorkspaceDataItem = event.result as WorkspaceDataItem;
+				if (wdi != null)
+				{					
+					var r:WorkspaceData = WorkspaceStorageWorkspaceWebItemToDataItem(wdi);
+					LoadWorkspaceItem(r);
+				}
+			}
+			
+			/**
+			 * Handles a fault response from the workspace service for queued workspace requests. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaulEvent]: </i>Fault event returned by the workspace service call.</li>
+			 * <li><i>token [Object]: </i>Attached details used for the callback.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function getWorkspaceByID_fault(event:FaultEvent, token:Object=null ):void
+			{
+				debug("Workspace widget", "getWorkspaceByID_fault" + event.fault.message);
+				
+				Alert.show( "Could not load workspace" + event.fault.message );
+			}
+			
+			
+			
+			/* SHARED WORKSPACE MODE FUNCTIONALITY
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Sets the widget in local storage mode and retreives any current workspaces from the local storage object.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */		
+			protected function InitAsSharedObjectMode():void
+			{
+				_StorageMode = STORAGE_MODE_SHARED_OBJECT;
+				var so:SharedObject = SharedObject.getLocal(SAVE_WORKSPACE_SHARED_OBJECT_NAME);
+				_WorkspacesSharedObject = so;
+				
+				// New or existing?
+				if (_WorkspacesSharedObject.size > 0 && _WorkspacesSharedObject.data)
+				{
+					/* Change by Ryan Elley 25/09/2012 - Addition of code to sort the workspace items alphabetically */
+					
+					/* // Original Code					
+					// Pre-existing, load.
+					_workspaceItems = _WorkspacesSharedObject.data.workspaces as ArrayList;
+					*/
+					
+					var col:ArrayCollection = new ArrayCollection();
+					col.addAll(_WorkspacesSharedObject.data.workspaces as ArrayCollection);
+					_workspaceItems = sortWorkspaces(col);
+					
+					// Apply the filter
+					applyFilter();
+				}
+				else
+				{
+					_workspaceItems = new ArrayCollection();
+					_WorkspacesSharedObject.data.workspaces = _workspaceItems;
+				}
+				
+				AppEvent.addListener(LOADWORKSPACE_BY_OBJECT_EVENT, LoadWorkspaceByObjectClick);
+				AppEvent.addListener(DELETEWORKSPACE_BY_OBJECT_EVENT, DeleteWorkspaceByObjectClick);
+				AppEvent.addListener(EDITWORKSPACE_BY_OBJECT_EVENT, EditWorkspaceByObjectClick);
+				
+				currentState = "Main";
+			}
+			
+			
+			
+			/* WORKSPACE UI FUNCTIONALITY
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * Called when the Open workspace button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */		
+			protected function OpenButton_clickHandler(event:MouseEvent):void
+			{
+				// Take selected Workspace and load it
+				var w:WorkspaceData = WorkspaceList.selectedItem as WorkspaceData;
+				if (w == null)
+				{
+					return;
+				}
+				
+				// Deselect the selected item
+				WorkspaceList.selectedIndex = -1;
+				
+				// Set the working message
+				showMessage(_OpeningWorkspaceMessage,true);
+				
+				// Load the workspace item
+				LoadWorkspaceItem(w);
+			}
+			
+			/**
+			 * Called when the Email workspace button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */		
+			protected function EmailButton_clickHandler(event:MouseEvent):void
+			{
+				// Take selected Workspace and load it
+				var w:WorkspaceData = WorkspaceList.selectedItem as WorkspaceData;
+				if (w == null || _StorageMode != STORAGE_MODE_CENTRAL_REPO)
+				{
+					return;
+				}
+				
+				// If in CentralRepo mode, fire off an email for sharing
+				var emaillink:String = configXML.ShareByEmailLink;
+				
+				//var findEmailAddress:RegExp = /\[emailaddress\]/i;
+				//emaillink = emaillink.replace(findEmailAddress, "matts@gbs.co.nz");
+				
+				var findWorkspaceID:RegExp = /\[workspaceid\]/i;
+				emaillink = emaillink.replace(findWorkspaceID, w.WorkspaceID);
+				
+				navigateToURL(new URLRequest(emaillink));
+			}
+			
+			/**
+			 * Called when the Delete workpsace button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function DeleteButton_clickHandler(event:MouseEvent):void
+			{
+				// Take selected Workspace and load it
+				var w:WorkspaceData = WorkspaceList.selectedItem as WorkspaceData;
+				if (w == null)
+				{
+					return;
+				}
+				
+				// Deselect the selected item
+				WorkspaceList.selectedIndex = -1;
+				
+				// Are you sure?
+				Alert.show(
+					_DeleteConfirmationText, 
+					_DeleteConfirmationTitle, 
+					Alert.YES | Alert.NO, 
+					this, 
+					function confirmDeleteReply(event:CloseEvent):void
+					{
+						if (event.detail != Alert.YES || w == null)
+						{
+							return;
+						}
+						WorkspaceStorageDelete(w);
+					}, 
+					null, 
+					Alert.NO
+				);
+			}
+			
+			/** 
+			 * Called when the edit workspace button is clicked
+			 */ 
+			protected function EditWorkspaceByObjectClick(event:AppEvent):void
+			{
+				if (event != null &&
+					event.data != null &&
+					event.data is WorkspaceData)
+				{
+					// Keep the workspace to edit, we'll scrape the properties when we go to save.
+					var w:WorkspaceData = event.data as WorkspaceData;
+					_ExistingWorkspaceItemToEdit = w;
+					textInputSaveExistingWorkspaceTitle.text = w.Title;
+					textInputSaveExistingWorkspaceDescription.text = w.Description;
+					chkBoxInputSaveExistingWorkspaceIncludeGraphics.selected = (w.GraphicLayers != null);
+					chkBoxInputSaveExistingWorkspaceIncludeMapServices.selected = (w.MapServices != null);					
+					currentState = "EditExisting";
+				}
+			}
+			
+			/**
+			 * Called when the cancel button on the save screen is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function ButtonSaveExistingCancel_clickHandler(event:MouseEvent):void
+			{
+				// Clear edited widget, just in case
+				_ExistingWorkspaceItemToEdit = null;
+				currentState = "Main";
+			}
+			
+			/**
+			 * Called when the save button on the save screen is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function ButtonSaveExistingOK_clickHandler(event:MouseEvent):void
+			{
+				if (textInputSaveExistingWorkspaceTitle.text == null || textInputSaveExistingWorkspaceTitle.text == "")
+				{
+					Alert.show("A name for the workspace is required");
+					return;
+				}
+				
+				if (_ExistingWorkspaceItemToEdit != null)
+				{
+					_ExistingWorkspaceItemToEdit.Title = textInputSaveExistingWorkspaceTitle.text;
+					_ExistingWorkspaceItemToEdit.Description = textInputSaveExistingWorkspaceDescription.text;
+					
+					// Set/clear graphics
+					if (chkBoxInputSaveExistingWorkspaceIncludeGraphics.selected)
+					{
+						// Coalese to empty array if didn't already have one
+						if (_ExistingWorkspaceItemToEdit.GraphicLayers == null)
+						{
+							_ExistingWorkspaceItemToEdit.GraphicLayers = [];
+						}
+					}
+					else
+					{
+						// Clear
+						_ExistingWorkspaceItemToEdit.GraphicLayers = null;
+					}
+					
+					// Set/clear map layers
+					if (chkBoxInputSaveExistingWorkspaceIncludeMapServices.selected)
+					{
+						// Coalese to empty array if didn't already have one
+						if (_ExistingWorkspaceItemToEdit.MapServices == null)
+						{
+							_ExistingWorkspaceItemToEdit.MapServices = [];
+						}
+					}
+					else
+					{
+						_ExistingWorkspaceItemToEdit.MapServices = null;
+					}
+					
+					WorkspaceStorageUpdate(_ExistingWorkspaceItemToEdit);
+					_ExistingWorkspaceItemToEdit = null;
+				}
+				currentState = "Main";
+			}
+			
+			protected function DeleteWorkspaceByObjectClick(event:AppEvent):void
+			{
+				if (event != null &&
+					event.data != null &&
+					event.data is WorkspaceData)
+				{
+					DeleteWorkspaceItem(event.data as WorkspaceData);
+				}				
+			}
+			
+			/**
+			 * Starts the process to delete the selected workspace from the repo (central or local).
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>workspace data object to be deleted.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function DeleteWorkspaceItem(w:WorkspaceData):void
+			{
+				if (w == null)
+				{
+					return;
+				}
+				
+				// Deselect the selected item
+				WorkspaceList.selectedIndex = -1;
+				
+				// Are you sure?
+				Alert.show(
+					_DeleteConfirmationText, 
+					_DeleteConfirmationTitle, 
+					Alert.YES | Alert.NO, 
+					this, 
+					function confirmDeleteReply(event:CloseEvent):void
+					{
+						if (event.detail != Alert.YES || w == null)
+						{
+							return;
+						}
+						WorkspaceStorageDelete(w);
+					}, 
+					null, 
+					Alert.NO
+				);				
+			}
+			
+			/**
+			 * Called when the save workspace button is clicked.  Displays a confirm dialog.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */ 
+			protected function SaveButton_clickHandler(event:MouseEvent):void
+			{
+				// Save over top of the selected Workspace
+				var w:WorkspaceData = WorkspaceList.selectedItem as WorkspaceData;
+				if (w == null)
+				{
+					return;
+				}
+				
+				// Are you sure?
+				Alert.show(_SaveOverConfirmationText, _SaveOverConfirmationTitle, Alert.YES | Alert.NO, this, WorkspaceSaveOver, null, Alert.YES);
+			}
+			
+			/**
+			 * Called when the user clicks a button on the confirm action popup dialog.  Overwrites the selected existing workspace with the current settings if Yes was selected.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceSaveOver(event:CloseEvent):void
+			{
+				// Save over top of the selected Workspace
+				var w:WorkspaceData = WorkspaceList.selectedItem as WorkspaceData;
+				if (event.detail != Alert.YES || w == null)
+				{
+					return;
+				}
+				
+				// Deselect the selected item
+				var oldWorkspacePosition:int = _workspaceItems.getItemIndex(w); 
+				WorkspaceList.selectedIndex = -1;
+				_workspaceItems.removeItemAt(oldWorkspacePosition);
+				
+				// Build a new WorkspaceData object 
+				var newWorkspace:WorkspaceData = GenerateNewWorkspaceDataObject(w.Title, w.Description, w.GraphicLayers != null, w.MapServices != null);
+				newWorkspace.WorkspaceID = w.WorkspaceID;
+				newWorkspace.CreatedTime = w.CreatedTime;
+				
+				_workspaceItems.addItemAt(newWorkspace, oldWorkspacePosition);
+				
+				WorkspaceStorageUpdate(newWorkspace);
+			}
+						
+			/**
+			 * Called when the Save New button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */ 
+			protected function SaveNewButton_clickHandler(event:MouseEvent):void
+			{
+				if (textInputSaveNewWorkspaceTitle) 
+				{
+					// Clear out the workspace details form.
+					textInputSaveNewWorkspaceTitle.text = "";
+					textInputSaveNewWorkspaceDescription.text = "";
+					chkBoxInputSaveNewWorkspaceIncludeGraphics.selected = true;
+					chkBoxInputSaveNewWorkspaceIncludeMapServices.selected = true;
+				}
+				
+				// Change to the save new state
+				currentState = "SaveNew";
+			}
+			
+			/**
+			 * Listens for the enter button to be clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [KeyboardEvent]: </i>Event dispatched when a key is press in a control that this function is attached to.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function buttonKeyDownHandler(event:KeyboardEvent):void
+			{
+				// Check if the enter button was pressed.
+				if (event.keyCode == Keyboard.ENTER)
+				{
+					event.target.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+				}
+			}
+			
+			/**
+			 * Called when the Cancel button is clicked in the save screen.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function ButtonSaveNewCancel_clickHandler(event:MouseEvent):void
+			{
+				currentState = "Main";				
+			}
+			
+			/**
+			 * Called when the OK button is clicked in the save screen.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event dispatched when the button is clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function ButtonSaveNewOK_clickHandler(event:MouseEvent):void
+			{
+				// Validate that a title has been included.
+				if (textInputSaveNewWorkspaceTitle.text == null || textInputSaveNewWorkspaceTitle.text == "")
+				{
+					Alert.show("A name for the workspace is required");
+				}
+				
+				// Aquire a new WorkspaceData object 
+				var newWorkspace:WorkspaceData = GenerateNewWorkspaceDataObject(
+					textInputSaveNewWorkspaceTitle.text, 
+					textInputSaveNewWorkspaceDescription.text,
+					chkBoxInputSaveNewWorkspaceIncludeGraphics.selected, 
+					chkBoxInputSaveNewWorkspaceIncludeMapServices.selected);
+				
+				// Call the save function
+				WorkspaceStorageAdd(newWorkspace);
+				
+				currentState = "Main";
+			}
+			
+			
+			
+			/*  WORKSPACE SAVE AND LOAD METHODS
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Creates the workspace save settings object to be saved.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>newWorkspaceTitle [String]: </i>Display name for the new workspace.</li>
+			 * <li><i>newWorkspaceDescription [String]: </i>Description text for the new workspace.</li>
+			 * <li><i>includeGraphics [Boolean]: </i>Flag for whether any drawn graphics in the map should be included in the saved workspace.  True=Save and drawn graphics to the workspace, False=Ignore any drawn graphics.</li>
+			 * <li><i>includeMapServices [Boolean]: </i>Flag for whether the currently loaded map layers should be included in the saved workspace.  True=Save the current layers (including visibility, False=Do not ave the layer settings.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function GenerateNewWorkspaceDataObject(
+				newWorkspaceTitle:String,
+				newWorkspaceDescription:String = "",
+				includeGraphics:Boolean = true,
+				includeMapServices:Boolean = true
+			):WorkspaceData
+			{
+				var newWorkspace:WorkspaceData = new WorkspaceData();
+				newWorkspace.WorkspaceID = UIDUtil.createUID();
+				newWorkspace.Title = newWorkspaceTitle;
+				newWorkspace.Description = newWorkspaceDescription;
+				
+				newWorkspace.MapExtent = 
+					[
+						map.extent.xmin,
+						map.extent.ymin,
+						map.extent.xmax,
+						map.extent.ymax,
+						map.extent.spatialReference.wkid
+					];
+				
+				
+				if (includeGraphics)
+				{
+					newWorkspace.GraphicLayers = [];
+					for each (var loopGraphicLayers:Layer in map.layers)
+					{
+						if (loopGraphicLayers is GraphicsLayer && !(loopGraphicLayers is FeatureLayer))
+						{
+							var gl:GraphicsLayer = loopGraphicLayers as GraphicsLayer;
+							if (gl != null
+								&& gl.name != ""
+								&& gl.id != ""
+								&& _GraphicLayerIDsToPersist.contains(gl.id)
+							)
+							{
+								var newPersistedGraphicsLayer:Object = new Object();
+								newPersistedGraphicsLayer.layername = gl.name;
+								newPersistedGraphicsLayer.id = gl.id;
+								newPersistedGraphicsLayer.graphics = [];
+								
+								for each (var graphicItem:Graphic in gl.graphicProvider)
+								{	
+									var newPersistedGraphicItem:Object = PersistGraphicItem(graphicItem);
+									newPersistedGraphicsLayer.graphics.push(newPersistedGraphicItem);
+								}
+								
+								newWorkspace.GraphicLayers.push(newPersistedGraphicsLayer);
+							}
+							
+						}
+					}
+				}
+				
+				if (includeMapServices)
+				{
+					newWorkspace.MapServices = [];
+					for each (var loopMapLayers:Layer in map.layers)
+					{
+						if (loopMapLayers is ArcGISTiledMapServiceLayer)
+						{
+							var atmsl:ArcGISTiledMapServiceLayer = loopMapLayers as ArcGISTiledMapServiceLayer;
+							if (atmsl != null)
+							{
+								var newPersistedTiledMapLayer:Object = new Object();
+								newPersistedTiledMapLayer.MapServiceLayerType = "ArcGISTiledMapServiceLayer";
+								newPersistedTiledMapLayer.url = atmsl.url;
+								newPersistedTiledMapLayer.layerInfos = atmsl.layerInfos;
+								
+								/*
+								Changed by Ryan Elley (ECan) 28/07/2013 - Addition of support for tokens and proxied layers.
+								*/
+								if (atmsl.token)
+								{
+									newPersistedTiledMapLayer.token = atmsl.token;
+								}
+								
+								if (atmsl.proxyURL)
+								{
+									newPersistedTiledMapLayer.useProxy = true;
+								}
+								
+								//note this reads the com.esri.ags.Layers.Layer.visible property, not a com.esri.ags.Layers.ArcGISTiledMapServiceLayer.visible, 
+								newPersistedTiledMapLayer.visible = atmsl.visible;
+								newPersistedTiledMapLayer.name = atmsl.name;
+								newPersistedTiledMapLayer.alpha = atmsl.alpha;
+								
+								//TODO: visibility
+								
+								/*
+								Changed by Ryan Elley (ECan) 20/12/2011 - Addition of popup info details to be saved.
+								*/
+								newPersistedTiledMapLayer.infoWindowSettings = LayerUtil.serialisePopupInfoSettings(atmsl);
+								newWorkspace.MapServices.push(newPersistedTiledMapLayer);
+							}
+						}
+						
+						if (loopMapLayers is ArcGISDynamicMapServiceLayer)
+						{
+							var adymsl:ArcGISDynamicMapServiceLayer = loopMapLayers as ArcGISDynamicMapServiceLayer;
+							if (adymsl != null)
+							{
+								var newPersistedDynamicMapLayer:Object = new Object();
+								newPersistedDynamicMapLayer.MapServiceLayerType = "ArcGISDynamicMapServiceLayer";
+								newPersistedDynamicMapLayer.url = adymsl.url;
+								newPersistedDynamicMapLayer.layerInfos = adymsl.layerInfos;
+								newPersistedDynamicMapLayer.visibleLayers = adymsl.visibleLayers;
+								
+								//note this reads the com.esri.ags.Layers.Layer.visible property, not a com.esri.ags.Layers.ArcGISDynamicMapServiceLayer.visible,
+								newPersistedDynamicMapLayer.visible = adymsl.visible;
+								newPersistedDynamicMapLayer.name = adymsl.name;
+								newPersistedDynamicMapLayer.alpha = adymsl.alpha;
+
+								/*
+								Changed by Ryan Elley (ECan) 28/07/2013 - Addition of support for tokens and proxied layers.
+								*/
+								if (adymsl.token)
+								{
+									newPersistedDynamicMapLayer.token = adymsl.token;
+								}
+								
+								if (adymsl.proxyURL)
+								{
+									newPersistedDynamicMapLayer.useProxy = true;
+								}
+								
+								/*
+								Changed by Ryan Elley (ECan) 20/12/2011 - Addition of popup info details to be saved.
+								*/
+								newPersistedDynamicMapLayer.infoWindowSettings = LayerUtil.serialisePopupInfoSettings(adymsl);
+								
+								newWorkspace.MapServices.push(newPersistedDynamicMapLayer);
+							}
+						}
+						
+						if (loopMapLayers is FeatureLayer)
+						{
+							/*
+							Changed by Ryan Elley (ECan) 02/11/2013 - Addition of check for search results.
+							*/
+							
+							// Check if the layer contains "{Search Results]"
+							if (loopMapLayers.name.indexOf("[Search Results]") == -1)
+							{
+								var afeaturelayer:FeatureLayer = loopMapLayers as FeatureLayer;
+								if (afeaturelayer != null)
+								{
+									var newPersistedFeatureLayer:Object = new Object();
+									newPersistedFeatureLayer.MapServiceLayerType = "FeatureLayer";
+									newPersistedFeatureLayer.url = afeaturelayer.url;
+									newPersistedFeatureLayer.visible = afeaturelayer.visible;
+									newPersistedFeatureLayer.name = afeaturelayer.name;
+									newPersistedFeatureLayer.alpha = afeaturelayer.alpha;
+									
+									/* 
+									Changed by Ryan Elley (ECan) 21/12/2011 - Fix for loading in featurelayer field settings 
+									*/
+									newPersistedFeatureLayer.outFields = afeaturelayer.outFields ? afeaturelayer.outFields.join(";") : "*";
+									/* End of Change */								
+
+									/* 
+									Changed by Ryan Elley (ECan) 02/08/2014 - Addition for including a defintion query agains the feature layer 
+									*/
+									if (afeaturelayer.definitionExpression)
+									{
+										newPersistedFeatureLayer.definitionExpression = afeaturelayer.definitionExpression;
+									}
+									/* End of Change */								
+									
+									/*
+									Changed by Ryan Elley (ECan) 20/12/2011 - Addition of popup info details to be saved.
+									*/
+									newPersistedFeatureLayer.infoWindowSettings = LayerUtil.serialisePopupInfoSettings(afeaturelayer);
+									/* End of Change */
+									
+									/*
+									Changed by Ryan Elley (ECan) 28/07/2013 - Addition of support for tokens and proxied layers.
+									*/
+									if (afeaturelayer.token)
+									{
+										newPersistedFeatureLayer.token = afeaturelayer.token;
+									}
+									
+									if (afeaturelayer.proxyURL)
+									{
+										newPersistedFeatureLayer.useProxy = true;
+									}
+									
+									newWorkspace.MapServices.push(newPersistedFeatureLayer);
+								}
+							}
+						}
+						
+						/* Changed by Ryan Elley (ECan) 28/07/2013 - New layer types to be saved */
+
+						if (loopMapLayers is VETiledLayer)
+						{
+							var ave:VETiledLayer = loopMapLayers as VETiledLayer;
+							if (ave != null)
+							{
+								var newPersistedVETiledLayer:Object = new Object();
+								newPersistedVETiledLayer.MapServiceLayerType = "VETiledLayer";
+								newPersistedVETiledLayer.mapStyle = ave.mapStyle;
+								newPersistedVETiledLayer.culture = ave.culture;
+								newPersistedVETiledLayer.key = ave.key;
+								newPersistedVETiledLayer.visible = ave.visible;
+								newPersistedVETiledLayer.name = ave.name;
+								newPersistedVETiledLayer.alpha = ave.alpha;
+								
+								newWorkspace.MapServices.push(newPersistedVETiledLayer);
+							}
+						}
+						
+						if (loopMapLayers is ArcGISImageServiceLayer)
+						{
+							var aimsl:ArcGISImageServiceLayer = loopMapLayers as ArcGISImageServiceLayer;
+							if (aimsl != null)
+							{
+								var newPersistedImageServiceLayer:Object = new Object();
+								newPersistedImageServiceLayer.MapServiceLayerType = "ArcGISImageServiceLayer";
+								newPersistedImageServiceLayer.url = aimsl.url;
+								
+								//note this reads the com.esri.ags.Layers.Layer.visible property, not a com.esri.ags.Layers.ArcGISDynamicMapServiceLayer.visible,
+								newPersistedImageServiceLayer.visible = aimsl.visible;
+								newPersistedImageServiceLayer.name = aimsl.name;
+								newPersistedImageServiceLayer.alpha = aimsl.alpha;
+								
+								if (aimsl.token)
+								{
+									newPersistedImageServiceLayer.token = aimsl.token;
+								}
+
+								if (aimsl.proxyURL)
+								{
+									newPersistedImageServiceLayer.useProxy = true;
+								}
+								
+								// Image service properties
+								newPersistedImageServiceLayer.bandIds = aimsl.bandIds;
+								newPersistedImageServiceLayer.compressionQuality = aimsl.compressionQuality;
+								newPersistedImageServiceLayer.imageFormat = aimsl.imageFormat;
+								newPersistedImageServiceLayer.interpolation = aimsl.interpolation;
+								newPersistedImageServiceLayer.noData = aimsl.noData;
+								newPersistedImageServiceLayer.timeOffset = aimsl.timeOffset;
+								newPersistedImageServiceLayer.timeOffsetUnits = aimsl.timeOffsetUnits;
+								newPersistedImageServiceLayer.useMapTime = aimsl.useMapTime;
+			
+								
+								// Add to the workspace list
+								newWorkspace.MapServices.push(newPersistedImageServiceLayer);
+							}
+						}
+						
+						
+					}
+				}
+				
+				return newWorkspace;
+			}
+			
+			/**
+			 * Reconstitutes the map settings from the saved workspace 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>workspace data object to be loaded.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function LoadWorkspaceItem(w:WorkspaceData):void
+			{
+				var i:int;
+				
+				// Goto stored extent
+				if (w != null
+					&& w.MapExtent != null
+					&& w.MapExtent.length == 5)
+				{	
+					var newMapExtent:Extent = new Extent(
+						w.MapExtent[0],
+						w.MapExtent[1],
+						w.MapExtent[2],
+						w.MapExtent[3],
+						new SpatialReference(w.MapExtent[4])
+					);
+					
+					map.extent = newMapExtent;
+				}
+				
+				// Rehydrate graphics
+				if (w != null && w.GraphicLayers != null)
+				{
+					for each (var wsGraphicLayer:Object in w.GraphicLayers)
+					{
+						if (!wsGraphicLayer.hasOwnProperty("layername")
+							|| wsGraphicLayer.layername == ""
+							|| !wsGraphicLayer.hasOwnProperty("id")
+							|| wsGraphicLayer.id == ""
+							|| !_GraphicLayerIDsToPersist.contains(wsGraphicLayer.id)
+						)
+						{
+							continue;
+						}
+						var destMapGraphicsLayer:GraphicsLayer = null;
+						
+						//try and grab matching original graphic layer
+						for each (var loopGraphicLayers:Layer in map.layers)
+						{
+							if (loopGraphicLayers is GraphicsLayer && !(loopGraphicLayers is FeatureLayer))
+							{
+								var gl:GraphicsLayer = loopGraphicLayers as GraphicsLayer;
+								if (gl != null && gl.id == wsGraphicLayer.id)
+								{
+									debug("LoadWorkspaceItem","Found graphics layer '" + wsGraphicLayer.id + "'");
+									destMapGraphicsLayer = gl;
+									break;
+								}
+							}
+						}
+						
+						if (destMapGraphicsLayer == null)
+						{
+							// Add the graphic layer in
+							destMapGraphicsLayer = new GraphicsLayer();
+							destMapGraphicsLayer.name = wsGraphicLayer.layername;
+							destMapGraphicsLayer.id = wsGraphicLayer.id;
+							
+							debug("LoadWorkspaceItem","Added graphics layer '" + wsGraphicLayer.id + "'");
+							
+							map.addLayer(destMapGraphicsLayer);
+						}
+						
+						destMapGraphicsLayer.clear();
+						
+						for each (var graphicItem:Object in wsGraphicLayer.graphics)
+						{
+							destMapGraphicsLayer.add(RehydrateGraphicItem(graphicItem));
+						}
+					}
+				}
+				
+				// Include Mapservices and Apply visibilites
+				if (w != null && w.MapServices != null)
+				{
+					// First, build an array of layers that are in the map. This helps keep track of what stays and what goes
+					var mapMapLayerArray:Array = [];
+					
+					for (var mapMapLayerArray_i:int = 0; mapMapLayerArray_i < map.layers.length; mapMapLayerArray_i ++)
+					{
+						var mapMapLayerArray_newItem:Object = new Object();
+						mapMapLayerArray_newItem.layer = map.layers[mapMapLayerArray_i];
+						
+						// Always keep graphic layers - don't mess with them - otherwise default false
+						mapMapLayerArray_newItem.keep = (map.layers[mapMapLayerArray_i] as Object) is GraphicsLayer && !(map.layers[mapMapLayerArray_i] is FeatureLayer);
+						
+						mapMapLayerArray_newItem.position = mapMapLayerArray_i;
+						mapMapLayerArray_newItem.isnew = false;
+						mapMapLayerArray.push(mapMapLayerArray_newItem);
+					}
+					
+					for (var wsMapService_i:int = 0; wsMapService_i < w.MapServices.length; wsMapService_i++)
+					{
+						var wsMapService:Object = w.MapServices[wsMapService_i];
+						
+						switch (wsMapService.MapServiceLayerType)
+						{
+							case "ArcGISTiledMapServiceLayer":
+							{
+								var mapMapLayerArray_destTileItem:Object;
+								var destArcGISTiledMapServiceLayer:ArcGISTiledMapServiceLayer = null;
+								var destTSasLayer:Layer = null;
+								
+								// Check for a service with these specs
+								for each (var mapMapLayerArray_loopTileItem:Object in mapMapLayerArray)
+								{
+									if (mapMapLayerArray_loopTileItem.layer is ArcGISTiledMapServiceLayer
+										&& ArcGISTiledMapServiceLayer(mapMapLayerArray_loopTileItem.layer).url == wsMapService.url)
+									{
+										mapMapLayerArray_destTileItem = mapMapLayerArray_loopTileItem;
+										destArcGISTiledMapServiceLayer = mapMapLayerArray_loopTileItem.layer as ArcGISTiledMapServiceLayer;
+										break;
+									}
+								}
+								
+								if (destArcGISTiledMapServiceLayer == null)
+								{
+									destArcGISTiledMapServiceLayer = new ArcGISTiledMapServiceLayer(wsMapService.url);
+									destArcGISTiledMapServiceLayer.name = wsMapService.name;
+									
+									if (wsMapService.useProxy)
+									{
+										destArcGISTiledMapServiceLayer.proxyURL = configData.proxyUrl;
+									}
+
+									if (wsMapService.token)
+									{
+										destArcGISTiledMapServiceLayer.token = wsMapService.token;
+									}
+									
+									mapMapLayerArray_destTileItem = new Object();
+									mapMapLayerArray_destTileItem.layer = destArcGISTiledMapServiceLayer;
+									mapMapLayerArray_destTileItem.isnew = true;
+									mapMapLayerArray.push(mapMapLayerArray_destTileItem);
+								}
+								
+								destArcGISTiledMapServiceLayer.visible = wsMapService.visible;
+								destArcGISTiledMapServiceLayer.alpha = wsMapService.alpha;
+								
+								/*
+								Change By Ryan Elley (ECan) 20/12/2011 - Addition of popupsettings
+								*/
+								LayerUtil.deserialisePopupInfoSettings(wsMapService.infoWindowSettings, 
+									destArcGISTiledMapServiceLayer); 
+								
+								mapMapLayerArray_destTileItem.keep = true;
+								mapMapLayerArray_destTileItem.position = wsMapService_i;
+								
+							}
+								break;
+							
+							case "ArcGISDynamicMapServiceLayer":
+							{
+								var mapMapLayerArray_destDynItem:Object;
+								var destArcGISDynamicMapServiceLayer:ArcGISDynamicMapServiceLayer = null;
+								
+								//check for a service with these specs
+								for each (var mapMapLayerArray_loopDynItem:Object in mapMapLayerArray)
+								{
+									if (mapMapLayerArray_loopDynItem.layer is ArcGISDynamicMapServiceLayer
+										&& ArcGISDynamicMapServiceLayer(mapMapLayerArray_loopDynItem.layer).url == wsMapService.url)
+									{
+										mapMapLayerArray_destDynItem = mapMapLayerArray_loopDynItem;
+										destArcGISDynamicMapServiceLayer = mapMapLayerArray_loopDynItem.layer as ArcGISDynamicMapServiceLayer;
+										break;
+									}
+								}
+								
+								if (destArcGISDynamicMapServiceLayer == null)
+								{
+									destArcGISDynamicMapServiceLayer = new ArcGISDynamicMapServiceLayer(wsMapService.url);
+									destArcGISDynamicMapServiceLayer.name = wsMapService.name;
+									
+									if (wsMapService.useProxy)
+									{
+										destArcGISDynamicMapServiceLayer.proxyURL = configData.proxyUrl;
+									}
+									
+									if (wsMapService.token)
+									{
+										destArcGISDynamicMapServiceLayer.token = wsMapService.token;
+									}
+
+									destArcGISDynamicMapServiceLayer.addEventListener(LayerEvent.LOAD,
+										function newDynLayerLoaded(event:LayerEvent):void
+										{
+											/* Change by Ryan Elley (ECan) 19/12/2011 - bug fix for setting the visiblity of the sub-layers in a dynamic map service 
+											// Original Code
+											destArcGISDynamicMapServiceLayer.removeEventListener(LayerEvent.LOAD, newDynLayerLoaded);
+											//LoadWorkspaceAssignAGSDynamicLayerVisibilities(destArcGISDynamicMapServiceLayer, wsMapService);
+											
+											destArcGISDynamicMapServiceLayer.visible = wsMapService.visible;
+											destArcGISDynamicMapServiceLayer.visibleLayers = wsMapService.visibleLayers;
+											*/
+											
+											var dynService:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(event.layer);
+											
+											// Clean up the event listener
+											dynService.removeEventListener(LayerEvent.LOAD, newDynLayerLoaded);
+											
+											// Get the details associated with this layer 
+											var savedDynamicDetails:Object = getSavedDetails(dynService.url);
+											
+											if (savedDynamicDetails)
+											{
+												// Set the maps service and sub-layer visible status
+												dynService.visible = savedDynamicDetails.visible;
+												
+												// Check if visible layer settings are valid
+												var vislayers:Array = [];
+												for each (var i:int in savedDynamicDetails.visibleLayers) 
+												{
+													if (getLayerInfo(dynService.layerInfos,i))
+													{
+														vislayers.push(i);														
+													}
+												};
+												dynService.visibleLayers = new ArrayCollection(vislayers);
+											}
+										});
+									
+									mapMapLayerArray_destDynItem = new Object();
+									mapMapLayerArray_destDynItem.layer = destArcGISDynamicMapServiceLayer;
+									mapMapLayerArray_destDynItem.isnew = true;
+									mapMapLayerArray.push(mapMapLayerArray_destDynItem);
+								}
+								else
+								{
+									destArcGISDynamicMapServiceLayer.visible = wsMapService.visible;
+									
+									var vislayers:Array = [];
+									for each (i in wsMapService.visibleLayers) 
+									{
+										if (getLayerInfo(destArcGISDynamicMapServiceLayer.layerInfos,i))
+										{
+											vislayers.push(i);														
+										}
+									};
+									destArcGISDynamicMapServiceLayer.visibleLayers = new ArrayCollection(vislayers);
+									//destArcGISDynamicMapServiceLayer.visibleLayers = wsMapService.visibleLayers;
+									//var test:Array = destArcGISDynamicMapServiceLayer.layerInfoWindowRenderers;
+									destArcGISDynamicMapServiceLayer.refresh();
+								}
+								
+								destArcGISDynamicMapServiceLayer.alpha = wsMapService.alpha;
+								
+								/*
+								Change By Ryan Elley (ECan) 20/12/2011 - Addition of popupsettings
+								*/
+								LayerUtil.deserialisePopupInfoSettings(wsMapService.infoWindowSettings, 
+									destArcGISDynamicMapServiceLayer); 
+								/* End of Change */
+								
+								mapMapLayerArray_destDynItem.keep = true;
+								mapMapLayerArray_destDynItem.position = wsMapService_i;
+								
+							}
+								break;
+							
+							case "FeatureLayer":
+							{
+								var mapMapLayerArray_destFeatureLayerItem:Object;
+								var destFeatureLayer:FeatureLayer = null;
+								
+								// Check for a service with these specs
+								for each (var mapMapLayerArray_loopFLItem:Object in mapMapLayerArray)
+								{
+									if (mapMapLayerArray_loopFLItem.layer is FeatureLayer
+										&& FeatureLayer(mapMapLayerArray_loopFLItem.layer).url == wsMapService.url)
+									{
+										mapMapLayerArray_destFeatureLayerItem = mapMapLayerArray_loopFLItem;
+										destFeatureLayer = mapMapLayerArray_loopFLItem.layer as FeatureLayer;
+										break;
+									}
+								}
+								
+								if (destFeatureLayer == null)
+								{
+									destFeatureLayer = new FeatureLayer(wsMapService.url);
+									destFeatureLayer.name = wsMapService.name;
+									
+									if (wsMapService.useProxy)
+									{
+										destFeatureLayer.proxyURL = configData.proxyUrl;
+									}
+									
+									if (wsMapService.token)
+									{
+										destFeatureLayer.token = wsMapService.token;
+									}
+									
+									mapMapLayerArray_destFeatureLayerItem = new Object();
+									mapMapLayerArray_destFeatureLayerItem.layer = destFeatureLayer;
+									mapMapLayerArray_destFeatureLayerItem.isnew = true;
+									mapMapLayerArray.push(mapMapLayerArray_destFeatureLayerItem);
+								}
+								
+								/* 
+								Change by Ryan Elley (ECan) 21/12/2011 - Fix for loading in featurelayer field settings 
+								*/
+								if (wsMapService.outFields)
+									destFeatureLayer.outFields = String(wsMapService.outFields).split(";");
+								/* End of Change */
+
+								
+								/* 
+								Change by Ryan Elley (ECan) 2/08/2014 - Addition for including definition expression settings 
+								*/
+								if (wsMapService.definitionExpression)
+									destFeatureLayer.definitionExpression = wsMapService.definitionExpression;
+								/* End of Change */
+								
+								destFeatureLayer.visible = wsMapService.visible;
+								destFeatureLayer.alpha = wsMapService.alpha;
+								
+								/*
+								Change By Ryan Elley (ECan) 20/12/2011 - Addition of popupsettings
+								*/
+								LayerUtil.deserialisePopupInfoSettings(wsMapService.infoWindowSettings, 
+									destFeatureLayer); 
+								/* End of Change */
+								
+								mapMapLayerArray_destFeatureLayerItem.keep = true;
+								mapMapLayerArray_destFeatureLayerItem.position = wsMapService_i;
+								
+							}
+								break;
+							
+							case "VETiledLayer":
+							{
+								var mapMapLayerArray_destVETiledLayerItem:Object;
+								var destVETiledLayer:VETiledLayer = null;
+								
+								// Check for a service with these specs
+								for each (var mapMapLayerArray_loopVLItem:Object in mapMapLayerArray)
+								{
+									if (mapMapLayerArray_loopVLItem.layer is VETiledLayer
+										&& VETiledLayer(mapMapLayerArray_loopVLItem.layer).mapStyle == wsMapService.mapStyle)
+									{
+										mapMapLayerArray_destVETiledLayerItem = mapMapLayerArray_loopVLItem;
+										destVETiledLayer = mapMapLayerArray_loopVLItem.layer as VETiledLayer;
+										break;
+									}
+								}
+								
+								if (destVETiledLayer == null)
+								{
+									destVETiledLayer = new VETiledLayer(wsMapService.culture, wsMapService.mapStyle);
+									destVETiledLayer.name = wsMapService.name;
+									
+									mapMapLayerArray_destVETiledLayerItem = new Object();
+									mapMapLayerArray_destVETiledLayerItem.layer = destVETiledLayer;
+									mapMapLayerArray_destVETiledLayerItem.isnew = true;
+									mapMapLayerArray.push(mapMapLayerArray_destVETiledLayerItem);
+								}
+								
+								destVETiledLayer.visible = wsMapService.visible;
+								destVETiledLayer.alpha = wsMapService.alpha;
+								
+								mapMapLayerArray_destVETiledLayerItem.keep = true;
+								mapMapLayerArray_destVETiledLayerItem.position = wsMapService_i;
+							}
+								break;
+							
+							case "ArcGISImageServiceLayer":
+							{
+								var mapMapLayerArray_destISLayerItem:Object;
+								var destISLayer:ArcGISImageServiceLayer = null;
+								
+								// Check for a service with these specs
+								for each (var mapMapLayerArray_loopISLItem:Object in mapMapLayerArray)
+								{
+									if (mapMapLayerArray_loopISLItem.layer is ArcGISImageServiceLayer
+										&& ArcGISImageServiceLayer(mapMapLayerArray_loopISLItem.layer).url == wsMapService.url)
+									{
+										mapMapLayerArray_destISLayerItem = mapMapLayerArray_loopISLItem;
+										destISLayer = mapMapLayerArray_loopISLItem.layer as ArcGISImageServiceLayer;
+										break;
+									}
+								}
+								
+								if (destISLayer == null)
+								{
+									destISLayer = new ArcGISImageServiceLayer(wsMapService.url, wsMapService.mapStyle);
+									
+									if (wsMapService.useProxy)
+									{
+										destISLayer.proxyURL = configData.proxyUrl;
+									}
+									
+									if (wsMapService.token)
+									{
+										destISLayer.token = wsMapService.token;
+									}
+
+									destISLayer.name = wsMapService.name;
+									
+									// Image service properties
+									destISLayer.bandIds = wsMapService.bandIds;
+									destISLayer.compressionQuality = wsMapService.compressionQuality;
+									destISLayer.imageFormat = wsMapService.imageFormat;
+									destISLayer.interpolation = wsMapService.interpolation;
+									destISLayer.noData = wsMapService.noData;
+									destISLayer.timeOffset = wsMapService.timeOffset;
+									destISLayer.timeOffsetUnits = wsMapService.timeOffsetUnits;
+									destISLayer.useMapTime = wsMapService.useMapTime;
+									
+									mapMapLayerArray_destISLayerItem = new Object();
+									mapMapLayerArray_destISLayerItem.layer = destVETiledLayer;
+									mapMapLayerArray_destISLayerItem.isnew = true;
+									mapMapLayerArray.push(mapMapLayerArray_destISLayerItem);
+								}
+								
+								destISLayer.visible = wsMapService.visible;
+								destISLayer.alpha = wsMapService.alpha;
+								
+								mapMapLayerArray_destISLayerItem.keep = true;
+								mapMapLayerArray_destISLayerItem.position = wsMapService_i;
+							}
+								break;
+							
+							default:
+								break;
+						}
+					}
+					
+					// Drop layers where keep == false (ie weren't in Workspace, and aren't GraphicsLayers
+					
+					// Change by Ryan Elley (ECan) 26/06/2012 - Addition of option not to drop layers
+					if (clearFeatures.selected)
+					{
+						var mapMapLayersToDrop:Array = mapMapLayerArray.filter(
+							function isToBeDropped(element:*, index:int, arr:Array):Boolean 
+							{
+								return (element.keep == false);
+							} 
+							, this);
+						
+						for each (var mapMapLayersToDrop_loopItem:Object in mapMapLayersToDrop)
+						{
+							map.removeLayer(mapMapLayersToDrop_loopItem.layer);
+						}
+					}
+					
+					// Filter on keep==true, order by position
+					var mapMapLayersToReconcile:Array = mapMapLayerArray.filter(
+						function isToBeDropped(element:*, index:int, arr:Array):Boolean 
+						{
+							return (element.keep == true);
+						} 
+						, this).sortOn("position", Array.NUMERIC);
+					
+					// Interation variable. using mapLayerPositionOrdinal in case there are repeat mapMapLayerArray_reconcileItem.position 
+					// values (existing GraphicsLayer here), or gaps in the sequence (other layers removed) 
+					var mapLayerPositionOrdinal:int = 0;
+					
+					for each (var mapMapLayerArray_reconcileItem:Object in mapMapLayersToReconcile)
+					{
+						
+						if (mapMapLayerArray_reconcileItem.isnew == true)
+						{
+							// add the new layer to the map
+							map.addLayer(mapMapLayerArray_reconcileItem.layer, mapLayerPositionOrdinal);
+						}
+						else
+						{
+							// reposition the layer
+							map.reorderLayer(mapMapLayerArray_reconcileItem.layer, mapLayerPositionOrdinal);
+						}
+						
+						mapLayerPositionOrdinal++;
+					}
+					
+				}
+				
+				// Raise event to dispatch the call to the TOC to force a refresh
+				AppEvent.dispatch(AppEvent.REFRESH_LEGEND);
+				
+				// Clear the loading message
+				clearMessage();
+				
+				/* 	Change by Ryan Elley (ECan) 26/06/2012 - Added to give feed back to user that the loading has completed. */
+				Alert.show("Workspace Load Completed!","Loading Workspace", Alert.OK, map);
+				
+				/*
+				Change by Ryan Elley (ECan) 19/12/2011 - Added as part of a bug fix for setting the visiblity of the sub-layers 
+				in a dynamic map service (see above). 				
+				*/
+				function getSavedDetails(serviceURL:String):Object
+				{
+					var s:Object;
+					
+					for each (var ms:Object in w.MapServices)
+					{
+						if (ms.url == serviceURL)
+						{
+							s = ms;
+							break;
+						}
+					}
+					return s;
+				}
+			}
+			
+			/** 
+			 * Serialises a graphic to an object to be saved to the workspace data item. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>Graphic to be serialised.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function PersistGraphicItem(graphic:Graphic):Object
+			{
+				var gOb:Object = new Object();
+				gOb.geometry = graphic.geometry;
+				gOb.attributes = graphic.attributes;
+				var sym:Symbol = null;
+				
+				if (graphic.symbol == null)
+				{
+					if (graphic.graphicsLayer != null)
+					{
+						sym = graphic.graphicsLayer.symbol;
+					}
+					else
+					{
+						sym = new CompositeSymbol(
+							[
+								new SimpleMarkerSymbol(), 
+								new SimpleLineSymbol(), 
+								new SimpleFillSymbol()
+							]);
+					}
+				}
+				else
+				{
+					sym = graphic.symbol;
+				}
+				
+				gOb.symbol = sym;
+				
+				//return gOb;
+				var ba:ByteArray = new ByteArray();
+				ba.writeObject(gOb);
+				return ba;
+			}
+			
+			/** 
+			 * Return layerInfo for the given LayerID. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerInfos [Array]: </i>Array of layer info objects, typcailly from an arcgis dynamic or tiled service</li>
+			 * <li><i>layerID [int]: </i>Layer id of the layerinfo to retrieve</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function getLayerInfo(layerInfos:Array, layerID:int):LayerInfo
+			{	
+				var layerInfo:LayerInfo;
+				for each (var info:LayerInfo in layerInfos)
+				{
+					if (info.layerId == layerID)
+					{
+						layerInfo = info;
+						break;
+					}
+				}
+				return layerInfo;
+			}
+			
+			/** 
+			 * Deserialises a saved graphic object. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>gObBytes [Object]: </i>Serialised graphic object.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function RehydrateGraphicItem(gObBytes:Object):Graphic
+			{
+				var ba:ByteArray = gObBytes as ByteArray;
+				ba.position = 0;
+				var gOb:Object = ba.readObject();				
+				
+				var newGraphic:Graphic = new Graphic(
+					gOb.geometry, 
+					gOb.symbol,
+					gOb.attributes
+				);
+
+				return newGraphic;
+			}
+			
+			/** 
+			 * Deserialises a web storage object to a workspace data object. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>webWorkspace [WorkspaceDataItem]: </i>Workspace data object to be reconstituted.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWorkspaceWebItemToDataItem(webWorkspace:WorkspaceDataItem):WorkspaceData
+			{
+				if (webWorkspace == null)
+				{
+					return null;
+				}
+				var newWorkspaceItem:WorkspaceData = new WorkspaceData();
+				newWorkspaceItem.WorkspaceID = webWorkspace.WorkspaceID;
+				newWorkspaceItem.Title = webWorkspace.Title;
+				newWorkspaceItem.Description = webWorkspace.Description;
+				newWorkspaceItem.MapExtent = webWorkspace.MapExtent.source;
+				
+				if (webWorkspace.GraphicLayers != null &&
+					webWorkspace.GraphicLayers.length > 0)
+				{
+					newWorkspaceItem.GraphicLayers = webWorkspace.GraphicLayers.readObject() as Array;
+				}
+				
+				if (webWorkspace.MapServices != null &&
+					webWorkspace.MapServices.length > 0)
+				{
+					newWorkspaceItem.MapServices = webWorkspace.MapServices.readObject() as Array;
+				}
+				
+				newWorkspaceItem.CreatedTime = DateFormatter.parseDateString(webWorkspace.CreatedTime);
+				newWorkspaceItem.LastModified = DateFormatter.parseDateString(webWorkspace.LastModified);
+				return newWorkspaceItem;
+			}
+			
+			/** 
+			 * Serialises a workspace data object to a web storage object. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>Workspace data object to be saved.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebDataToWebItem(w:WorkspaceData):WorkspaceDataItem
+			{
+				var newWorkspaceItem:WorkspaceDataItem = new WorkspaceDataItem();
+				
+				newWorkspaceItem.WorkspaceID = w.WorkspaceID;
+				newWorkspaceItem.Title = w.Title;
+				newWorkspaceItem.Description = w.Description;
+				newWorkspaceItem.MapExtent = w.MapExtent;
+				
+				if (w.GraphicLayers != null)
+				{
+					var glba:ByteArray = new ByteArray();
+					glba.writeObject(w.GraphicLayers);						
+					newWorkspaceItem.GraphicLayers = glba;
+				}
+				
+				if (w.MapServices != null)
+				{
+					var msba:ByteArray = new ByteArray();
+					msba.writeObject(w.MapServices);
+					newWorkspaceItem.MapServices = msba;
+				}
+				
+				newWorkspaceItem.CreatedTime = _storageDateFormatter.format(w.CreatedTime);
+				newWorkspaceItem.LastModified = _storageDateFormatter.format(w.LastModified);
+				
+				return newWorkspaceItem;
+			}
+			
+
+			
+			
+			/*  WORKSPACE CRUD FUNCTIONALITY
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Save a new workspace to Persisent storage
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>New workspace data object to be saved.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageAdd(w:WorkspaceData):void
+			{
+				// Get the current date to tag against the workspace
+				var now:Date = new Date();
+				w.CreatedTime = now;
+				w.LastModified = now;
+
+				// Add the new workspace to the current collection
+				_workspaceItems.addItem(w);
+
+				// Check the current storage mode 
+				switch (_StorageMode)
+				{
+					case STORAGE_MODE_SHARED_OBJECT:
+					{	
+						_WorkspacesSharedObject.flush();
+						break;
+					}
+						
+					case STORAGE_MODE_CENTRAL_REPO:
+					{
+						var newWorkspaceItem:WorkspaceDataItem = WorkspaceStorageWebDataToWebItem(w);
+						
+						var token:AsyncToken = _WorkspacesWebService.InsertWorkspace(newWorkspaceItem);
+						token.addResponder(new AsyncResponder(WorkspaceStorageWebCRUDWorkspace_resultHandler,WorkspaceStorageWebCRUDWorkspace_faultHandler));
+						break;
+					}
+						
+					default:
+						// Do nothing
+						break;
+				}
+			}
+			
+			/** 
+			 * Called when the new workspace or an existing workspace is updated to the network storage service.  Used for debugging only. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [ResultEvent]: </i>Event returned by the network storage call.</li>
+			 * <li><i>token [Object]: </i>Data object attached to callback process.  Should be null in all cases.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebCRUDWorkspace_resultHandler(event:ResultEvent, token:Object=null ):void
+			{	
+				debug("Workspace Storage Web CRUD Workspace","Success");
+			}
+			
+			/** 
+			 * Called when the new workspace or an existing workspace is updated to the network storage service and a fault is returned. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaultEvent]: </i>Fault event returned by the network storage call.</li>
+			 * <li><i>token [Object]: </i>Data object attached to callback process.  Should be null in all cases.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageWebCRUDWorkspace_faultHandler(event:FaultEvent, token:Object=null ):void
+			{
+				debug("Workspace Storage Web CRUD Workspace","ERROR: " + event.fault.message);
+				showMessage("ERROR: " + event.fault.message,false);
+			}
+			
+			/** 
+			 * Delete a workspace in Persisent storage
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>Current workspace data object to be removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageDelete(w:WorkspaceData):void
+			{
+				// Take the item out of the list
+				var oldWorkspaceIndex:int = _workspaceItems.getItemIndex(w);
+				_workspaceItems.removeItemAt(oldWorkspaceIndex);
+				
+				// Check the current storage mode
+				switch (_StorageMode)
+				{
+					case STORAGE_MODE_SHARED_OBJECT:
+						_WorkspacesSharedObject.flush();
+						break;
+					
+					case STORAGE_MODE_CENTRAL_REPO:
+					{
+						var delWorkspaceItem:WorkspaceDataItem = WorkspaceStorageWebDataToWebItem(w);
+						
+						var token:AsyncToken = _WorkspacesWebService.DeleteWorkspace(delWorkspaceItem);
+						token.addResponder(new AsyncResponder(WorkspaceStorageWebCRUDWorkspace_resultHandler,WorkspaceStorageWebCRUDWorkspace_faultHandler));
+					}
+						break;
+					
+					default:
+						// Do nothing
+						break;
+				}
+			}
+			
+			/** 
+			 * Save changes to a workspace to Persisent storage
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>w [WorkspaceData]: </i>Current workspace data object to be saved.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function WorkspaceStorageUpdate(w:WorkspaceData):void
+			{
+				// Get the current date to tag against the workspace
+				var now:Date = new Date();
+				w.LastModified = now;
+				
+				// Check the current storage mode 
+				switch (_StorageMode)
+				{
+					case STORAGE_MODE_SHARED_OBJECT:
+					{
+						_WorkspacesSharedObject.flush();
+					}
+						break;
+					
+					case STORAGE_MODE_CENTRAL_REPO:
+					{
+						var updWorkspaceItem:WorkspaceDataItem = WorkspaceStorageWebDataToWebItem(w);
+						
+						var token:AsyncToken = _WorkspacesWebService.UpdateWorkspace(updWorkspaceItem);
+						token.addResponder(new AsyncResponder(WorkspaceStorageWebCRUDWorkspace_resultHandler,WorkspaceStorageWebCRUDWorkspace_faultHandler));
+						
+					}
+						break;
+					
+					default:
+						// Do nothing
+						break;
+				}
+			}
+			
+			
+			
+			/*  HELP FUNCTIONALITY
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Opens the help file assoicated with this widget.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showHelp():void
+			{
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_helpLocation),"_blank");
+			}
+
+			
+			
+			/*  MESSAGE STATE CODE
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Show a processing message.  Optionally including a working animation.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [String]: </i>Message to be displayed in the message area.</li>
+			 * <li><i>swfVisible [Boolean]: </i>Flag as to whether the working animation should be displayed when the message is shown.</li>
+			 * </ul>
+			 * </p>			 
+			 */ 			
+			private function showMessage(message:String, swfVisible:Boolean):void
+			{
+				// Set the message text
+				txtMessage.text = message;
+				
+				// Set the swirl animation visiblity
+				swfMessage.visible = swfVisible;
+				swfMessage.includeInLayout = swfVisible;
+				
+				// Set the message block visibility
+				msgVisible = true;
+			}			
+			
+			/** 
+			 * Clear processing message function.
+ 			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */ 
+			private function clearMessage():void
+			{
+				swfMessage.visible = false;
+				swfMessage.includeInLayout = false;
+				msgVisible = false;
+			}
+			
+			
+			/*  FILTER METHODS
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the text changes in the filter check box. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [TextOperationEvent]: </i>Event dispatched when the user types a value in the filter input text box.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function filterInput_changeHandler(event:TextOperationEvent):void
+			{
+				// Call to filter the workspace list.
+				applyFilter();
+			}
+						
+			/**
+			 * Update the filter on the displayed workspace list.
+ 			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function applyFilter():void 
+			{
+				_workspaceItems.filterFunction = filterWorkspaces;
+				_workspaceItems.refresh();
+			}
+			
+			
+			
+			/* WORKSPACE ITEM COLLECTION MANIPULATION FUNCTIONS
+			------------------------------------------------------------------------ */
+			
+			/**
+			 * General function to sort the returned alphabetically workspaces by title.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>workspaces [ArrayCollection]: </i>Collction of workspace setting objects returnd from the local storarge or network storage to be sorted by thier title.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function sortWorkspaces(workspaces:ArrayCollection):ArrayCollection
+			{
+				var sortFld:SortField = new SortField("Title");
+				var sort:Sort = new Sort();
+				sort.fields = [sortFld];
+				
+				// Sort the collection
+				workspaces.sort = sort;
+				workspaces.refresh();
+				
+				sort = null;
+				sortFld = null; 
+				
+				return new ArrayCollection(workspaces.toArray());
+			}
+			
+			/**
+			 * Function to apply to the workspace collection to filter workspaces tagged with appropriate details.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>item [Object]: </i>Workspace item to check if it should be filtered.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function filterWorkspaces(item:Object):Boolean 
+			{
+				var result:Boolean = false;
+				
+				// Check for text in the filter list
+				var searchString:String = "";
+				
+				if (filterInput != null)
+					searchString = filterInput.text.toUpperCase();
+				
+				if (searchString.length > 0) {
+					// Check for the filter text in the title, descripion or layer info details
+					if (item.Title.toUpperCase().indexOf(searchString) > -1 || item.Description.toUpperCase().indexOf(searchString) > -1 ) {
+						result = true;
+					}
+					else {
+						// Check map services
+						for each(var service:Object in item.MapServices) 
+						{
+							if (service.name.toUpperCase().indexOf(searchString) > -1 ) 
+							{
+								result = true;
+								break;
+							}
+						}
+					}
+				}
+				else {
+					result = true;
+				}
+				
+				return result;
+			}
+			
+			
+			
+			/*  DEBUG METHOD
+			---------------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Debug function - records debug information to the trace console if the debug variable from the config is set to true. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>heading [String]: </i>Section heading string for categorising debug messages.  Append to the front of the debug message.</li>
+			 * <li><i>message [String]: </i>Debug message string to be sent to the console..</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function debug(heading:String, message:String):void
+			{
+				if (_debug)
+				{
+					trace(heading + ": " + message);	
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<viewer:WidgetTemplate id="wTemplate"
+						   width="480" height="240"
+						   minWidth="480" minHeight="240"
+						   visible.Main="true"
+						   visible.SaveNew="true" >
+		
+		<viewer:layout>
+			<s:VerticalLayout gap="5" />
+		</viewer:layout>
+		
+		<s:HGroup includeIn="LoadingWorkspaces" verticalAlign="middle" paddingLeft="5" paddingTop="5" >
+			<mx:SWFLoader source="assets/images/loader.swf"/>
+			<s:Label text="{_LoadingWorkspacesLabel}" />
+		</s:HGroup>
+		
+		<s:VGroup includeIn="Main"
+				  height="100%"
+				  width="100%" >
+			
+			<s:HGroup 
+				paddingTop="5"
+				paddingBottom="5" 
+				width="100%" gap="5" 
+				horizontalAlign="center"
+				verticalAlign="middle" 
+				verticalCenter="0" >
+				<s:TextInput id="filterInput" change="filterInput_changeHandler(event)" prompt="{_FilterListPrompt}" width="100%" toolTip="{_FilterListLabel}" />
+			</s:HGroup>
+			
+			<s:List id="WorkspaceList"
+					dataProvider="{_workspaceItems}"
+					width="100%" height="100%" 
+					alternatingItemColors="[#CCCCCC, #999999]" 
+					rollOverColor="{getStyle('rollOverColor')}" 
+					selectionColor="{getStyle('focusColor')}"
+					itemRenderer="widgets.Workspace.WorkspaceItemRenderer" >
+				<s:scroller>
+					<!--TODO: promote this up to styles-->
+					<s:Scroller horizontalScrollPolicy="auto" verticalScrollPolicy="on"/>
+				</s:scroller>
+			</s:List>
+			
+			<s:HGroup paddingBottom="5" 
+					  width="100%" 
+					  horizontalAlign="center" >
+				<s:Button id="OpenButton"
+						  label="{_OpenButtonLabel}"
+						  enabled="{WorkspaceList.selectedIndex != -1 &amp;&amp; WorkspaceList.selectedItem != null}"
+						  click="OpenButton_clickHandler(event)" >
+				</s:Button>
+				<s:Button id="EmailButton"
+						  label="{_EmailButtonLabel}"
+						  enabled="{WorkspaceList.selectedIndex != -1 &amp;&amp; WorkspaceList.selectedItem != null}"
+						  includeInLayout="{_StorageMode == STORAGE_MODE_CENTRAL_REPO}"
+						  visible="{_StorageMode == STORAGE_MODE_CENTRAL_REPO}"
+						  click="EmailButton_clickHandler(event)" >
+				</s:Button>
+				<s:Button id="DeleteButton"
+						  label="{_DeleteButtonLabel}"
+						  enabled="{WorkspaceList.selectedIndex != -1 &amp;&amp; WorkspaceList.selectedItem != null}"
+						  click="DeleteButton_clickHandler(event)" >
+				</s:Button>
+				<s:Button id="SaveButton"
+						  label="{_SaveButtonLabel}"
+						  enabled="{WorkspaceList.selectedIndex != -1 &amp;&amp; WorkspaceList.selectedItem != null}"
+						  click="SaveButton_clickHandler(event)" >
+				</s:Button>
+				<s:Button id="SaveNewButton"
+						  label="{_NewButtonLabel}"
+						  click="SaveNewButton_clickHandler(event)" >
+				</s:Button>
+				<s:CheckBox id="clearFeatures"
+							label="{_ClearFeaturesLabel}"
+							selected="{_ClearFeatures}" 
+							toolTip="{_ClearFeaturesTooltip}" />
+			</s:HGroup>
+		</s:VGroup>
+		
+		<s:VGroup includeIn="SaveNew"
+				  height="100%"
+				  width="100%" >
+			
+			<mx:Form id="SaveNewForm"
+					 width="100%" height="100%"
+					 paddingBottom="0"
+					 verticalScrollPolicy="off">
+				
+				<mx:FormItem label="{_NewTitleLabel}" width="100%" >
+					<s:TextInput id="textInputSaveNewWorkspaceTitle" width="100%"/>
+				</mx:FormItem>
+				
+				<mx:FormItem label="{_NewDescriptionLabel}" width="100%" height="100%" >
+					<s:TextArea id="textInputSaveNewWorkspaceDescription" width="100%" height="100%" />
+				</mx:FormItem>
+				
+				<mx:FormItem label="{_NewIncludeGroupLabel}" >
+					<s:CheckBox label="{_NewIncludeGraphicsLabel}" id="chkBoxInputSaveNewWorkspaceIncludeGraphics" selected="true" />
+					<s:CheckBox label="{_NewIncludeMapLayersLabel}" id="chkBoxInputSaveNewWorkspaceIncludeMapServices" selected="true" />
+				</mx:FormItem>
+				
+				<s:HGroup width="100%" horizontalAlign="center" paddingBottom="5" >
+					<s:Button id="ButtonSaveNewOK"
+							  keyDown="buttonKeyDownHandler(event)"
+							  label="{_NewSaveButtonLabel}"
+							  click="ButtonSaveNewOK_clickHandler(event)" />
+					<s:Button id="ButtonSaveNewCancel"
+							  keyDown="buttonKeyDownHandler(event)"
+							  label="{_NewCancelButtonLabel}"
+							  click="ButtonSaveNewCancel_clickHandler(event)" />
+				</s:HGroup>
+				
+			</mx:Form>
+			
+		</s:VGroup>
+		
+		<s:VGroup
+			includeInLayout="false"
+			includeInLayout.EditExisting="true"
+			visible="false"
+			visible.EditExisting="true"
+			height="100%"
+			width="100%" >
+			
+			<mx:Form id="SaveExistingForm"
+					 width="100%" height="100%"
+					 paddingBottom="0"
+					 verticalScrollPolicy="off" >
+				
+				<mx:FormItem label="{_NewTitleLabel}" width="100%" >
+					<s:TextInput id="textInputSaveExistingWorkspaceTitle" width="100%" maxChars="50" />					
+				</mx:FormItem>
+				
+				<mx:FormItem label="{_NewDescriptionLabel}" width="100%" height="100%" >
+					<s:TextArea id="textInputSaveExistingWorkspaceDescription" width="100%" height="100%" maxChars="250" />
+				</mx:FormItem>
+				
+				<mx:FormItem label="{_NewIncludeGroupLabel}" >
+					<s:CheckBox label="{_NewIncludeGraphicsLabel}" id="chkBoxInputSaveExistingWorkspaceIncludeGraphics"/>
+					<s:CheckBox label="{_NewIncludeMapLayersLabel}" id="chkBoxInputSaveExistingWorkspaceIncludeMapServices"/>
+				</mx:FormItem>
+				
+				<s:HGroup width="100%" horizontalAlign="center" paddingBottom="5" >
+					<s:Button id="ButtonSaveExistingOK"
+							  keyDown="buttonKeyDownHandler(event)"
+							  label="{_NewSaveButtonLabel}"
+							  click="ButtonSaveExistingOK_clickHandler(event)" />
+					<s:Button id="ButtonSaveExistingCancel"
+							  keyDown="buttonKeyDownHandler(event)"
+							  label="{_NewCancelButtonLabel}"
+							  click="ButtonSaveExistingCancel_clickHandler(event)" />
+				</s:HGroup>
+				
+			</mx:Form>
+			
+		</s:VGroup>
+		
+		<!--- Message box area -->
+		<s:HGroup id="boxMessage" visible="{msgVisible}" includeInLayout="{msgVisible}" 
+				  width="100%" verticalAlign="middle" >
+			<mx:SWFLoader id="swfMessage" source="assets/images/loader.swf" />
+			<s:Label id="txtMessage" text="" width="100%" paddingRight="5" paddingLeft="5" maxDisplayedLines="20" />
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>

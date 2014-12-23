@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<iconassets/images/i_excel.png</icon>
+	<label>Add From Excel</label>
+	<description>Import points from an Excel spreadsheet.</description>
+	<widgetversion>1.1</widgetversion>
+	<helpurl></helpurl>
+</configuration>

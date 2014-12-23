@@ -1,0 +1,1207 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:esri=					"http://www.esri.com/2008/ags"
+				   xmlns:fx=					"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=						"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=					"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=				"com.esri.viewer.*"
+				   xmlns:components=			"com.esri.viewer.components.*"
+				   xmlns:CoordinatesCapture=	"widgets.CoordinateCapture.*"
+				   layout=						"absolute"
+				   widgetConfigLoaded=			"init(event)"
+				   initialize=					"basewidget_initializeHandler(event)" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.DatumTransform;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.ags.tools.NavigationTool;
+			import com.esri.viewer.AppEvent;
+			
+			import flash.events.Event;
+			import flash.events.MouseEvent;
+			
+			import mx.charts.chartClasses.DataTransform;
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ItemClickEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.CursorManagerPriority;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.effects.animation.RepeatBehavior;
+			
+			import widgets.supportClasses.utils.MapUtil;
+			
+			
+			/* Widget variables
+			------------------------------------------------------------ */
+			
+			// Display settings
+			private var _graphicsLayer:GraphicsLayer;
+			private var _graphicPointSym:PictureMarkerSymbol;
+			
+						
+			// Number formatting settings
+			private var _projNumDecPlace:Number;
+			private var _wgs84NumDecPlace:Number;
+			
+			// Point location placeholder values 
+			private var _xValue:TextField;
+			private var _yValue:TextField;
+			
+			// Current projection settings
+			[Bindable]
+			private var _myProjection:Object;
+			[Bindable]
+			private var _NZTMvisible:Boolean=true;
+			[Bindable]
+			private var _NZMGvisible:Boolean=true;
+			[Bindable]
+			private var _WSG84visible:Boolean=true;
+			[Bindable]
+			private var _WebMercatorvisible:Boolean=true;
+			
+			// Mapgrid settings
+			[Bindable]
+			private var _Grids:XMLList;
+			private var _Grid:Object;
+			private var _coordsx:int;
+			private var _coordsy:int;
+			
+			// Coordinate label values
+			[Bindable]
+			private var _coordResultLabelWebMercator:String;
+			[Bindable]
+			private var _coordResultLabelNZTM:String;
+			[Bindable]
+			private var _coordResultLabelNZTMGridRef:String;
+			[Bindable]
+			private var _coordResultLabelNZTMFinal:String;
+			[Bindable]
+			private var _coordResultLabelWGS84:String;
+			[Bindable]
+			private var _coordResultLabelWGS84Degrees:String;
+			[Bindable]
+			private var _coordResultLabelWGS84Final:String;
+			[Bindable]
+			private var _coordResultLabelNZMG:String;
+			[Bindable]
+			private var _coordResultLabelNZMGFinal:String;
+			[Bindable]
+			private var _coordResultLabelNZMGGridRef:String;
+			
+			// Widget labels
+			[Bindable]
+			private var _someText:String="Loading, pse wait.";
+			[Bindable]
+			private var _pointLabel:String;
+			[Bindable]
+			private var _clipboardlabel:String;
+			[Bindable]
+			private var _descriptionLabel:String;
+			[Bindable]
+			private var _coordEmptylabel:String;
+			[Binable]
+			private var _cursorLabel:String;
+			[Bindable]
+			private var _clearLabel:String;
+			
+			// Loading/message state
+			[Bindable]
+			private var _msgVisible:Boolean=false;
+			
+			// Messages for errors
+			[Bindable]
+			private var _locationError:String;
+			
+			// Cursor classes 			
+			[Embed(source="widgets/CoordinateCapture/assets/cursors/select_cursor.png")]
+			private var selectCursor:Class;
+			
+			// Help URL
+			private var _helpLocation:String;
+			
+			
+			/*  Widget constant values
+			------------------------------------------------------------ */
+			
+			// Image url paths
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/CoordinateCapture/assets/images/";
+
+			private const nzmgwkid:Number = 27200;
+			private const nztmwkid:Number = 2193;
+			private const wgs84wkid:Number = 4326;
+			private const webmercatorwkid:Number = 102100;
+
+			private const NZGD_1949_To_WGS_1984_2:Number = 1564;
+			private const NZGD_2000_To_WGS_1984_1:Number = 1565;
+			private const New_Zealand_1949_To_NZGD_2000_3_NTv2:Number = 1568;
+			
+			// Listings of the coordinate system used by this widget
+			private const spatialDetails:Array = [
+				{ inputWKID: nzmgwkid, outputWKID: nzmgwkid, datTransform: null, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: nztmwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: wgs84wkid, datTransform: NZGD_1949_To_WGS_1984_2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: webmercatorwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				
+				{ inputWKID: nztmwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: nztmwkid, outputWKID: nztmwkid, datTransform: null , transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: wgs84wkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: webmercatorwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				
+				{ inputWKID: wgs84wkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: wgs84wkid, datTransform: null , transformForward: true },
+				{ inputWKID: wgs84wkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true },
+				
+				{ inputWKID: webmercatorwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: wgs84wkid, datTransform: null, transformForward: true },
+				{ inputWKID: webmercatorwkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true }
+			];
+
+			
+			/*  Widget code
+			------------------------------------------------------------ */
+			
+			private function basewidget_initializeHandler(event:Event):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}			
+			
+			/** 
+			 * Called when the widget config file has been loaded
+			 */ 
+			private function init(event:Event):void
+			{
+				// Generate the point symbol - default to the widget icon
+				_graphicPointSym = new PictureMarkerSymbol(widgetIcon, 40, 40);
+				
+				if (configXML)
+				{
+					_graphicPointSym = new PictureMarkerSymbol(WIDGET_ICON_URL + configXML.clickicon, 40, 40);
+					
+					// Create graphics layer to display results in (or get the reference to the existing layer if created by another widget)
+					var graphicsLayerName:String = configXML.graphicsLayerName || "CoordinateCaptureGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "Coordinate Capture Graphics";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName,map,graphicsLayerAlias);
+					
+					// Set the graphics layer symbol (important we add the symbol -*after*- the check for config icon)
+					_graphicsLayer.symbol = _graphicPointSym;
+					
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.C.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Load labels
+					_descriptionLabel = configXML.labels.descriptionlabel || "Use the map coordindate tool to identify coordinates on the map:";
+					_pointLabel = configXML.labels.pointlabel || "Click For Coordinate";
+					_coordEmptylabel = configXML.labels.coordEmptylabel  || "-click on the map-";
+					_clearLabel = configXML.labels.clearlabel || "Clear";
+					_clipboardlabel = configXML.labels.clipboardlabel || "This Button will copy the current captured coordinates to the clipboard";
+					_locationError = configXML.labels.locationError || "Your location coordinates are invalid or outside the region.";
+					
+					// Set number format properties
+					_projNumDecPlace = configXML.projNumDecPlace || 2;
+					_wgs84NumDecPlace = configXML.wgs84NumDecPlace || 6;
+					
+					// Load help location
+					_helpLocation = configXML.helplocationurl || "widgets/CoordinatesCapture/Help/Help.htm" ;
+					
+					// Get the projection settings and enable the appropriate modes
+					var outSpatial:Number = map.spatialReference.wkid;
+					
+					// Check config for NZMG/NZTM/WGS84/WebMercator states
+					_NZMGvisible = configXML.NZMG.enable == 'true';
+					_NZTMvisible = configXML.NZTM.enable == 'true';
+					_WSG84visible = configXML.WSG84.enable == 'true';
+					_WebMercatorvisible = configXML.WebMercator.enable == 'true';
+				}
+				
+				// Add menu items to Widget
+				wTemplate.addTitlebarButton(ICON_URL + "i_clear.png", _clearLabel, clear, false);
+				if (_helpLocation)
+				{
+					wTemplate.addTitlebarButton(ICON_URL + "i_help.png", "Help", showHelp, false);
+				}
+				
+				// Reset the default labels for the coordinates
+				resetLabels();
+				
+				// Add listener for other widgets that call the draw tool
+				AppEvent.addListener(AppEvent.DATA_PUBLISH, sharedDataUpdated);
+				
+				// Set the tool to active
+				activateCoordTool();
+			}
+			
+			/** 
+			 * Clears/resets the widget
+			 */ 
+			private function clear():void
+			{
+				// Clear the graphics layer
+				_graphicsLayer.clear();
+				
+				// Reset the location labels
+				resetLabels();
+				
+				// Deactivate select tool and reactivate navigation tools
+				removeAllCursors();
+				
+				// Set state to capture
+				showStateCapture();
+			}
+			
+			/** 
+			 * Clears/resets the coordinate labels
+			 */  
+			private function resetLabels():void
+			{
+				_coordResultLabelNZTM = _coordEmptylabel;
+				_coordResultLabelNZTMFinal = _coordEmptylabel;
+				_coordResultLabelNZTMGridRef= _coordEmptylabel;
+				_coordResultLabelWGS84 = _coordEmptylabel;
+				_coordResultLabelWGS84Final = _coordEmptylabel;
+				_coordResultLabelWGS84Degrees = _coordEmptylabel;
+				_coordResultLabelNZMG = _coordEmptylabel;
+				_coordResultLabelNZMGFinal = _coordEmptylabel;
+				_coordResultLabelNZMGGridRef = _coordEmptylabel;
+				_coordResultLabelWebMercator = _coordEmptylabel;
+			}			
+			
+			/** 
+			 * Clears/resets the mouse cursors and resets map navigation
+			 */ 
+			private function removeAllCursors():void
+			{
+				// Deactivate select tool and reactivate navigation tools
+				setMapNavigation(NavigationTool.PAN,"Pan");
+				map.cursorManager.removeAllCursors();
+				
+				// Remove listeners for map rollover
+				map.removeEventListener(MouseEvent.ROLL_OUT,handle_base_rollout);
+				map.removeEventListener(MouseEvent.ROLL_OVER,handle_base_rollover);
+			}
+			
+			/** 
+			 * Activates the coordinate capture tool
+			 */ 
+			private function activateCoordTool():void
+			{
+				// Play the glowing button effect
+				buttonFun(drawButton);
+				
+				// Add listeners for map rollover 
+				map.addEventListener(MouseEvent.ROLL_OUT,handle_base_rollout);
+				map.addEventListener(MouseEvent.ROLL_OVER,handle_base_rollover);
+				
+				// Send out message to all widgets to deactivate any active draw tools
+				addSharedData("Deactivate_DrawTool", new ArrayCollection([{ widget: "CaptureCoordinatesWidget"}]));
+				
+				// Call the draw tool to capture the point				
+				var status:String = _pointLabel;
+				setMapAction(DrawTool.MAPPOINT, status, _graphicPointSym, drawEnd);
+			}
+			
+			/** 
+			 * Handles messages from other widgets that are going to use the draw tool
+			 */ 
+			private function sharedDataUpdated(event:AppEvent):void
+			{
+				var data:Object = event.data;
+				
+				if (data.key == "Deactivate_DrawTool")
+				{
+					setMapAction(null, null, null, null);
+				}
+			}
+			
+			
+			/* Capture point code
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Called when the user completes drawing a point
+			 */ 
+			private function drawEnd(event:DrawEvent):void
+			{
+				// Remove listeners for map rollover
+				map.removeEventListener(MouseEvent.ROLL_OUT,handle_base_rollout);
+				map.removeEventListener(MouseEvent.ROLL_OVER,handle_base_rollover);
+				
+				// Clear existing graphics
+				if (_graphicsLayer != null)
+					_graphicsLayer.clear();
+				
+				// Reset the labels
+				resetLabels();
+				
+				// Add the clicked point as a graphic to the display
+				var gra:Graphic = event.graphic as Graphic;
+				gra.symbol = _graphicPointSym;
+				_graphicsLayer.add(event.graphic);
+				
+				// Get the point geometry
+				var geom:MapPoint = gra.geometry as MapPoint;
+				
+				// Show the working screen
+				_msgVisible = true;
+				showStateWorking(_someText, _msgVisible);
+				
+				var stillWorking:Boolean = false;
+				
+				// CASE IF MAP IS IN Web Mercatoor
+				if (map.spatialReference.wkid == webmercatorwkid)
+				{
+					// 102100 Web Mercator Aux Sphere
+					_coordResultLabelWebMercator = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: "+ geom.y.toFixed(_projNumDecPlace);
+					
+					// Check if WGS84 coordinates enabled
+					if(_WSG84visible)
+					{
+						// Call the project points custom rest service
+						getCoordinates(wgs84wkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if WGS84 coordinates enabled
+					if(_NZTMvisible)
+					{
+						// Call the project points custom rest service
+						getCoordinates(nztmwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if NZMG coordinates enabled
+					if(_NZMGvisible)
+					{
+						// Call the project points task
+						getCoordinates(nzmgwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if any further calculations required
+					if (!stillWorking)
+					{
+						// Process complete - show results
+						showStateCapture();
+					}
+				}
+				
+				// CASE IF MAP IS IN NZMG
+				if (map.spatialReference.wkid == nzmgwkid)
+				{
+					// 27200 NZMG
+					_coordResultLabelNZMG = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: "+ geom.y.toFixed(_projNumDecPlace);// NZMG
+					_coordResultLabelNZMGGridRef = NZGridRef(geom.x, geom.y, 'NZMG');// NZMG GRIDREF
+					setNZMGLabel();
+					
+					// Check if WGS84 coordinates enabled
+					if(_WSG84visible)
+					{
+						// Call the project points custom rest service
+						getCoordinates(wgs84wkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if NZTM coordinates enabled
+					if(_NZTMvisible)
+					{
+						// Call the project points custom rest service
+						getCoordinates(nztmwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+
+					// Check if Web Mercator coordinates enabled
+					if(_WebMercatorvisible)
+					{
+						// Call the project points task
+						getCoordinates(webmercatorwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if any further calculations required
+					if (!stillWorking)
+					{
+						// Process complete - show results
+						showStateCapture();
+					}
+				}
+				
+				// CASE IF MAP IS IN NZTM
+				if (map.spatialReference.wkid == nztmwkid)
+				{
+					//2193 NZTM
+					_coordResultLabelNZTM = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: " + geom.y.toFixed(_projNumDecPlace);
+					_coordResultLabelNZTMGridRef = NZGridRef(geom.x, geom.y, 'NZTM');// NZTM GRIDREF
+					setNZTMLabel();
+					
+					// Check if WGS84 coordinates enabled
+					if(_WSG84visible)
+					{
+						// Call the project points task
+						getCoordinates(wgs84wkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+
+					// Check if NZMG coordinates enabled
+					if(_NZMGvisible)
+					{
+						// Call the project points task
+						getCoordinates(nzmgwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+
+					// Check if Web Mercator coordinates enabled
+					if(_WebMercatorvisible)
+					{
+						// Call the project points task
+						getCoordinates(webmercatorwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if any further calculations required
+					if (!stillWorking)
+					{
+						// Process complete - show results
+						showStateCapture();
+					}
+				}
+				
+				// CASE IF MAP IS IN WGS84
+				if (map.spatialReference.wkid == wgs84wkid)
+				{
+					//4326 		WSG84
+					_coordResultLabelWGS84 = "Longitude: " + geom.x.toFixed(_wgs84NumDecPlace) + " / Latitude: " + geom.y.toFixed(_wgs84NumDecPlace);
+					_coordResultLabelWGS84Degrees = "Longitude: " + convertToDMS(geom.x) + " / Latitude: " + convertToDMS(geom.y);
+					setWSG84Label();
+					
+					// Check if NZTM or NZMG coordinates enabled
+					if(_NZTMvisible)
+					{
+						// Call the project points task
+						getCoordinates(nztmwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+
+					if(_NZMGvisible)
+					{
+						// Call the project points task
+						getCoordinates(nzmgwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+
+					// Check if Web Mercator coordinates enabled
+					if(_WebMercatorvisible)
+					{
+						// Call the project points task
+						getCoordinates(webmercatorwkid, geom);
+						
+						// Set stillworking
+						stillWorking = true;
+					}
+					
+					// Check if any further calculations required
+					if (!stillWorking)
+					{
+						// Process complete - show results
+						showStateCapture();
+					}
+				}
+				
+				// Deactivate select tool and reactivate navigation tools
+				removeAllCursors();
+			}			
+			
+			
+			/**
+			 * Starts the project process to convert coodinates of the given point to another projected coordinate system.
+			 */
+			private function getCoordinates(targetWKID:int, geom:Geometry):void
+			{
+				// Check if input and target coordinate systems are the same
+				if (geom.spatialReference.wkid == targetWKID) 
+				{
+					// No other actions required - Set loading image to visable etc
+					_msgVisible = false;
+					showStateCapture();
+				}
+				else
+				{
+					// Call the projection task
+					var projParam:ProjectParameters = getProjectParams(geom.spatialReference.wkid, targetWKID);
+					projParam.geometries = [geom];
+					
+					// Call the geometry service project task
+					geometryService.project(projParam, new AsyncResponder( project_completeHandler, project_faultHandler, null)); 
+				}
+				
+				function project_completeHandler(result:Object, token:Object = null):void
+				{
+					var geom:MapPoint = (result as Array)[0] as MapPoint;
+					switch(geom.spatialReference.wkid){
+						case wgs84wkid:
+						{
+							_coordResultLabelWGS84 = "Longitude: " + geom.x.toFixed(_wgs84NumDecPlace) + " / Latitude: " + geom.y.toFixed(_wgs84NumDecPlace);
+							_coordResultLabelWGS84Degrees = "Longitude: " + convertToDMS(Number(geom.x.toFixed(_wgs84NumDecPlace))) + 
+								" / Latitude: " + convertToDMS(Number(geom.y.toFixed(_wgs84NumDecPlace)));
+							setWSG84Label();
+							break;
+						}
+							
+						case nztmwkid:
+						{
+							_coordResultLabelNZTM = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: " + geom.y.toFixed(_projNumDecPlace);
+							_coordResultLabelNZTMGridRef =  NZGridRef(geom.x, geom.y, 'NZTM');// NZTM GRIDREF
+							setNZTMLabel();
+							break;		
+						}
+							
+						case nzmgwkid:
+						{
+							_coordResultLabelNZMG = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: " + geom.y.toFixed(_projNumDecPlace);
+							_coordResultLabelNZMGGridRef =  NZGridRef(geom.x, geom.y, 'NZMG');// NZMG GRIDREF
+							setNZMGLabel();
+							break;		
+						}
+							
+						case webmercatorwkid:
+						{
+							_coordResultLabelWebMercator = "Easting: " + geom.x.toFixed(_projNumDecPlace) + " / Northing: " + geom.y.toFixed(_projNumDecPlace);
+							break;
+						}
+					}			
+					
+					// Set loading image to visable etc
+					_msgVisible = false;
+					showStateCapture();
+				}
+				
+				function project_faultHandler(fault:Fault, token:Object = null):void
+				{
+					// Deactivate select tool and reactivate navigation tools
+					removeAllCursors();
+					
+					// Show the error message
+					showStateWorking(fault.toString(), false);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function getProjectParams(inputWKID:int, targetWKID:int):ProjectParameters
+			{
+				// Create a new project parameters
+				var projParam:ProjectParameters = new ProjectParameters();
+				projParam.outSpatialReference = new SpatialReference(targetWKID);
+				
+				// Create a datam transformation
+				var datTransform:DatumTransform = new DatumTransform();
+				
+				for (var i:int =0; i < spatialDetails.length; i++)
+				{
+					var sd:Object = spatialDetails[i];
+					if (sd.inputWKID == inputWKID &&
+						sd.outputWKID == targetWKID) {
+						datTransform.wkid = sd.datTransform;
+						projParam.datumTransform = datTransform;
+						projParam.transformForward = sd.transformForward;
+						break;
+					}
+				}
+				return projParam;
+			}
+
+
+			/** 
+			 * Called when the user clicks on the WGS84 radio button group
+			 */ 
+			protected function handlewsg84type(event:ItemClickEvent):void
+			{
+				setWSG84Label();	
+			}
+			
+			/** 
+			 * Called when the user clicks on the NZMG radio button group
+			 */ 
+			protected function handlenzmgtype(event:ItemClickEvent):void
+			{
+				setNZMGLabel();	
+			}
+			
+			/** 
+			 * Called when the user clicks on the NZTM radio button group
+			 */ 
+			protected function handlenztmtype(event:ItemClickEvent):void
+			{
+				setNZTMLabel();	
+			}
+			
+			/** 
+			 * Updates the NZTM results label, setting format based on current format selection
+			 */ 
+			private function setNZTMLabel():void
+			{
+				if( radio_nztmtype.selectedValue == "grid") 
+					_coordResultLabelNZTMFinal = _coordResultLabelNZTMGridRef;
+				if( radio_nztmtype.selectedValue == "std") 
+					_coordResultLabelNZTMFinal = _coordResultLabelNZTM;
+			}
+			
+			/** 
+			 * Updates the NZMG results label, setting format based on current format selection
+			 */ 
+			private function setNZMGLabel():void
+			{
+				if( radio_nzmgtype.selectedValue == "grid") 
+					_coordResultLabelNZMGFinal = _coordResultLabelNZMGGridRef;
+				if( radio_nzmgtype.selectedValue == "std") 
+					_coordResultLabelNZMGFinal = _coordResultLabelNZMG;
+			}
+			
+			/** 
+			 * Updates the WGS84 results label, setting format based on current format selection
+			 */ 
+			private function setWSG84Label():void
+			{
+				if (radio_wsg84type.selectedValue == "decimal")
+					_coordResultLabelWGS84Final = _coordResultLabelWGS84;
+				if (radio_wsg84type.selectedValue == "degrees") 
+					_coordResultLabelWGS84Final = _coordResultLabelWGS84Degrees;
+			}
+			
+			/** 
+			 * Called when the user clicks any of the copy coordinates to clipboard buttons
+			 */ 
+			private function button_click(event:MouseEvent, wkid:String):void 
+			{
+				// Play the glowing button effect
+				buttonFun(event.currentTarget);
+				
+				var c:String="";
+				//copy either one or all data to clipboard
+				switch(wkid)
+				{
+					case "ALL":
+					{
+						c = "NZMG:- " + _coordResultLabelNZMG + "; NZMG Grid Ref:- " + _coordResultLabelNZMGGridRef + "; NZTM:- " + 
+						_coordResultLabelNZTM + "; NZTM Grid Ref:- " + _coordResultLabelNZTMGridRef + "; WGS84 Decimal:- " + 
+						_coordResultLabelWGS84 + "; WGS84 Degrees:- " + _coordResultLabelWGS84Degrees + "; Web Mercator AS:- " +
+						_coordResultLabelWebMercator;
+						break;
+					}
+					
+					case "WGS84":
+					{
+						if(radio_wsg84type.selectedValue == "decimal")
+							c = _coordResultLabelWGS84;
+						if(radio_wsg84type.selectedValue == "degrees")
+							c = _coordResultLabelWGS84Degrees;
+						break;
+					}
+					
+					case "NZTM":
+					{
+						if (radio_nztmtype.selectedValue == "std")
+							c = _coordResultLabelNZTM;
+						if (radio_nztmtype.selectedValue == "grid")
+							c = _coordResultLabelNZTMGridRef;
+						break;
+					}
+					
+					case "NZMG":
+					{
+						if (radio_nzmgtype.selectedValue == "std")
+							c = _coordResultLabelNZMG;
+						if (radio_nzmgtype.selectedValue == "grid")
+							c = _coordResultLabelNZMGGridRef;
+						break;
+					}
+						
+					case "WebMercator":
+					{
+						c = _coordResultLabelWebMercator;
+						break;
+					}
+				}
+				
+				// Send content to the clipboard
+				System.setClipboard(c);
+				
+				// Alert user data has been copied to clipboard
+				Alert.show("Data has been copied to clipboard", "Capture Location", Alert.OK, map);		
+			}
+			
+			
+			/*  Map scale and grid reference functions
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Calculate NZ Grid Reference
+			 */ 
+			private function NZGridRef(x:int, y:int , type:String):String 
+			{
+				var gr:String = '';
+				var coords:Object;
+				
+				// Set up x & y 
+				_coordsx = x;
+				_coordsy = y;
+				
+				// Grab coords for nzmg case //returns {xmin:xmin, xmax:xmax, ymin:ymin , ymax:ymax ,  sheet:sheet}
+				if(type == 'NZMG')
+					coords = convertGridRefs2Std(configXML.NZMG.gridrefs.gridref);
+				if(type == 'NZTM')
+					coords = convertGridRefs2Std(configXML.NZTM.gridrefs.gridref);
+				
+				// Check coords if null return
+				if(coords == null) return "Outside Region";
+				
+				// Format the results and return to calling function
+				gr = coords[0].sheet + ':' + x.toString().substr(2, 4) + '-' + y.toString().substr(2, 4);
+				
+				return gr;
+			}
+			
+			/** 
+			 * Converts decimal degrees to degrees minutes seconds
+			 */ 
+			public function convertToDMS(num:Number):String
+			{
+				var degFinal:String;
+				var minFinal:String;
+				var secFinal:String;
+				var d:Number = Math.abs(num);  	 
+				var deg:Number = Math.floor(d); 
+				var min:Number = Math.floor((d-deg)*60);
+				var sec:Number = (((d-deg)*60)-min)*60;
+				
+				if(num>0)degFinal = deg.toString();
+				else degFinal = "-"+deg.toString(); //take into account negative longitude			
+				minFinal = min.toString();
+				secFinal = sec.toFixed(2);
+				
+				return degFinal + '\u00B0 ' + minFinal + '\u2032 ' + secFinal + '\u2033';	
+			}
+			
+			/** 
+			 * Returns the New Zealand Map Sheet Reference for the current coordinates
+			 */  
+			private function convertGridRefs2Std(configvalues:Object):Object
+			{
+				//vars
+				var gridrefs:Array = new Array();
+				var item:Array;
+				var x:String;
+				var y:String;
+				var configvalues:Object;
+				
+				// Get Grid refs
+				for each(var gridrefConfigXML:XML in configvalues) {
+					var xmin:Number = Number(gridrefConfigXML.attribute('xmin'));
+					var xmax:Number = Number(gridrefConfigXML.attribute('xmax'));
+					var ymin:Number = Number(gridrefConfigXML.attribute('ymin'));
+					var ymax:Number = Number(gridrefConfigXML.attribute('ymax'));
+					var sheet:String = gridrefConfigXML.attribute('sheet');
+					gridrefs.push({xmin:xmin, xmax:xmax, ymin:ymin, ymax:ymax, sheet:sheet});
+				}
+				// filter to the sheet ref item
+				// DONE BY NUMBERS THIS TIME item = gridrefs.filter(findGridbySheet);
+				item = gridrefs.filter(findGridbyXY);
+				
+				// Check for valid grid ref re: length [err]
+				if(item.length == 0 )
+				{
+					Alert.show(_locationError + "grid reference", "Loation Error", Alert.OK, map);
+					return null;
+				} 
+				else 
+				{
+					return item;
+				}
+				
+				// Return nothing if get this far
+				return null;
+			}		
+			
+			/** 
+			 * Filter function used by convertGridRefs2Std to select the correct map sheet from the provided array
+			 */ 
+			private function findGridbyXY(item:Object, idx:uint, arr:Array):Boolean 
+			{
+				return  ( (_coordsy >= item.ymin) && (_coordsy < item.ymax) && 
+					(_coordsx >= item.xmin) && (_coordsx < item.xmax) );
+			}
+			
+			
+			
+			/* Widget UI code
+			------------------------------------------------------------ */
+			
+			/** 
+			 * Called when the widget is opened
+			 */ 
+			private function widgetOpenedEventHandler(event:Event):void
+			{
+				resetLabels();
+				// not needed activateCoordTool();
+				if (_graphicsLayer)
+					_graphicsLayer.visible = true;
+			}
+			
+			/** 
+			 * Called when the widget is closed
+			 */ 
+			private function widgetClosedEventHandler(event:Event):void
+			{
+				resetLabels();
+				_graphicsLayer.clear();	
+				
+				// Deactivate select tool and reactivate navigation tools
+				removeAllCursors();
+			}
+			
+			/** 
+			 * Called when the widget is minimized
+			 */ 
+			private function widgetMinimizedEventHandler(event:Event):void
+			{
+				// Deactivate select tool and reactivate navigation tools
+				removeAllCursors();
+			}
+			
+			/** 
+			 * Modify Cursors when NOT over the map
+			 */ 
+			private function handle_base_rollout(event:MouseEvent):void 
+			{
+				map.cursorManager.removeAllCursors();
+			}
+			
+			/** 
+			 * Modify Cursors when over the map
+			 */ 
+			private function handle_base_rollover(event:MouseEvent):void 
+			{
+				map.cursorManager.setCursor(selectCursor,2,-8,-8);
+			}
+			
+			/** 
+			 * Show the standard state
+			 */ 
+			private function showStateCapture():void
+			{
+				this.currentState = "capture";				
+			}
+			
+			/** 
+			 * Show the working state
+			 */ 
+			private function showStateWorking(message:String = null, showWorking:Boolean = false):void
+			{
+				this.currentState = "working";				
+			}
+			
+			/** 
+			 * Adds a glowing button effect to objects
+			 */ 
+			private function buttonFun(obj:Object):void 
+			{
+				if(glower.isPlaying) {
+					glower.end();
+				}
+				glower.target = obj;
+				glower.play();
+			}
+			
+			/** 
+			 * Help function
+			 */ 
+			private function showHelp():void {
+				var urlRequest:URLRequest = new URLRequest(_helpLocation);
+				navigateToURL(urlRequest, "_blank");
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!--- Glowing button effect -->
+		<s:GlowFilter id="glow" blurX="25" blurY="25" color="{getStyle('focusColor')}" strength="1.5"/>
+		<s:AnimateFilter id="glower" bitmapFilter="{glow}" 
+						 duration="1500" repeatCount="2" repeatDelay="500" 
+						 repeatBehavior="{RepeatBehavior.REVERSE}">
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter> 
+			
+		<!--- Geometry service for basic projection actions-->
+		<esri:GeometryService  id="geometryService" />
+				
+		<!--- Radio buttons -->
+		<s:RadioButtonGroup id="radio_nztmtype" selectedValue="std" enabled="true" itemClick="handlenztmtype(event);"/>
+		<s:RadioButtonGroup id="radio_wsg84type" enabled="true" selectedValue="decimal" itemClick="handlewsg84type(event);"/>
+		<s:RadioButtonGroup id="radio_nzmgtype" selectedValue="std" enabled="true" itemClick="handlenzmgtype(event);"/>
+	</fx:Declarations>
+	
+	<viewer:states>
+		<s:State name="capture"/>
+		<s:State name="working"/>
+	</viewer:states>
+	
+	<viewer:transitions>
+		<s:Transition autoReverse="true" toState="*">
+			<s:Fade targets="{[capture, working]}"/>
+		</s:Transition>
+	</viewer:transitions>
+	
+	<viewer:WidgetTemplate id="wTemplate" 
+						   height="340"
+						   width="400"
+						   minHeight="340"
+						   minWidth="400"
+						   closed="widgetClosedEventHandler(event)" 
+						   open="widgetOpenedEventHandler(event)" 
+						   minimized="widgetMinimizedEventHandler(event)" >
+		
+		<s:Group id="capture"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.capture="true" >
+			<s:Scroller width="100%" height="100%">
+				<s:VGroup width="100%" height="100%" gap="10" paddingTop="1" horizontalAlign="center">
+					<s:Label id="txtLabel" text="{_descriptionLabel}" width="{wTemplate.width - 50}" 
+							 textAlign="justify" maxDisplayedLines="5" /> 
+					
+					<s:HGroup horizontalAlign="center" width="100%" gap="10" >
+						<s:VGroup horizontalAlign="center" >
+							<s:Button id="drawButton"
+									  skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetDrawPointButtonSkin"
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{activateCoordTool()}"
+									  toolTip="{_pointLabel}" />
+							
+							<s:Label id="drawLabel" text="{_pointLabel}" />
+						</s:VGroup>
+						<s:VGroup horizontalAlign="center">
+							<s:Button id="copyButton" 
+									  skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetCopyButtonSkin" 
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{button_click(event,'ALL')}" 
+									  toolTip="{_clipboardlabel}" /> 
+							<s:Label id="copyLabel" text="Copy all to Clipboard" />
+						</s:VGroup>
+					</s:HGroup>
+					
+					<!--- NZTM -->
+					<s:HGroup horizontalAlign="left" width="100%" gap="5" visible="{_NZTMvisible}" 
+							  includeInLayout="{_NZTMvisible}">
+						<s:VGroup width="75%">
+							<s:HGroup verticalAlign="middle">
+								<s:Label text="NZTM:" styleName="WidgetTitle"/>
+								<s:RadioButton group="{radio_nztmtype}" 
+											   id="nztmstd"
+											   label="Std"
+											   value="std"
+											   styleName="WidgetText"
+											   selected="true" />
+								<s:RadioButton group="{radio_nztmtype}" 
+											   id="nztmgrid"
+											   label="Grid"
+											   value="grid"
+											   styleName="WidgetText" />
+							</s:HGroup>
+							<s:Label text="{_coordResultLabelNZTMFinal}" styleName="WidgetText" />
+						</s:VGroup>
+						<s:VGroup width="25%" horizontalAlign="right" paddingRight="5">
+							<s:Button skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetCopyButtonSkin" 
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{button_click(event, 'NZTM')}" 
+									  toolTip="{_clipboardlabel}" /> 
+						</s:VGroup>
+					</s:HGroup>
+					
+					<!--- WGS84 -->
+					<s:HGroup horizontalAlign="left" width="100%" gap="5" visible="{_WSG84visible}" 
+							  includeInLayout="{_WSG84visible}" >
+						<s:VGroup width="75%">
+							<s:HGroup verticalAlign="middle">
+								<s:Label text="WGS84:" styleName="WidgetTitle"/>
+								<s:RadioButton groupName="radio_wsg84type" 
+											   id="wsg84decimals"
+											   label="Decimal"
+											   value="decimal"
+											   styleName="WidgetText"
+											   selected="true" />
+								<s:RadioButton groupName="radio_wsg84type" 
+											   id="wsg84degrees"
+											   label="Degrees"
+											   value="degrees"
+											   styleName="WidgetText" />
+							</s:HGroup>
+							<s:Label text="{_coordResultLabelWGS84Final}" styleName="WidgetText" />
+						</s:VGroup>
+						<s:VGroup width="25%" horizontalAlign="right" paddingRight="5" >
+							<s:Button skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetCopyButtonSkin" 
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{button_click(event, 'WGS84')}" 
+									  toolTip="{_clipboardlabel}" /> 
+						</s:VGroup>
+					</s:HGroup>
+					
+					<!--- Web Mercator -->
+					<s:HGroup horizontalAlign="left" width="100%" gap="5" visible="{_WebMercatorvisible}" 
+							  includeInLayout="{_WebMercatorvisible}" >
+						<s:VGroup width="75%">
+							<s:HGroup verticalAlign="middle">
+								<s:Label text="Web Mercator:" styleName="WidgetTitle"/>
+							</s:HGroup>
+							<s:Label text="{_coordResultLabelWebMercator}" styleName="WidgetText" />
+						</s:VGroup>
+						<s:VGroup width="25%" horizontalAlign="right" paddingRight="5" >
+							<s:Button skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetCopyButtonSkin" 
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{button_click(event, 'WebMercator')}" 
+									  toolTip="{_clipboardlabel}" /> 
+						</s:VGroup>
+					</s:HGroup>
+					
+					<!--- NZMG -->
+					<s:HGroup horizontalAlign="left" width="100%" gap="5" visible="{_NZMGvisible}" includeInLayout="{_NZMGvisible}" >
+						<s:VGroup width="75%">
+							<s:HGroup verticalAlign="middle">
+								<s:Label text="NZMG:" styleName="WidgetTitle" />
+								<s:RadioButton group="{radio_nzmgtype}" 
+											   id="nzmgstd"
+											   label="Std"
+											   value="std"
+											   styleName="WidgetText"
+											   selected="true" />
+								<s:RadioButton group="{radio_nzmgtype}" 
+											   id="nzmggrid"
+											   label="Grid"
+											   value="grid"
+											   styleName="WidgetText" />
+							</s:HGroup>
+							<s:Label text="{_coordResultLabelNZMGFinal}" styleName="WidgetText"/>
+						</s:VGroup>
+						<s:VGroup width="25%" horizontalAlign="right" paddingRight="5">
+							<s:Button skinClass="widgets.CoordinateCapture.skins.CoordinateCaptureWidgetCopyButtonSkin" 
+									  buttonMode="true" 
+									  useHandCursor="true" 
+									  width="40" 
+									  height="40"
+									  click="{button_click(event, 'NZMG')}" 
+									  toolTip="{_clipboardlabel}" /> 
+						</s:VGroup>
+					</s:HGroup>
+					
+				</s:VGroup>
+			</s:Scroller>
+		</s:Group>
+		
+		<s:Group id="working"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.working="true">
+			<s:Scroller width="100%" height="100%">
+				
+				<s:VGroup width="100%" height="100%" gap="2" paddingTop="1" verticalAlign="middle">
+					<!--- LOADING MESSAGE BOX -->
+					<s:HGroup  id='boxMessage' width="100%" >
+						<mx:Image id="swfMessage" source="assets/images/loader.swf" visible="true" width="10%"/>
+						<s:Label id="txtMessage" text="{_someText}" width="90%" visible="true"/>
+					</s:HGroup>
+				</s:VGroup>
+			
+			</s:Scroller>
+		</s:Group>
+		
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>

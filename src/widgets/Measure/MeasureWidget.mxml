@@ -1,0 +1,1168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY			: This widget allows users to interactively measure areas, line, and return 
+				point locations and display those measurements in the map popup window.  
+				The measurements can be copied to the system clioboard.  
+
+SOURCE			: Parts of this widget are based on the code from the Draw Widget supplied 
+				with the ArcGIS Viewer for Flex.	
+
+DEVELOPED BY 	: Ryan Elley, ECan.
+
+CREATED			: 09/07/2012
+DEPENDENCIES	: GeometryUtil
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan) 	| 09/07/2011 	| Initial Development.
+Ryan Elley (ECan) 	| 26/01/2013 	| Flex Viewer Port 3.1 API and 3.1 viewer
+									  DrawTool Update event used to update the interactive measurement details.
+									  Addition of active tool toggle button to keep tool active after measurem complete 
+Ryan Elley (ECan) 	| 27/05/2013 	| Flex Viewer Port 3.3 API and 3.3 viewer
+Ryan Elley (ECan)	| 18/08/2013	| Bug fix for typo in line symbol that was stopping pprinting from functioning. 	
+
+-->
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=			"com.esri.viewer.*" 
+				   widgetConfigLoaded=		"widgetConfigLoadedHandler(event)"
+				   creationComplete=		"creationCompleteHandler(event)" >
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		s|Form#frmMeasurements s|FormItem
+		{
+			skinClass: ClassReference("widgets.Measure.skins.MeasureWidgetFormItemSkin");
+		}
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.Units;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.events.GraphicEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.AreasAndLengthsParameters;
+			import com.esri.ags.tasks.supportClasses.AreasAndLengthsResult;
+			import com.esri.ags.tasks.supportClasses.LengthsParameters;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.ags.tools.NavigationTool;
+			import com.esri.viewer.AppEvent;
+			
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.MapGridUtil;
+			import widgets.supportClasses.utils.MapUtil;
+			
+			import flash.text.engine.FontWeight;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.components.Label;
+			import spark.events.IndexChangeEvent;
+			import spark.filters.GlowFilter;
+			
+			import widgets.Measure.components.MesaurementInspector;
+			import widgets.Measure.skins.MeasureWidgetMeasureToolToggleButtonSkin;
+			import widgets.Measure.skins.MeasureWidgetSettingsToggleButtonSkin;
+			
+			private const MEASUREMENTWIDGET:String = "MeasurementWidget_Settings";
+
+			
+			/* Widget variables
+			-------------------------------------------------------------------- */
+			
+			// Graphics layer variables
+			[Bindable]
+			private var _graphicsLayer:GraphicsLayer;
+			
+			// UI control variables
+			private var _disablePanZoomNavigationWidget:Boolean;
+			private var _lastState:String;
+			
+			// Settings
+			private var _settingsSO:SharedObject;
+			
+			// Measurement variables
+			[Bindable]
+			private var _configDistance:Array;
+			[Bindable]
+			private var _configArea:Array;
+			
+			// Labels
+			[Bindable]
+			private var _measurementOptionsLabel:String;
+			[Bindable]
+			private var _clearFeatureLabel:String;
+			[Bindable]
+			private var _settingsLabel:String;
+			[Bindable]
+			private var _toolLabel:String;
+			[Bindable]
+			private var _drawToolLabel:String;
+			
+			// Measurement tool labels
+			[Bindable]
+			private var _measurementsLabel:String;
+			[Bindable]
+			private var _showMeasurementsLabel:String;
+			[Bindable]
+			private var _segmentLengthLabel:String;
+			[Bindable]
+			private var _totalLengthLabel:String;
+			
+			private var _lengthLabel:String;
+			private var _perimeterLabel:String;
+			private var _radiusLabel:String;
+			private var _widthLabel:String;
+			private var _heightLabel:String;
+			
+			[Bindable]
+			private var _distanceUnitsLabel:String;
+			[Bindable]
+			private var _distanceUnitsTooltip:String;
+			
+			private var _areaLabel:String;
+			[Bindable]
+			private var _areaUnitsLabel:String;
+			[Bindable]
+			private var _areaUnitsTooltip:String;
+			[Bindable]
+			private var _convertGraphicsLabel:String;
+			
+			private var _dispatchedMessage:Boolean = false;
+
+			// Measurement inspector component
+			private var _inspector:MesaurementInspector = new MesaurementInspector();
+			
+			// Map grid settings
+			protected var _mapGridUtil:MapGridUtil = new MapGridUtil();
+			protected var _mapGridEnabled:Boolean = false;
+
+			// Active tool flag 
+			[Bindable]
+			private var _toolActive:Boolean = false;
+
+			
+			
+			/* Widget functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the widget config has fnished loading.
+			 */ 
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				if (configXML)
+				{
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Create graphics layer for map
+					var graphicsLayerName:String = configXML.graphicsLayerName || "MeasurementsGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "Measurement Graphics";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName,map,graphicsLayerAlias);
+
+					var i:int;	
+					
+					// Load measurement settings
+					var distanceList:XMLList = configXML..distanceunit;
+					var areaList:XMLList = configXML..areaunit;
+					
+					// Distance measurement settings
+					_configDistance = new Array()
+					for (i = 0; i < distanceList.length(); i++)
+					{
+						var dLabel:String = distanceList[i];
+						var dAbbr:String = distanceList[i].@abbr;
+						var dConversion:Number = Number(distanceList[i].@conversion);
+						var dPrecision:Number = Number(distanceList[i].@precision);
+						var dESRIUnit:String = distanceList[i].@esriunitid;
+						var dUnit:Object = 
+							{
+								label: dLabel,
+								abbr: dAbbr,
+								conversion: dConversion,
+								precision: dPrecision,
+								unit: dESRIUnit
+							}
+						_configDistance.push(dUnit);
+					}
+					cboDistance.dataProvider = new ArrayCollection(_configDistance);
+					
+					// Set the default distance unit
+					var distIndex:int = Number(configXML.defaultdistanceunit) || 0;
+					if (distIndex < _configDistance.length) {
+						cboDistance.selectedIndex = distIndex;
+					} 
+					else 
+					{
+						cboDistance.selectedIndex = 0;
+					}
+					
+					// Area measurement settings
+					_configArea = [];
+					for (i = 0; i < areaList.length(); i++)
+					{
+						var aLabel:String = areaList[i];
+						var aAbbr:String = areaList[i].@abbr;
+						var aConversion:Number = Number(areaList[i].@conversion);
+						var aPrecision:Number = Number(areaList[i].@precision);
+						var aESRIUnit:String = areaList[i].@esriunitid;
+						var aUnit:Object = 
+							{
+								label: aLabel,
+								abbr: aAbbr,
+								conversion: aConversion,
+								precision: aPrecision,
+								unit: aESRIUnit
+							}
+						_configArea.push(aUnit);
+					}
+					cboArea.dataProvider = new ArrayCollection(_configArea);
+					
+					// Set the default area unit
+					var areaIndex:int = Number(configXML.defaultareaunit) || 0;
+					if (areaIndex < _configArea.length) 
+					{
+						cboArea.selectedIndex = areaIndex;
+					} 
+					else 
+					{
+						cboArea.selectedIndex = 0;
+					}
+					
+					// Get map projection
+					if (configXML.mapgrids[0] != null && configXML.mapgrids[0].@enabled == "true")
+					{
+						setupMeasurementSettings();	
+					}
+					
+					// Button labels
+					_toolLabel = configXML.labels.toollabel || "Click to toggle interactive measurement tool on/off";
+					_drawToolLabel = configXML.labels.drawtoollabel || "Click to change the interactive measurement tool";
+					_settingsLabel = configXML.labels.settingslabel || "Measurement Unit Settings";
+					_clearFeatureLabel = configXML.labels.clearfeaturelabel || "Clear Measurement Feature";
+					
+					// Measurement labels
+					_measurementsLabel = configXML.labels.measurementslabel || "Measurement Settings";
+					_showMeasurementsLabel = configXML.labels.showmeasurementslabel || "Show Measurements with Graphics:";
+					_distanceUnitsLabel = configXML.labels.distanceunitslabel || "Distance Units:";
+					_distanceUnitsTooltip = configXML.labels.distanceunitstooltip || "Choose measurements units to display distances in";
+					_areaUnitsLabel = configXML.labels.areaunitslabel || "Area Units:";
+					_areaUnitsTooltip = configXML.labels.areaunitstooltip || "Choose measurements units to display areas in";
+					
+					_areaLabel = configXML.labels.arealabel || getDefaultString("areaLabel");
+					_perimeterLabel = configXML.labels.perimeterlabel || getDefaultString("perimeterLabel");
+					_lengthLabel = configXML.labels.lengthlabel || getDefaultString("lengthLabel");
+					_radiusLabel = configXML.labels.radiuslabel || "Radius";
+					_widthLabel = configXML.labels.widthlabel || "Width";
+					_heightLabel = configXML.labels.heightlabel || "Height";
+
+					
+					_convertGraphicsLabel = configXML.labels.convertgraphicslabel || getDefaultString("lengthLabel");
+						
+					_segmentLengthLabel = configXML.labels.segmentlengthlabel || "Line segment length:";
+					_totalLengthLabel = configXML.labels.totallengthlabel || "Total line length:";
+				}
+				
+				// Set the rollover alpha values
+				var rollOverAlpha:Number = configXML.rolloveralpha[0] ? parseFloat(configXML.rolloveralpha) : 1;
+				var rollOutAlpha:Number = configXML.rolloutalpha[0] ? parseFloat(configXML.rolloutalpha) : 0.39;
+				
+				rollOutFade.alphaTo = rollOutAlpha;
+				rollOverFade.alphaTo = rollOverAlpha;
+				toolContainer.alpha = rollOutAlpha;
+				toolContainer.visible = true;
+				
+				// Add listener for other widgets calling the draw events - used in ESRI widgets to turn off these tools
+				// so they don't interfere with one another.
+				AppEvent.addListener(AppEvent.DATA_PUBLISH, sharedDataUpdated);
+				AppEvent.addListener(AppEvent.SET_MAP_NAVIGATION, sharedNavigationChange);
+				
+				// Setup Listener for the measurement inspector
+				_inspector.addEventListener("GraphicInspector_ClosePopup",inspector_ClosePopup);
+
+				
+				// Check for a shared object containing the status of the show graphics option
+				try
+				{
+					_settingsSO = SharedObject.getLocal(MEASUREMENTWIDGET);
+					if (_settingsSO)
+					{
+						var showGraphics:Boolean;
+						if (_settingsSO.data[MEASUREMENTWIDGET])
+						{ 
+							showGraphics = _settingsSO.data[MEASUREMENTWIDGET] == true;
+						}
+						else
+						{
+							showGraphics = true;
+						}
+						chkConvertGraphic.selected = showGraphics;
+					}
+				}
+				catch (err:Error)
+				{
+					
+				}
+			}
+			
+			/**
+			 * Updates the meaasurement settings for the widget.
+			 */   
+			protected function setupMeasurementSettings():void
+			{
+				if (map.loaded)
+				{
+					var srid:String = map.spatialReference.wkid.toString();
+					
+					var mapgrids:XMLList = configXML.mapgrids.mapgrid.(@srid == srid);
+					if (mapgrids.length() > 0)
+					{
+						_mapGridUtil.MapGridData = mapgrids[0].mapsheet;
+						_mapGridEnabled = true;
+						_mapGridUtil.MapGridPrecision = Number(mapgrids[0].@precision) || 4;
+						_mapGridUtil.MapGridFormat = mapgrids[0].@format || "{0}:{1}-{2}";
+						
+						// Set the inspector mapgridutil
+						_inspector.MapPositionFormatter = _mapGridUtil;
+					}
+				} else {
+					map.addEventListener(MapEvent.LOAD, map_LoadedHandler);
+				}
+
+				function map_LoadedHandler(event:MapEvent):void
+				{
+					map.removeEventListener(MapEvent.LOAD, map_LoadedHandler);
+					setupMeasurementSettings();
+				}
+			}
+			
+			/** 
+			 * Called when the event listen picks up data being published (listen set in init)
+			 */ 
+			private function sharedDataUpdated(event:AppEvent):void
+			{
+				var data:Object = event.data;
+				if (data.key == "Deactivate_DrawTool")
+				{
+					if (data.collection && data.collection[0].widget != "MeasureWidget")
+					{
+						setStateNormal();
+					}
+				}
+			}
+			
+			/**
+			 * Called when the navigation tools are activated
+			 */
+			private function sharedNavigationChange(event:AppEvent):void
+			{
+				if (this.currentState != "normal")
+				{
+					setStateNormal();
+				}
+			}
+			
+
+			
+			/* Measurement UI functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the measurement tool dropdown button item changes.
+			 */
+			protected function toolButton_changeHandler(event:Event):void
+			{
+				if (event.currentTarget.selected)
+				{
+					setStateActive();					
+				}
+				else
+				{
+					setStateNormal();
+				}
+			}
+			
+
+			/* Widget State functions
+			-------------------------------------------------------------------- */
+
+			/**
+			 * Change the current state to the normal mode.  The measurement tools are deactivated.
+			 */
+			private function setStateNormal():void
+			{
+				this.currentState = "normal";
+				toolButton.selected = false;
+				settingsButton.selected = false;
+
+				// Clear the measurement label settings
+				clearMeasurementLabel();
+
+				// Reactivate map navigation - trick navigation into being enabled 
+				_disablePanZoomNavigationWidget = false;
+				addSharedData("Edit_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				setMapNavigation(NavigationTool.PAN,getDefaultString("panLabel"));
+				
+				// Deactive the draw tool
+				drawTool.deactivate();
+				
+				// Desctivate the grapghic inspector
+				_inspector.graphic = null;
+			}
+			
+			/**
+			 * Change the current state to the measurement mode.
+			 */
+			private function setStateActive():void
+			{
+				this.currentState = "active";
+				settingsButton.selected = false;
+				
+				// Dispatch a clear drawingtool event;
+				_dispatchedMessage = true;
+				addSharedData("Deactivate_DrawTool", new ArrayCollection([{ widget: "MeasureWidget" }]));
+
+				// Activate the drawing tool
+				activateDrawTool();
+			}
+			
+			/**
+			 * Change the current state to the settings mode.
+			 */
+			private function setStateSettings():void
+			{
+				this.currentState = "settings";
+			}
+			
+			/**
+			 * Called when the settings button toggle state changes.
+			 */
+			protected function settingsButton_changeHandler(event:Event):void
+			{
+				// Check if the button is in the selected state.
+				if (event.currentTarget.selected)
+				{
+					setStateSettings();					
+				}
+				else
+				{
+					setStateActive();
+				}
+			}
+
+			
+			/* Interactive measurement Action functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Activates the drawing tool, setting the draw function based on 
+			 * the selected item in the tool dropdown list.
+			 */
+			private function activateDrawTool():void
+			{
+				// Clear current drawtool setting
+				drawTool.deactivate();
+				
+				// Get the current user defined tool and set the viewer status text
+				var tool:String;
+				var status:String;
+				switch(cboDrawTool.selectedItem.drawId)
+				{
+					case "mappoint":
+					{
+						tool = DrawTool.MAPPOINT;	
+						status = "Measure Point";
+						_disablePanZoomNavigationWidget = false;
+						break;
+					}
+					
+					case "pointToPointPolygon":
+					{
+						tool = DrawTool.POLYGON;		
+						status = "Measure Polygon";
+						_disablePanZoomNavigationWidget = false;
+						break;
+					}
+						
+					case "extent":
+					{
+						tool = DrawTool.EXTENT;	
+						status = "Measure Rectangle";
+						_disablePanZoomNavigationWidget = false;
+						break;
+					}
+						
+					case "circle":
+					{
+						tool = DrawTool.CIRCLE;		
+						status = "Measure Circle";
+						_disablePanZoomNavigationWidget = true;
+						break;
+					}
+
+					default:
+					{
+						tool = DrawTool.POLYLINE;
+						status = "Measure Line";
+						_disablePanZoomNavigationWidget = false;
+					}
+				}
+
+				// Change the status text
+				AppEvent.setStatus(status);
+				
+				// Trick navigation into being disabled 
+				if (_disablePanZoomNavigationWidget)
+				{
+					addSharedData("Edit_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				}
+	
+				// Activate the draw tool
+				drawTool.activate(tool);
+			}
+			
+			/** 
+			 * Called at the beginning of a draw action.
+			 */
+			protected function drawTool_drawStartHandler(event:DrawEvent):void
+			{
+				// Set the state to active and hide the measurement details
+				if (this.currentState == "settings")
+				{
+					setStateActive();
+				}
+								
+				// Add a label to display the results
+				var label:Label = new Label();
+				label.name = "measurementLabel";
+				map.staticLayer.addElement(label);
+				label.x = map.mouseX + 15;
+				label.y = map.mouseY - 50;
+				
+				label.setStyle("color",0x000000);
+				label.setStyle("fontWeight", flash.text.engine.FontWeight.BOLD);
+				
+				// Add glowfilter
+				var glow:spark.filters.GlowFilter = new spark.filters.GlowFilter(0xFFFFFF,0.7,6,6,4,1);
+				label.filters = [glow];
+			}
+			
+			/** 
+			 * Called as the mouse moves when the draw tool is activated.
+			 */
+			protected function drawTool_drawUpdateHandler(event:DrawEvent):void
+			{
+				var geometry:Geometry = event.graphic.geometry;
+				
+				var labelText:String = "";
+				var pt:MapPoint;
+				
+				switch(geometry.type) {
+					
+					case Geometry.MULTIPOINT:
+						var mpt:Multipoint = geometry as Multipoint;
+						labelText = mpt.points.length.toString();
+						
+						break;
+					
+					case Geometry.MAPPOINT:
+						// Do nothing
+						
+						break;
+					
+					case Geometry.POLYLINE:
+						var lin:Polyline = geometry as Polyline;
+						numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+						labelText = _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(lin) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr  + "\n" + 
+								    _totalLengthLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(lin) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						break;
+					
+					case Geometry.POLYGON:
+						var pol:Polygon = geometry as Polygon;
+						
+						switch (cboDrawTool.selectedItem.drawId)
+						{
+							case "circle":
+								// Calculate the area
+								numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+
+								// Calculate the radius
+								labelText += _radiusLabel + numberFormatter.format(GeometryUtil.getCircleRadius(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+
+								break;
+								
+							default:
+								// Calculate the area
+								numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+								
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+								
+								// Calculate the last segment length 
+								labelText += _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						}
+						
+
+						break;
+					
+					case Geometry.EXTENT:
+						var ext:Extent = geometry as Extent;
+						// Calculate the area
+						numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+						labelText += _areaLabel + numberFormatter.format((ext.height * ext.width) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+
+						// Calculate the perimeter
+						numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+						labelText += _perimeterLabel + numberFormatter.format((ext.height * 2 + ext.width * 2) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+
+						// Calculate the height and width
+						labelText += _widthLabel + numberFormatter.format(ext.width * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + " " +
+									 _heightLabel + numberFormatter.format(ext.height * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						
+						break;
+				}
+				
+				
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					label.text = labelText;
+					label.x = map.mouseX + 15;
+					label.y = map.mouseY - 50;
+				}
+				
+			}
+			
+			/** 
+			 * Called at the end of of a draw action.
+			 */
+			protected function drawTool_drawEndHandler(event:DrawEvent):void
+			{
+				// Clear the measurement label settings
+				clearMeasurementLabel();
+				
+				// Check if measureent should be added as a graphic
+				if (chkConvertGraphic.selected && _graphicsLayer)
+				{
+					// Create a display graphic
+					var graphic:Graphic = new Graphic(event.graphic.geometry,null,{});
+					graphic.addEventListener(MouseEvent.CLICK,graphicClick);
+					
+					// Calculate the actual measurements using the appropraite geometry service task 
+					switch (event.graphic.geometry.type)
+					{
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						{
+							// Set the fill symbol
+							graphic.symbol = sfs;				
+							
+							// Create task parameter object
+							var poly:Polygon;
+							if (event.graphic.geometry.type == Geometry.EXTENT)
+							{
+								poly = Extent(event.graphic.geometry).toPolygon();	
+							}
+							else
+							{
+								poly = Polygon(event.graphic.geometry);
+							}
+
+							var areaParams:AreasAndLengthsParameters = new AreasAndLengthsParameters();
+							areaParams.areaUnit = cboArea.selectedItem.unit;
+							areaParams.lengthUnit = cboDistance.selectedItem.unit;
+							areaParams.polygons = [poly];
+							
+							// Call areas and lengths task
+							geometryService.areasAndLengths(areaParams, 
+								new AsyncResponder(areaAndLengthResults, geometryServiceFault, graphic));
+							
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							// Set the line symbol
+							graphic.symbol = sls;				
+
+							// Create task parameter object
+							var lengthParams:LengthsParameters = new LengthsParameters();
+							lengthParams.lengthUnit = cboDistance.selectedItem.unit;
+							lengthParams.polylines = [Polyline(event.graphic.geometry)];
+							
+							// Call the lengths task
+							geometryService.lengths(lengthParams, 
+								new AsyncResponder(lengthsResults,geometryServiceFault,graphic));
+							
+							break;
+						}
+							
+						case Geometry.MAPPOINT:
+						{
+							// Set the fill symbol
+							graphic.symbol = sms;
+
+							// Do nothing - no measurements required
+							break;
+						}
+					}
+					
+					// Add the graphic to the display layer
+					_graphicsLayer.add(graphic);
+
+					// Show the infoWindow if the graphic is a point
+					if (graphic.geometry.type == Geometry.MAPPOINT)
+					{
+						if (_mapGridEnabled)
+						{
+							var mapref:String = _mapGridUtil.getMapReference(graphic.geometry as MapPoint);
+						}
+						
+						// Show the map infoWindow and focus on the graphic
+						_inspector.graphic = graphic;
+						map.infoWindow.label = "Measurements";
+						map.infoWindow.content = _inspector;
+						map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.addEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.show(graphic.geometry as MapPoint);
+					}
+				}
+				
+				// Reactivate the draw tool
+				if (_toolActive) {
+					activateDrawTool();
+				} 
+				else 
+				{
+					setStateNormal();
+				}
+				
+				function areaAndLengthResults(results:AreasAndLengthsResult, token:Object = null):void
+				{
+					// Get the token graphic
+					var graphic:Graphic = token as Graphic;
+					
+					if (results.areas.length > 0 && graphic)
+					{
+						// Add area attributes
+						graphic.attributes.area = results.areas[0];
+						graphic.attributes.areaformat = 
+							numberFormatter.format(results.areas[0]) + cboArea.selectedItem.abbr;
+						
+						// Add perimeter attributes
+						graphic.attributes.perimeter = results.lengths[0];
+						graphic.attributes.perimeterformat = 
+							numberFormatter.format(results.lengths[0]) + cboDistance.selectedItem.abbr;
+					
+						// Show the map infoWindow and focus on the graphic
+						_inspector.graphic = graphic;
+						map.infoWindow.label = "Measurements";
+						map.infoWindow.content = _inspector;
+						map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.addEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.show(GeometryUtil.getMapPoint(graphic.geometry));
+					}
+				}
+				
+				function lengthsResults(results:Array, token:Object = null):void
+				{
+					// Get the token graphic
+					var graphic:Graphic = token as Graphic;
+
+					if (results.length > 0)
+					{
+						// Add perimeter attributes
+						graphic.attributes.linelength = results[0];
+						graphic.attributes.linelengthformat = 
+							numberFormatter.format(results[0]) + cboDistance.selectedItem.abbr;
+
+						// Show the map infoWindow and focus on the graphic
+						_inspector.graphic = graphic;
+						map.infoWindow.label = "Measurements";
+						map.infoWindow.content = _inspector;
+						map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.addEventListener(Event.CLOSE, popupClosed);
+						map.infoWindow.show(GeometryUtil.getMapPoint(graphic.geometry));
+					}
+				}
+				
+				function geometryServiceFault(event:Fault, token:Object = null):void
+				{
+					Alert.show(event.faultCode + " - " + event.message, "Measurement Error", Alert.OK);
+				}
+			}
+			
+			/** 
+			 * Called when a meaurement graphic is clicked.
+			 */
+			private function graphicClick(event:MouseEvent):void
+			{
+				// Show the info window with the measurement info
+				_inspector.graphic = event.currentTarget as Graphic;
+				map.infoWindow.label = "Measurements";
+				map.infoWindow.content = _inspector;
+				map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+				map.infoWindow.addEventListener(Event.CLOSE, popupClosed);
+				
+				if (_inspector.graphic.geometry.type == Geometry.MAPPOINT)
+				{
+					map.infoWindow.show(_inspector.graphic.geometry as MapPoint);
+				}
+				else
+				{
+					map.infoWindow.show(GeometryUtil.getMapPoint(_inspector.graphic.geometry));
+				}
+			}
+			
+			/**
+			 * Resets the measurement label details and clears the handlers for the mouse move while measuring.
+			 */
+			private function clearMeasurementLabel():void
+			{
+				// Reset the drawing flags
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					map.staticLayer.removeElement(label);
+				}
+			}
+
+			
+			
+			/* Listener functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Activates listeners for specific events related to functionality 
+			 * while the widget is visible.
+			 */
+			private function widgetAddEventListeners():void
+			{
+				// Add Keypress Down listener
+				systemManager.addEventListener(KeyboardEvent.KEY_DOWN,widgetKeyPressDownHandler);
+				
+				// Add Keypress Up listener
+				systemManager.addEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			/**
+			 * Removes listeners for specific events related to functionality so 
+			 * that they are not called when the widget is closed or minimised.
+			 */
+			private function widgetRemoveEventListeners():void
+			{
+				// Remove Keypress Down listener
+				systemManager.removeEventListener(KeyboardEvent.KEY_DOWN,widgetKeyPressDownHandler);
+				
+				// Remove Keypress Up listener
+				systemManager.removeEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			/**
+			 * Called when a key pressed by the user presses goes down
+			 */
+			private function widgetKeyPressDownHandler(event:KeyboardEvent):void
+			{
+				// Check the keycode of the button pressed
+				switch(event.keyCode)
+				{
+					case 17: // Control key
+					{
+						
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Called when a key pressed by the user presses comes up
+			 */
+			private function widgetKeyPressUpHandler(event:KeyboardEvent):void
+			{
+				// Check the keycode of the button pressed
+				switch(event.keyCode)
+				{
+					case Keyboard.ESCAPE: // Escape key
+					{
+						// Deactivate the tool if in active state
+						if (this.currentState != "normal")
+						{
+							setStateNormal();
+						}
+						
+						break;
+					}
+				}
+			}
+
+			/**
+			 * Called when the widget created event fires.  Adds the keypress listeners.
+			 */
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				widgetAddEventListeners();
+			}
+
+			/**
+			 * Called when the drawtool pick list selected item changes.
+			 */
+			protected function cboDrawTool_changeHandler(event:IndexChangeEvent):void
+			{
+				// Reactivate the draw tool with the new setting				
+				activateDrawTool();
+			}
+
+			/** 
+			 * Called when the user clicks the clear graphics button
+			 */
+			protected function clearButton_clickHandler(event:MouseEvent):void
+			{
+				hideInfoWindow();
+				_graphicsLayer.clear();
+			}
+
+			/**
+			 * Called when the map popup window is closed by the user.
+			 */
+			private function popupClosed(event:Event):void
+			{
+				// Remove the listener
+				map.infoWindow.removeEventListener(Event.CLOSE, popupClosed);
+				map.infoWindow.content = null;
+				map.infoWindow.label = "";
+			}
+			
+			/**
+			 * Hide the info window.
+			 */
+			private function hideInfoWindow():void
+			{
+				map.infoWindow.hide();
+			}
+			
+			/**
+			 * Called when the user clicks the close button on the settings title window
+			 */
+			protected function windowSettings_closeHandler(event:CloseEvent):void
+			{
+				// Reset the state to active mode
+				setStateActive();
+			}
+			
+			/**
+			 * Called when the user click the show graphics button
+			 */
+			protected function chkConvertGraphic_changeHandler(event:Event):void
+			{
+				if (_settingsSO)
+				{
+					_settingsSO.data[MEASUREMENTWIDGET] = chkConvertGraphic.selected;
+					try
+					{
+						_settingsSO.flush();
+					}
+					catch (err:Error)
+					{
+						
+					}
+				}
+			}
+			
+			protected function measureToolActiveToggleButton_changeHandler(event:Event):void
+			{
+				_toolActive = measureToolActiveToggleButton.selected;
+			}
+			
+			protected function inspector_ClosePopup(event:Event):void
+			{
+				hideInfoWindow();
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<viewer:states>
+		<s:State name="normal" />
+		<s:State name="settings" />
+		<s:State name="active" />
+	</viewer:states>
+	
+	<fx:Declarations>
+		<!--- Geometry service for drawing processes -->
+		<esri:GeometryService id="geometryService" 
+							  url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"
+							  showBusyCursor="true" />
+		
+		<!--- Drawing tool used to create new graphics -->
+		<esri:DrawTool id="drawTool" 
+					   drawStart="drawTool_drawStartHandler(event)" 
+					   drawEnd="drawTool_drawEndHandler(event)" 
+					   drawUpdate="drawTool_drawUpdateHandler(event)" 
+					   map="{map}" showDrawTips="{true}" />
+
+		<!--- Number Formatter -->
+		<s:NumberFormatter id="numberFormatter" decimalSeparator="." groupingSeparator="," useGrouping="true" />
+		
+		<!--- Fade Effects -->
+		<s:Fade id="rollOverFade" target="{toolContainer}"/>
+		<s:Fade id="rollOutFade" target="{toolContainer}"/>
+
+		<!--- Symbols for results -->
+		<esri:SimpleMarkerSymbol id="sms" alpha="0.7" color="0xFF0000" size="10" style="cross" >
+			<esri:SimpleLineSymbol alpha="1" color="0xFF0000" style="solid" width="2" />
+		</esri:SimpleMarkerSymbol>
+
+		<esri:SimpleLineSymbol id="sls" alpha="0.7" color="0xFF0000" style="solid" width="2" />
+		
+		<esri:SimpleFillSymbol id="sfs" alpha="0.7" color="0xFF0000" style="solid" >
+			<esri:SimpleLineSymbol alpha="1" color="0xFF0000" style="solid" width="2" />
+		</esri:SimpleFillSymbol>
+		
+	</fx:Declarations>
+	
+	<s:HGroup id="toolContainer" gap="5" 
+			  verticalAlign="middle" 
+			  rollOut="{rollOutFade.play()}"
+			  rollOver="{rollOverFade.play()}" >
+		
+		<s:filters>
+			<s:DropShadowFilter alpha="0.5"
+								blurX="10"
+								blurY="10"/>
+		</s:filters>
+		
+		<s:ToggleButton id="toolButton" label="Measure" selected="false" 
+						change="toolButton_changeHandler(event)" 
+						skinClass="widgets.Measure.skins.MeasureWidgetMeasureToolToggleButtonSkin" 
+						toolTip="{_toolLabel}" height="25" width="25" />
+		
+		<s:DropDownList id="cboDrawTool" width="40" height="25" 
+						skinClass="com.esri.ags.skins.EditorDrawDropDownListSkin"
+						itemRenderer="com.esri.ags.skins.supportClasses.EditorDropDownListItemRenderer"
+						change="cboDrawTool_changeHandler(event)"
+						visible="false" visible.active="true" visible.settings="true" 
+						includeInLayout="false" includeInLayout.active="true" 
+						includeInLayout.settings="true" selectedIndex="1" 
+						toolTip="{_drawToolLabel}" >
+			<s:dataProvider>
+				<s:ArrayList>
+					<!--- @private -->
+					<fx:Object id="mapPointIcon"
+							   drawId="mappoint"
+							   icon="@Embed('widgets/Measure/assets/images/ElementMarker16.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointLabel')}"/>
+					<!--- @private -->
+					<fx:Object id="pointToPointLineIcon"
+							   drawId="pointToPointLine"
+							   icon="@Embed('widgets/Measure/assets/images/ElementPolyline16.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+					<!--- @private -->
+					<fx:Object id="pointToPointPolygonIcon"
+							   drawId="pointToPointPolygon"
+							   icon="@Embed('widgets/Measure/assets/images/EditingPolygonTool16.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+					<!--- @private -->
+					<fx:Object id="extentIcon"
+							   drawId="extent"
+							   icon="@Embed('widgets/Measure/assets/images/EditingExtent_16.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorCreateExtentLabel')}"/>
+					<!--- @private -->
+					<fx:Object id="circleIcon"
+							   drawId="circle"
+							   icon="@Embed('widgets/Measure/assets/images/EditingCircleTool16.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorCreateCircleLabel')}"/>
+				</s:ArrayList>
+			</s:dataProvider>
+		</s:DropDownList>
+		
+		<s:ToggleButton id="settingsButton" label="Settings" selected="false" 
+						change="settingsButton_changeHandler(event)"
+						skinClass="widgets.Measure.skins.MeasureWidgetSettingsToggleButtonSkin"
+						visible="false" visible.active="true" visible.settings="true" 
+						includeInLayout="false" includeInLayout.active="true" 
+						includeInLayout.settings="true"
+						toolTip="{_settingsLabel}" />
+		
+		<s:Button id="clearButton" label="Clear Graphics" enabled="{_graphicsLayer.numGraphics > 0}"
+				  visible="false" visible.active="true" visible.settings="true" 
+				  includeInLayout="false" includeInLayout.active="true" includeInLayout.settings="true"
+				  click="clearButton_clickHandler(event)" 
+				  skinClass="widgets.Measure.skins.MeasurementWidgetClearGraphicsButtonSkin" 
+				  toolTip="{_clearFeatureLabel}" />
+
+		<s:ToggleButton id="measureToolActiveToggleButton" toolTip="Click to keep the Measure Tool active" 
+						visible="false" visible.active="true" visible.settings="true"
+						includeInLayout="false" includeInLayout.active="true" includeInLayout.settings="true" 
+						height="25" width="25"
+						change="measureToolActiveToggleButton_changeHandler(event)"
+						skinClass="widgets.Measure.skins.MeasureWidgetToolActiveToggleButtonSkin" />
+
+		
+	</s:HGroup>
+	
+	<!-- Settings for the measurement units -->
+	<s:TitleWindow id="windowSettings" visible="false" visible.settings="true" width="350" title="{_measurementsLabel}"
+				   close="windowSettings_closeHandler(event)">
+		<s:layout>
+			<s:VerticalLayout gap="5" paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5" />
+		</s:layout>
+
+		<s:Form id="frmMeasurements"
+				 width="100%"  >
+			<s:FormItem skinClass="widgets.Measure.skins.MeasureWidgetFormItemSkin"
+						label="{_areaUnitsLabel}" >
+				<s:DropDownList id="cboArea"
+								requireSelection="true"
+								selectedIndex="0"
+								width="100%" />
+			</s:FormItem>
+			<s:FormItem skinClass="widgets.Measure.skins.MeasureWidgetFormItemSkin"
+						label="{_distanceUnitsLabel}">
+				<s:DropDownList id="cboDistance"
+								requireSelection="true"
+								selectedIndex="0"
+								width="100%" />
+			</s:FormItem>
+			<s:FormItem skinClass="widgets.Measure.skins.MeasureWidgetFormItemSkin"
+						label="{_convertGraphicsLabel}" > 
+				<s:CheckBox id="chkConvertGraphic" selected="true" change="chkConvertGraphic_changeHandler(event)"/>
+			</s:FormItem>
+			
+		</s:Form>
+
+	</s:TitleWindow>
+	
+</viewer:BaseWidget>

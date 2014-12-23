@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>widgets/LocatePoint/assets/images/icon.png</icon>
+	<label>Enhanced Locate Widget</label>
+	<description></description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/LocatePoint/README.md</helpurl>
+</configuration>

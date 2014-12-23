@@ -1,3 +1,18 @@
+ArcGIS API for Flex
+-------------------
 Download the SWC (the API Library) from http://links.esri.com/flex-api/latest-download
 
 More information on ArcGIS API for Flex: http://links.esri.com/flex-api
+
+
+as3xls — an Excel library for Actionscript 3
+--------------------------------------------
+Download the SWC (the API Library) from https://github.com/djw/as3xls
+
+Used by the AddExcel Widget 
+
+DBF
+---
+DBF library part of vanrijkom flash libraries download from https://code.google.com/p/vanrijkom-flashlibs/
+
+Used by the AddShapefile widget.

@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>widgets/DataExtractEnhanced/assets/images/icon.png</icon>
+	<label>Enhanced Data Extract Widget</label>
+	<description>This widget allows the user to extract sections of configured layers to one of several types of GIS or CAD layer file for use in their own systems. This version includes a link button to a help file location.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/DataExtractEnhanced/README.md</helpurl>
+</configuration>

@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>widgets/AttributeTableEnhanced/assets/images/icon.png</icon>
+	<label>Enhanced Attribute Table Widget</label>
+	<description></description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/AttributeTableEnhanced/README.md</helpurl> 
+</configuration>

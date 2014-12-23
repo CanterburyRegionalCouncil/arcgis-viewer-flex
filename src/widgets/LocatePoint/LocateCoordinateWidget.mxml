@@ -1,0 +1,1810 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx"
+				   xmlns:viewer=			"com.esri.viewer.*" 
+				   xmlns:widget=			"widgets.LocatePoint.*"
+				   xmlns:components=		"widgets.LocatePoint.components.*"
+				   widgetConfigLoaded=		"widgetConfigLoadedHandler(event)"
+				   initialize=				"basewidget_initializeHandler(event)" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.portal.PopUpRenderer;
+			import com.esri.ags.portal.supportClasses.PopUpInfo;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.DatumTransform;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			
+			import mx.collections.XMLListCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ValidationResultEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.validators.Validator;
+			
+			import spark.collections.Sort;
+			import spark.collections.SortField;
+			import spark.events.IndexChangeEvent;
+
+			import widgets.supportClasses.utils.MapUtil;
+
+			
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+			
+			private const nzmgwkid:Number = 27200;
+			private const nztmwkid:Number = 2193;
+			private const wgs84wkid:Number = 4326;
+			private const webmercatorwkid:Number = 102100;
+			
+			private const NZGD_1949_To_WGS_1984_2:Number = 1564;
+			private const NZGD_2000_To_WGS_1984_1:Number = 1565;
+			private const New_Zealand_1949_To_NZGD_2000_3_NTv2:Number = 1568;
+			
+			// Listings of the coordinate system used by this widget
+			private const spatialDetails:Array = [
+				{ inputWKID: nzmgwkid, outputWKID: nzmgwkid, datTransform: null, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: nztmwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: wgs84wkid, datTransform: NZGD_1949_To_WGS_1984_2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: webmercatorwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				
+				{ inputWKID: nztmwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: nztmwkid, outputWKID: nztmwkid, datTransform: null , transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: wgs84wkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: webmercatorwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				
+				{ inputWKID: wgs84wkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: wgs84wkid, datTransform: null , transformForward: true },
+				{ inputWKID: wgs84wkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true },
+				
+				{ inputWKID: webmercatorwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: wgs84wkid, datTransform: null, transformForward: true },
+				{ inputWKID: webmercatorwkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true }
+			];
+			
+			
+			// Image url paths
+			private const ICON_URL:String = "assets/images/";
+			
+			
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+			
+			// Debug mode setting;
+			private var _debug:Boolean = false;	
+			
+			// Display settings
+			private var _graphicsLayer:GraphicsLayer;
+			private var _graphicPointSym:PictureMarkerSymbol;
+			
+			// Geometry service setting
+			[Bindable]
+			private var _geometryServiceUrl:String;
+			
+			// Map zoom scale setting
+			[Bindable]
+			private var _zoomScale:Number;
+			
+			// Extent check setting
+			private var _extentSetting:String;
+			
+			// Location calculation settings
+			private var _inSpatial:Number;
+			private var _outSpatial:Number;
+			
+			private var _inX:Number;
+			private var _inY:Number;
+			
+			// State check settings
+			private var _lastState:String;
+			
+			// Display format settings
+			private var _projNumDecPlace:Number = 0;
+			private var _wgs84NumDecPlace:Number = 6;
+			
+			
+			
+			// Labels and tooltips
+			// ----------------------------------------------
+			
+			[Bindable]
+			private var _instructionLabel:String; 
+			
+			[Bindable]
+			private var _modeTooltip:String;
+			
+			[Bindable]
+			private var _sheetLabel:String;
+			[Bindable]
+			private var _xLabel:String;
+			[Bindable]
+			private var _yLabel:String;
+			[Bindable]
+			private var _longitudeLabel:String;
+			[Bindable]
+			private var _latitudeLabel:String;
+			
+			private var _extentError:String;
+			private var _locationError:String;
+			private var _validationError:String;
+			
+			// Prompt labels
+			[Bindable]
+			private var _promptXLabel:String;
+			[Bindable]
+			private var _promptYLabel:String;
+			[Bindable]
+			private var _promptDegreesLabel:String;
+			[Bindable]
+			private var _promptMinutesLabel:String;
+			[Bindable]
+			private var _promptSecondsLabel:String;
+			
+			// Example labels
+			[Bindable]
+			private var _nzms260SheetExampleLabel:String;
+			[Bindable]
+			private var _nztopo50SheetExampleLabel:String;
+			[Bindable]
+			private var _nzmgXExampleLabel:String;
+			[Bindable]
+			private var _nzmgYExampleLabel:String;
+			[Bindable]
+			private var _nztmXExampleLabel:String;
+			[Bindable]
+			private var _nztmYExampleLabel:String;
+			[Bindable]
+			private var _webmercatorXExampleLabel:String;
+			[Bindable]
+			private var _webmercatorYExampleLabel:String;
+			[Bindable]
+			private var _wgs84LongitudeExampleLabel:String;
+			[Bindable]
+			private var _wgs84DMLongitudeExampleLabel:String;
+			[Bindable]
+			private var _wgs84DMSLongitudeExampleLabel:String;
+			[Bindable]
+			private var _wgs84LatitudeExampleLabel:String;
+			[Bindable]
+			private var _wgs84DMLatitudeExampleLabel:String;
+			[Bindable]
+			private var _wgs84DMSLatitudeExampleLabel:String;
+			
+			
+			// Button labels and tooltips
+			[Bindable]
+			private var _locateLabel:String;
+			[Bindable]
+			private var _locateTooltip:String;
+			
+			[Bindable]
+			private var _clearLabel:String;
+			
+			[Bindable]
+			private var _resetLabel:String;
+			[Bindable]
+			private var _resetTooltip:String;
+			
+			// Icon for display location
+			// Cursor classes 			
+			[Embed(source="widgets/LocatePoint/assets/images/crosshair.png")]
+			private var _crosshair:Class;
+			
+			
+			// Help settings
+			// ----------------------------------------------
+			
+			// Help URL
+			private var _helpLocation:String;
+			
+
+			
+			/* WIDGET EVENT HANDLERS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the widget componet is initialised
+			 */
+			protected function basewidget_initializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}
+			
+			/** 
+			 * Called when the widget config file has been loaded
+			 */ 
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				if (configXML)
+				{
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Generate the point symbol - default to the widget icon
+					_graphicPointSym = new PictureMarkerSymbol(_crosshair, 40, 40);
+					
+					// Create graphics layer for map to display results in
+					var graphicsLayerName:String = configXML.graphicsLayerName || "LocatePointGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "Locate Point Graphics";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName,map,graphicsLayerAlias);
+					
+					// Set the graphics layer symbol (important we add the symbol -*after*- the check for config icon)
+					_graphicsLayer.symbol = _graphicPointSym;
+					
+					// Set the zoom scale
+					if (Number(configXML.zoomscale) > 0)
+						_zoomScale = Number(configXML.zoomscale) || 5000;
+					
+					// Extent check setting
+					_extentSetting = configXML.extentCheckSetting || "";
+					
+					// Get the projection settings and enable the appropriate modes
+					_outSpatial = map.spatialReference.wkid;
+					
+					/* 	Check that the map spatial reference matches nztm, nzmg or wgs84 - the custom project points service only 
+					works with these spatial references at this stage. */
+					var allowNZMG:Boolean = ( _outSpatial == nzmgwkid || _outSpatial == nztmwkid || _outSpatial == wgs84wkid || _outSpatial == webmercatorwkid);
+					
+					// Check the NZTM settings
+					if (configXML.NZTM.enable == "true")
+						modeList.dataProvider.addItem(nztm);
+					
+					if (configXML.NZTM.enablenztopo50 == "true")
+						modeList.dataProvider.addItem(nztopo50);
+					
+					// Check the NZMG settings
+					if (configXML.NZMG.enable == "true" && allowNZMG)
+						modeList.dataProvider.addItem(nzmg);
+					
+					if (configXML.NZMG.enablenzms260 == "true" && allowNZMG)
+						modeList.dataProvider.addItem(nzms260);
+					
+					// Check the WGS84 settings
+					if (configXML.WGS84.enable == "true")
+						modeList.dataProvider.addItem(wgs84);
+					
+					if (configXML.WGS84.enabledm == "true")
+						modeList.dataProvider.addItem(wgs84dm);
+					
+					if (configXML.WGS84.enabledms == "true")
+						modeList.dataProvider.addItem(wgs84dms);
+
+					// Check the webmercator settings
+					if (configXML.webmercator.enable == "true")
+						modeList.dataProvider.addItem(webmercator);
+					
+					// Set number format properties
+					_projNumDecPlace = configXML.projNumDecPlace || 2;
+					_wgs84NumDecPlace = configXML.wgs84NumDecPlace || 6;
+					
+					// Load label and tooltip settings
+					_instructionLabel = configXML.labels.instructionlabel || "Use the locate tool to zoom to coordinates on the map:";
+					_modeTooltip = configXML.labels.modelabel || "Click the button to set the coordinate entry mode.";
+					
+					_sheetLabel = configXML.labels.sheetlabel || "Sheet:";
+					_xLabel = configXML.labels.xlabel || "X:";
+					_yLabel = configXML.labels.ylabel || "Y:";
+					_longitudeLabel = configXML.labels.longitudelabel || "Longitude:";
+					_latitudeLabel = configXML.labels.latitudelabel || "Latitude:";
+					
+					_clearLabel = configXML.labels.clearlabel || "Click to reset the form and clear location points";
+					
+					_resetLabel = configXML.labels.resetlabel || "Reset";
+					_resetTooltip = configXML.labels.resettooltip || "Click to reset the form";
+					
+					_locateLabel = configXML.labels.locatelabel || "Locate";
+					_locateTooltip = configXML.labels.locatetooltip || "Click to start the locate action";
+					
+					// Error messages
+					_extentError = configXML.messages.extentError || "Your location reference is outside the region.";
+					_locationError = configXML.messages.locationError || "Your location reference is invalid or outside the region.";
+					_validationError = configXML.messages.validationError || "There were problems with your values entered.";
+					
+					// Prompt labels
+					_promptXLabel = configXML.labels.promptXValue || "Enter X Value";
+					_promptYLabel = configXML.labels.promptYValue || "Enter Y Value";
+					_promptDegreesLabel = configXML.labels.promptSeconds || "Enter Degrees";
+					_promptMinutesLabel = configXML.labels.promptMinutes || "Enter Minutes";
+					_promptSecondsLabel = configXML.labels.promptSeconds || "Enter Seconds";
+					
+					// Example label settings
+					_nzms260SheetExampleLabel = configXML.labels.exampleNZMS260SheetLabel || "Pick a sheet from the list";
+					_nztopo50SheetExampleLabel = configXML.labels.exampleNZTopo50SheetLabel || "Pick a sheet from the list";
+					
+					_nzmgXExampleLabel = configXML.labels.exampleNZMGXLabel || "Enter a 7 digit nunmber";
+					_nzmgYExampleLabel = configXML.labels.exampleNZMGYLabel || "Enter a 7 digit nunmber";
+					
+					_nztmXExampleLabel = configXML.labels.exampleNZTMXLabel || "Enter a 7 digit nunmber";
+					_nztmYExampleLabel = configXML.labels.exampleNZTMYLabel || "Enter a 7 digit nunmber";
+					
+					_wgs84LongitudeExampleLabel = configXML.labels.exampleWGS84LongitudeLabel || "e.g. 172.632377";
+					_wgs84DMLongitudeExampleLabel = configXML.labels.exampleWGS84DMLongitudeLabel || "e.g. 172° 29.814199′";
+					_wgs84DMSLongitudeExampleLabel = configXML.labels.exampleWGS84DMSLongitudeLabel || "e.g. 172° 29′ 48.85″";
+					
+					_wgs84LatitudeExampleLabel = configXML.labels.exampleWGS84LatitudeLabel || "e.g. -43.526945";
+					_wgs84DMLatitudeExampleLabel = configXML.labels.exampleWGS84DMLatitudeLabel || "e.g. -43° 28.999′";
+					_wgs84DMSLatitudeExampleLabel = configXML.labels.exampleWGS84DMSLatitudeLabel || "e.g. -43° 28′ 59.94″";
+					
+					_webmercatorXExampleLabel = configXML.labels.webmercatorXExampleLabel || "Enter a 8 digit nunmber";
+					_webmercatorYExampleLabel = configXML.labels.webmercatorYExampleLabel || "Enter a negative 7 digit nunmber";
+					
+					// Load help location
+					_helpLocation = configXML.helplocationurl;
+					
+					// Add the template header buttons
+					wTemplate.addTitlebarButton(ICON_URL + "i_clear.png", _clearLabel, clearWidget, false);
+					
+					// Add the help button if a location has been set.
+					if (_helpLocation)
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", "Help", showHelp, false);
+					}
+					
+					// Set the initial view state
+					setView(configXML.initialview[0]);
+				}
+				
+				//fade.targets = [ this., textInput, resultsList ];
+				wTemplate.visible = true;
+			}
+			
+			/** 
+			 * Called when the widget is closed
+			 */ 
+			protected function widget_closedHandler(event:Event):void
+			{
+				// Hide the graphics layer
+				_graphicsLayer.visible = false;
+				
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/** 
+			 * Called when the widget is opened
+			 */ 
+			protected function widget_openHandler(event:Event):void
+			{
+				if (_graphicsLayer)
+					_graphicsLayer.visible = true;
+			}
+
+			
+			
+			/* VIEWSTATE SETTINGS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Sets the viewstate of the widget. Called during the config loaded event.
+			 */
+			private function setView(view:String):void
+			{
+				switch(view)
+				{
+					case "nzmgInput":
+					case "nzmg":
+					{
+						showStateNZMG();
+						break;
+					}
+						
+					case "nzms260Input":
+					case "nzms260":
+					{
+						showStateNZMS260();
+						break;
+					}
+						
+					case "nztopo50Input":
+					case "nztopo50":
+					{
+						showStateNZTopo50();
+						break;
+					}
+						
+					case "wgs84dmsInput":
+					case "wgs84dms":
+					{
+						showStateWGS84DMS();
+						break;
+					}
+						
+					case "wgs84dmInput":
+					case "wgs84dm":
+					{
+						showStateWGS84DM();
+						break;
+					}
+						
+					case "wgs84Input":
+					case "wgs84":
+					{
+						showStateWGS84();
+						break;
+					}
+						
+					case "webmercatorInput":	
+					case "webmercator":	
+					{
+						showStateWebMercator();
+						break;
+					}
+
+					default:
+					{
+						showStateNZTM();						
+					}
+				}
+			}
+			
+			/**
+			 * Sets the widget state to working.
+			 */
+			private function showStateWorking():void
+			{
+				// Record the what the current state was
+				_lastState = currentState;
+				
+				// Update to the new state
+				currentState = "working";	
+			}
+			
+			/**
+			 * Sets the widget state to webmercatorInput.
+			 */
+			private function showStateWebMercator():void
+			{
+				currentState = "webmercatorInput";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to nztmInput.
+			 */
+			private function showStateNZTM():void
+			{
+				currentState = "nztmInput";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to nzmgInput.
+			 */
+			private function showStateNZMG():void
+			{
+				currentState = "nzmgInput";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to nztopo50Input.
+			 */
+			private function showStateNZTopo50():void
+			{
+				currentState = "nztopo50Input";
+				
+				// Load the sheet list into the sheet selection combo.
+				if (_lastState != "nztopo50Input")
+				{
+					loadSheetCombo();
+				}
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to nzms260Input.
+			 */
+			private function showStateNZMS260():void
+			{
+				currentState = "nzms260Input";	
+				
+				// Load the sheet list into the sheet selection combo.
+				if (_lastState != "nzms260Input")
+				{
+					loadSheetCombo();
+				}
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to wgs84dmsInput.
+			 */
+			private function showStateWGS84DMS():void
+			{
+				currentState = "wgs84dmsInput";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to wgs84dmInput.
+			 */
+			private function showStateWGS84DM():void
+			{
+				currentState = "wgs84dmInput";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Sets the widget state to wgs84Input.
+			 */
+			private function showStateWGS84():void
+			{
+				currentState = "wgs84Input";	
+				
+				// Update the modeBar selected item 
+				setModeBarIndex(currentState);
+			}
+			
+			/**
+			 * Called when the selected item on the mode bar changes;
+			 */
+			protected function modeBar_changeHandler(event:IndexChangeEvent):void
+			{
+				// Reset the form
+				resetForm();
+				
+				// Set the new view state
+				if (modeList.selectedItem)
+				{
+					setView(modeList.selectedItem.value);
+				}
+
+				else
+				{
+					// Default to the initial view
+					setView(configXML.initialview[0]);
+				}
+			}
+			
+			/**
+			 * Gets the index of the button in the modeBar that matches the given view state.
+			 * Returns -1 if not located.
+			 */
+			private function getModeBarIndex(view:String):Number
+			{
+				var index:int = -1;
+				var name:String;
+				
+				switch(view)
+				{
+					case "nzmgInput":
+					case "nzmg":
+					{
+						name = "nzmg";
+						break;
+					}
+						
+					case "nzms260Input":
+					case "nzms260":
+					{
+						name = "nzms60";
+						break;
+					}
+						
+					case "nztopo50Input":
+					case "nztopo50":
+					{
+						name = "nztopo50";
+						break;
+					}
+						
+					case "wgs84dmsInput":
+					case "wgs84dms":
+					{
+						name = "wgs84dms";
+						break;
+					}
+						
+					case "wgs84dmInput":
+					case "wgs84dm":
+					{
+						name = "wgs84dm";
+						break;
+					}
+						
+					case "wgs84Input":
+					case "wgs84":
+					{
+						name = "wgs84";
+						break;
+					}
+						
+					case "webmercatorInput":
+					case "webmercator":
+					{
+						name = "webmercator";
+						break;
+					}
+
+					default:
+					{
+						name = "nztm";
+					}
+				}
+				
+				// Iterate through the modeBar data provider to find the index of the object with the given name
+				for each (var object:Object in modeList.dataProvider)
+				{
+					if (object.value == name)
+					{
+						index = modeList.dataProvider.getItemIndex(object);						
+						break;
+					}
+				}
+
+				
+				return index;
+			}
+			
+			/** 
+			 * Updates the modeBar selected index to match the given view.
+			 */ 
+			private function setModeBarIndex(view:String):void
+			{
+				// Get the index of the button in the modeBar that matches the given view. 
+				var index:int = getModeBarIndex(view);
+				
+				if (index != -1 && modeList.selectedIndex != index)
+				{
+					// Set the button as selected.
+					modeList.selectedIndex = index;	
+				}
+			}
+			
+			/**
+			 * Loads the sheet selection combo with a list of available sheet references.
+			 */
+			private function loadSheetCombo():void
+			{
+				var gridList:XMLListCollection;
+				var sort:Sort = new Sort();
+				sort.fields = [new SortField("@sheet",false)];
+				
+				// Get the current view mode 
+				if (currentState == "nztopo50Input")
+				{
+					// Get the nztopo50 list objects
+					gridList = new XMLListCollection(configXML.NZTM.gridrefs.gridref);
+					
+					// Sort the list based on the sheet attribute
+					gridList.sort = sort;
+					gridList.refresh();
+					
+					// Set the list as the data provider
+					sheetCombo.dataProvider = gridList;
+					sheetCombo.labelField = "@sheet";
+				}
+				else if (currentState == "nzms260Input")
+				{
+					// Get the nzms260 list objects
+					gridList = new XMLListCollection(configXML.NZMG.gridrefs.gridref);
+					
+					// Sort the list based on the sheet attribute
+					gridList.sort = sort;
+					gridList.refresh();
+					
+					// Set the list as the data provider
+					sheetCombo.dataProvider = gridList;
+					sheetCombo.labelField = "@sheet";
+				}
+				else
+				{
+					// Clear the data provider if it is populated
+					if (sheetCombo.dataProvider.length > 0)
+					{
+						sheetCombo.dataProvider = new ArrayCollection();
+					}
+				}
+				
+				// Set the current value
+				if (gridList.length > 0)
+				{
+					sheetCombo.selectedIndex = -1;
+					sheetCombo.selectedIndex = 0;					
+					
+					// Call the example entry function.
+					updateSheetExample();
+				}
+			}
+			
+			/**
+			 * Called when the sheet selection combo selected item changes.
+			 */
+			protected function sheetCombo_changeHandler(event:IndexChangeEvent):void
+			{
+				// Reset the coorindate entry inputs
+				resetForm(false);
+				
+				// Call the example entry function.
+				updateSheetExample();
+			}
+			
+			/**
+			 * Updates the example values for the x and y text input when in grid reference entry states.
+			 */
+			private function updateSheetExample():void
+			{
+				// Check the state of the widget
+				if (currentState == "nzms260Input" || currentState == "nztopo50Input")
+				{
+					if (sheetCombo.selectedItem)
+					{
+						// Update the example values on the x and y entry forms
+						var xmin:String = sheetCombo.selectedItem.@xmin;
+						var xmax:String = sheetCombo.selectedItem.@xmax;
+						var ymin:String = sheetCombo.selectedItem.@ymin;
+						var ymax:String = sheetCombo.selectedItem.@ymax;
+						
+						xExampleLabel.text = "Valid Range: " + xmin.substr(2,5) + "-" + xmax.substr(2,5);
+						yExampleLabel.text = "Valid Range: " + ymin.substr(2,5) + "-" + ymax.substr(2,5);
+					}
+					else
+					{
+						// Clear the example labels
+						xExampleLabel.text = "";
+						yExampleLabel.text = "";
+					}
+				}
+			}
+			
+			
+			
+			/* POPUP INFOWINDOW FUNCTIONS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Hides the map popup info window if the content displayed was palced there by this widget.
+			 */
+			private function hideInfoWindow():void
+			{
+				if (map.infoWindow.contentOwner && ((map.infoWindow.contentOwner is Graphic && 
+					Graphic(map.infoWindow.contentOwner).graphicsLayer === _graphicsLayer) || 
+					map.infoWindow.contentOwner is Map))
+				{
+					map.infoWindow.hide();
+				}
+			}
+			
+			
+			
+			/* GENERAL FUNCTIONS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Help function
+			 */
+			private function showHelp():void 
+			{
+				var urlRequest:URLRequest = new URLRequest(_helpLocation);
+				navigateToURL(urlRequest, "_blank");
+			}
+			
+			/**
+			 * Called when the locate button is clicked.
+			 */			
+			protected function locateButton_clickHandler(event:MouseEvent):void
+			{
+				// Start the locate process
+				submitAndValidate();
+			}
+			
+			/**
+			 * Called when the reset button is clicked.
+			 */
+			protected function resetButton_clickHandler(event:MouseEvent):void
+			{
+				// Reset the form
+				resetForm();
+			}
+			
+			/**
+			 * Resets all the data entry elements to blank
+			 */ 
+			private function resetForm(fullReset:Boolean = true):void
+			{
+				// Check for a full reset - Full Reset's are only really used when the sheet combo is displayed
+				if (sheetCombo != null)
+				{
+					if (fullReset && sheetCombo.dataProvider.length > 0)
+					{
+						sheetCombo.selectedIndex = -1;
+						sheetCombo.selectedIndex = 0;
+					}
+				}
+				
+				// Clear the input controls
+				xInput.text = "";
+				xInput.errorString = "";
+				
+				yInput.text = "";
+				yInput.errorString = "";
+				
+				if (xMinutes != null)
+				{
+					xMinutes.text = "";
+					xMinutes.errorString = "";
+				}
+				
+				if (yMinutes != null)
+				{
+					yMinutes.text = "";
+					yMinutes.errorString = "";
+				}
+				
+				if (xSeconds != null)
+				{
+					xSeconds.text = "";
+					xSeconds.errorString = "";
+				}
+				
+				if (ySeconds != null)
+				{
+					ySeconds.text = "";
+					ySeconds.errorString = "";
+				}				
+			}
+			
+			/**
+			 * Clears any existing graphics and resets the input entry controls to default.
+			 */
+			private function clearWidget():void
+			{
+				// Clear the exitsing location graphics
+				clearGraphics();
+				
+				// Reset the data entry form
+				resetForm();	
+			}
+			
+			/**
+			 * Clears any existing location graphics from the map.
+			 */
+			private function clearGraphics():void
+			{
+				// Hide the info window
+				hideInfoWindow();
+				
+				// Clear the graphics layer
+				_graphicsLayer.clear();
+			}
+			
+			/** 
+			 * Called when the one of the controls in the form recieves a key press.
+			 */  
+			protected function coordEntryForm_keyDownHandler(event:KeyboardEvent):void
+			{
+				// Check for the enter key being pressed.
+				if (event.keyCode == Keyboard.ENTER)
+				{
+					submitAndValidate();
+				}			
+			}
+			
+			
+			
+			/* LOCATE FUNCTIONS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Start the validate and coordinate location process.
+			 */
+			private function submitAndValidate():void
+			{
+				
+				// Validate the entered values
+				var validators:Array = [];
+				
+				switch(currentState)
+				{
+					case "nztmInput":
+					case "nzmgInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break;
+					}
+						
+					case "nztopo50Input":
+					case "nzms260Input":
+					{
+						// Load the validators array
+						validators.push(xGridValidator,yGridValidator);
+						
+						break;
+					}
+						
+					case "wgs84Input":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break
+					}
+						
+					case "wgs84dmInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator,longMinuteValidator,latMinuteValidator);
+						
+						break
+					}
+						
+					case "wgs84dmsInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator,longMinuteValidator,latMinuteValidator,longSecondValidator,latSecondValidator);
+						
+						break
+					}
+
+					case "webmercatorInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break
+					}
+				}
+				
+				var errors:Array = Validator.validateAll(validators);
+				var errorMessages:Array = [];
+				
+				// If validator errors
+				if (errors.length > 0)
+				{
+					// List validator errors
+					for each(var error:ValidationResultEvent in errors)
+					{
+						var errorField:String = FormItem(error.currentTarget.source.parent.parent.parent).label;
+						errorMessages.push(errorField + ": " + error.message);
+					}
+					// Display the errors
+					Alert.show(errorMessages.join("\n\n"), _validationError);
+				}
+				else
+				{
+					// No errors - start locator
+					locateCoordinates();
+				}
+			}
+			
+			/**
+			 * Finds the entered locations. 
+			 */
+			private function locateCoordinates():void
+			{
+				// Set the working state
+				showStateWorking();
+				
+				// Determine state to work out required conversion method
+				switch (_lastState)
+				{
+					case "nztmInput":
+					case "nzmgInput":
+					case "wgs84Input":
+					case "webmercatorInput":
+					{
+						_inX = Number(xInput.text);
+						_inY = Number(yInput.text);
+						
+						break;
+					}
+						
+					case "nzms260Input":
+					case "nztopo50Input":
+					{
+						_inX = getGridCoordinate(xInput.text, sheetCombo.selectedItem);
+						_inY = getGridCoordinate(yInput.text, sheetCombo.selectedItem, "y");
+						
+						break;
+					}
+						
+					case "wgs84dmInput":
+					{
+						_inX = Number(xInput.text) + Number(xMinutes.text)/60;
+						_inY = Number(yInput.text) + Number(yMinutes.text)/60;
+						
+						break;
+					}
+						
+					case "wgs84dmsInput":
+					{
+						_inX = Number(xInput.text) + Number(xMinutes.text)/60 + Number(xSeconds.text)/3600;
+						_inY = Number(yInput.text) + Number(yMinutes.text)/60 + Number(ySeconds.text)/3600;
+						
+						break;
+					}
+				}
+				
+				// Determine state to work out required input spatial reference
+				switch (_lastState)
+				{
+					case "nztmInput":
+					case "nztopo50Input":
+					{
+						_inSpatial = nztmwkid;
+						
+						break;
+					}
+						
+					case "nzmgInput":
+					case "nzms260Input":
+					{
+						_inSpatial = nzmgwkid;
+						
+						break;
+					}
+						
+					case "wgs84Input":	
+					case "wgs84dmInput":
+					case "wgs84dmsInput":
+					{
+						_inSpatial = wgs84wkid;
+						
+						break;
+					}
+						
+					case "webmercatorInput":
+					{
+						_inSpatial = webmercatorwkid;
+
+						break;
+					}
+				}
+				
+				// Check output spatial reference
+				if (map.spatialReference.wkid == _inSpatial)
+				{
+					// Display the result on the map
+					displayLocation(_inX,_inY);
+				}
+				else
+				{
+					// Project the input value to the output coordinate system
+					
+					// Construct a point based on the coordinates and the input spatial reference
+					var pt:MapPoint = new MapPoint(_inX, _inY, new SpatialReference(_inSpatial));
+					
+					// Use standard projection task
+					getCoordinates(map.spatialReference.wkid,pt);
+				}
+			}
+			
+			/**
+			 * Starts the project process to convert coodinates of the given point to another projected coordinate system.
+			 */
+			private function getCoordinates(targetWKID:int, geom:Geometry):void
+			{
+				// Check if input and target coordinate systems are the same
+				if (geom.spatialReference.wkid == targetWKID) 
+				{
+					// Go straight to the results presentation function
+					project_completeHandler([geom],null);
+				}
+				else
+				{
+					// Call the projection task
+					var projParam:ProjectParameters = getProjectParams(geom.spatialReference.wkid, targetWKID);
+					projParam.geometries = [geom];
+					
+					// Call the geometry service project task
+					geometryService.project(projParam, new AsyncResponder( project_completeHandler, project_faultHandler, null)); 
+				}
+				
+				function project_completeHandler(result:Object, token:Object = null):void
+				{
+					if ((result as Array).length == 0)
+					{
+						Alert.show(_locationError,"Location Error",Alert.OK,map);
+						return;
+					}
+					else
+					{
+						// An array of results is returned - this code should only return one point 
+						for each (var g:Geometry in (result as Array))
+						{
+							// Test for invalid point
+							if(isNaN(g['x']))
+							{
+								// Send an error message
+								Alert.show(_locationError,"Location Error",Alert.OK,map);
+								
+								// Turn the working message off
+								setView(_lastState);
+								return;
+							}
+							
+							// Projection received - generate geometry to check for extent
+							var point:MapPoint = g as MapPoint;
+							
+							// Check to see if within the map extent of the first base maps
+							if (checkWithinExtent(point) == false){
+								// Send an error message
+								Alert.show(_extentError,"Location Error",Alert.OK,map);
+								
+								// Turn the working message off
+								setView(_lastState);
+								return;
+							}
+							
+							// Call the display result function
+							displayLocation(point.x, point.y);
+						}
+					}	
+				}
+				
+				function project_faultHandler(fault:Fault, token:Object = null):void
+				{
+					// Show the error message.
+					Alert.show(fault.message.toString(), "Projection Error",Alert.OK,map);
+					
+					// Turn the working message off
+					setView(_lastState);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function getProjectParams(inputWKID:int, targetWKID:int):ProjectParameters
+			{
+				// Create a new project parameters
+				var projParam:ProjectParameters = new ProjectParameters();
+				projParam.outSpatialReference = new SpatialReference(targetWKID);
+				
+				// Create a datam transformation
+				var datTransform:DatumTransform = new DatumTransform();
+				
+				for (var i:int =0; i < spatialDetails.length; i++)
+				{
+					var sd:Object = spatialDetails[i];
+					if (sd.inputWKID == inputWKID &&
+						sd.outputWKID == targetWKID) {
+						
+						if (sd.datTransform != null)
+						{
+							datTransform.wkid = sd.datTransform;
+							projParam.datumTransform = datTransform;
+							projParam.transformForward = sd.transformForward;
+						}
+						break;
+					}
+				}
+				return projParam;
+			}
+			
+			/**
+			 * Coverts the map sheet grid reference into a 7 digit x or y value.
+			 */
+			private function getGridCoordinate(value:String, coordinateRange:Object, 
+															 coordinateType:String = "x"):Number
+			{
+				var minText:String;
+				var maxText:String;
+				var minPref:String;
+				var maxPref:String
+				var prefix:String;
+				
+				if (coordinateType == "x")
+				{
+					// Get the x values
+					minText = String(coordinateRange.@xmin).substr(2,5);
+					maxText = String(coordinateRange.@xmax).substr(2,5);
+					minPref = String(coordinateRange.@xmin).substr(0,2);
+					maxPref = String(coordinateRange.@xmax).substr(0,2);
+				}
+				else
+				{
+					// Get the y values
+					minText = String(coordinateRange.@ymin).substr(2,5);
+					maxText = String(coordinateRange.@ymax).substr(2,5);
+					minPref = String(coordinateRange.@ymin).substr(0,2);
+					maxPref = String(coordinateRange.@ymax).substr(0,2);
+				}
+				
+				// Convert to numbers
+				var minVal:Number = Number(minText);
+				var maxVal:Number = Number(maxText);
+				
+				// Check for a split value i.e. the range extends over 100000.
+				var isSplit:Boolean = (maxVal < minVal);
+				
+				// Format the text to validate
+				var checkText:String = value as String;
+				
+				// Pad out to 5 digits
+				while (checkText.length < 5)
+				{
+					checkText += "0";	
+				}
+				
+				// Convert to number
+				var checkVal:Number = Number(checkText);
+				
+				// Validate the value
+				if (isSplit)
+				{
+					if (minVal <= checkVal && checkVal < 100000)
+					{
+						// Use the min value to generate the prefix  					
+						prefix = minPref;
+					}
+					else
+					{
+						// Use the max value to generate the prefix 
+						prefix = maxPref;
+					}
+				}
+				else
+				{
+					// Use the min value to generate the prefix
+					prefix = minPref;
+				}
+				
+				// Calculate the return result
+				return Number(prefix + "00000") + checkVal;
+			}
+			
+			
+			
+			/* DISPLAY RESULT FUNCTIONS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Plots the calculate location on the map.
+			 */
+			private function displayLocation(outX:Number, outY:Number):void
+			{
+				// Projection received - generate geometry
+				var point:MapPoint = new MapPoint(outX,outY,map.spatialReference);
+				
+				// Create infowindow details
+				var title:String = "Location Point";
+				var content:String = constructContent(outX, outY); 
+				
+				// Clear the info window
+				hideInfoWindow();
+				
+				// Generate a new location graphic
+				var ptGraphic:Graphic = new Graphic();
+				ptGraphic.geometry = point;
+				_graphicsLayer.add(ptGraphic);
+				
+				// Construct the popup
+				var popUpInfo:PopUpInfo = new PopUpInfo();
+				popUpInfo.title = title;
+				popUpInfo.description = content;
+				
+				var infoWindowRenderer:ClassFactory = new ClassFactory(PopUpRenderer);
+				infoWindowRenderer.properties = { popUpInfo: popUpInfo };
+				
+				ptGraphic.infoWindowRenderer = infoWindowRenderer; 
+				
+				// Position the map and set the zoom scale
+				if (map.scale > _zoomScale)
+				{
+					map.scale = _zoomScale;
+				}
+				map.centerAt(point);
+				
+				// Show the info window
+				map.infoWindow.content = ptGraphic.infoWindowRenderer.newInstance();
+				map.infoWindow.contentOwner = ptGraphic;
+				map.infoWindow.show(point);
+				
+				// Turn the working message off
+				setView(_lastState);	
+			}
+			
+			/** 
+			 * Constructs the content for the popup window
+			 */ 
+			private function constructContent(x:Number, y:Number):String
+			{
+				var content:String;
+				var origproj:String;
+				
+				var outSR:Number = map.spatialReference.wkid;
+				
+				// Format results
+				if (outSR == nztmwkid || outSR == nzmgwkid || outSR == webmercatorwkid)
+				{
+					content = "<b>" + x.toFixed(_projNumDecPlace).toString() + "</b>, <b>" + 
+						y.toFixed(_projNumDecPlace).toString() + "</b>";
+				} 
+				else 
+				{
+					content = "<b>" + x.toFixed(_wgs84NumDecPlace).toString() + "</b>, <b>" + 
+						y.toFixed(_wgs84NumDecPlace).toString() + "</b>";
+				}
+				
+				// Check if spatial reference of map == input spatial reference 
+				if (outSR != _inSpatial)
+				{
+					// Input spatial reference differs from map spatial reference - show input values on results
+					
+					// Get the input spatial reference and entry type
+					switch (_lastState)
+					{
+						case "nztmInput":
+						{
+							origproj = nztm.label + " [ " + xInput.text + ", " + yInput.text + " ]";
+							break;
+						}
+							
+						case "nztopo50Input":	
+						{
+							origproj = nztopo50.label + " [ " + sheetCombo.selectedItem.@sheet + ":" + xInput.text + "-" + yInput.text + " ]";
+							break;
+						}
+							
+						case "nzms260Input":	
+						{
+							origproj = nzms260.label + " [ " + sheetCombo.selectedItem.@sheet + ":" + xInput.text + "-" + yInput.text + " ]";
+							break;
+						}
+							
+						case "nzmgInput":
+						{
+							origproj = nzmg.label + " [ " + xInput.text + ", " + yInput.text + " ]";
+							break;
+						}
+							
+						case "wgs84Input":
+						{
+							origproj = wgs84.label + " [ " + _longitudeLabel + xInput.text + ", " + _latitudeLabel + yInput.text + " ]";
+							break;
+						}
+							
+						case "wgs84dmInput":
+						{
+							origproj = wgs84dms.label + " [ " + _longitudeLabel + xInput.text + "° " + xMinutes.text + "′\n" + _latitudeLabel + yInput.text + "° " + yMinutes.text + "′ ]";
+							break;
+						}
+							
+						case "wgs84dmsInput":
+						{
+							origproj = wgs84dms.label + " [ " + _longitudeLabel + xInput.text + "° " + xMinutes.text + "′ " + xSeconds.text + "″\n" + _latitudeLabel + yInput.text + "° " + yMinutes.text + "′ " + ySeconds.text + "″ ]";
+							break;
+						}
+
+						case "webmercatorInput":
+						{
+							origproj = webmercator.label + " [ " + xInput.text + ", " + yInput.text +  " ]";
+							break;
+						}
+					}
+					
+					// Append origproj details to content
+					content += "<br/><i>(original projection "+ origproj + " )</i>";
+				}
+				
+				return content;
+			}
+			
+			
+			
+			/* PROJECTION FUNCTIONS
+			-------------------------------------------------------------------------- */
+			
+			/** 
+			 * Checks whether the provided map point is within the initial extent of the map
+			 */ 
+			private function checkWithinExtent(point:MapPoint):Boolean
+			{
+				// Get the initial and full extents from the config
+				var initExt:Object;
+				var fullExt:Object;
+				
+				if (configData.mapAttrs[0].id == 'initial')
+				{
+					initExt = configData.mapAttrs[0];	
+				}
+				else if (configData.mapAttrs[0].id == 'full')
+				{
+					fullExt = configData.mapAttrs[0];
+				}
+				
+				if (configData.mapAttrs[1].id == 'initial')
+				{
+					initExt = configData.mapAttrs[1];	
+				}
+				else if (configData.mapAttrs[1].id == 'full')
+				{
+					fullExt = configData.mapAttrs[1];
+				}
+				
+				// Check the extent setting method
+				if (_extentSetting != '')
+				{
+					var ext:String;
+					
+					// Check to see if within the map extent of the first base maps (assues the first loaded has same extent as the whole map.)
+					if (_extentSetting == "full" && fullExt)
+					{
+						ext = fullExt.extent;
+					}
+					else
+					{
+						ext = initExt.extent;
+					}
+					
+					var extArray:Array = ext.split(" ");
+					var extent:Extent = new Extent(Number(extArray[0]), Number(extArray[1]), Number(extArray[2]), Number(extArray[3]),
+						map.spatialReference);
+					return extent.contains(point);
+				}
+				else
+				{
+					// Hard coded as true until another solution is found
+					return true;
+				}
+			}
+			
+			protected function Input_focusOutHandler(event:FocusEvent):void
+			{
+				// Validate the entered values
+				var validators:Array = [];
+
+				// Load the validators array
+				switch(event.currentTarget.id)
+				{
+					case "xInput":
+						if (currentState == "nztopo50Input" || currentState == "nzms260Input")
+						{
+							validators.push(xGridValidator);
+						}
+						else 
+						{
+							validators.push(xValidator);
+						}
+						
+						break;
+
+					case "yInput":
+						if (currentState == "nztopo50Input" || currentState == "nzms260Input")
+						{
+							validators.push(yGridValidator);
+						}
+						else 
+						{
+							validators.push(yValidator);
+						}
+						
+						break;
+
+					case "xMinutes":
+						validators.push(longMinuteValidator);
+						break;
+					
+					case "yMinutes":
+						validators.push(latMinuteValidator);
+						break;
+
+					case "xSeconds":
+						validators.push(longSecondValidator);
+						break;
+					
+					case "ySeconds":
+						validators.push(latSecondValidator);
+						break;
+
+				}
+				
+				var errors:Array = Validator.validateAll(validators);
+
+				
+				/*
+				switch(currentState)
+				{
+					case "nztmInput":
+					case "nzmgInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break;
+					}
+						
+					case "nztopo50Input":
+					case "nzms260Input":
+					{
+						// Load the validators array
+						validators.push(xGridValidator,yGridValidator);
+						
+						break;
+					}
+						
+					case "wgs84Input":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break
+					}
+						
+					case "wgs84dmInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator,longMinuteValidator,latMinuteValidator);
+						
+						break
+					}
+						
+					case "wgs84dmsInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator,longMinuteValidator,latMinuteValidator,longSecondValidator,latSecondValidator);
+						
+						break
+					}
+						
+					case "webmercatorInput":
+					{
+						// Load the validators array
+						validators.push(xValidator,yValidator);
+						
+						break
+					}
+				}
+				*/
+
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<viewer:states>
+		<s:State name="nztmInput"/>
+		<s:State name="nztopo50Input"/>
+		<s:State name="nzmgInput"/>
+		<s:State name="nzms260Input"/>
+		<s:State name="wgs84dmsInput"/>
+		<s:State name="wgs84dmInput"/>
+		<s:State name="wgs84Input"/>
+		<s:State name="webmercatorInput"/>
+		<s:State name="working"/>
+	</viewer:states>
+	
+	<viewer:transitions>
+		<s:Transition autoReverse="true" toState="*">
+			<s:Fade id="fade"/>
+		</s:Transition>
+	</viewer:transitions>
+	
+	<fx:Declarations>
+		<!--- Potential mode bar items -->
+		<fx:Object id="nztm" label="NZTM Grid Reference" value="nztm" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="nzmg" label="NZMG Grid Reference" value="nzmg" tooltip="Click to enter location in NZTM XY" />
+		<fx:Object id="nztopo50" label="NZ Topo 50 Map Reference" value="nztopo50" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="nzms260" label="NZMS 260 Map Reference" value="nzms260" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="wgs84" label="WGS84 Latitude/Longitude" value="wgs84" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="wgs84dm" label="WGS84 Latitude/Longitude (DM)" value="wgs84dm" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="wgs84dms" label="WGS84 Latitude/Longitude (DMS)" value="wgs84dms" tooltip="Click to enter location in NZMG XY" />
+		<fx:Object id="webmercator" label="Web Mercator" value="webmercator" tooltip="Click to enter location in Web Mercator XY" />
+		
+		<!--- Validators -->	
+		<s:NumberValidator id="xValidator" source="{xInput}" required="true" property="text"
+						   enabled="true" enabled.nzms260Input="false" enabled.nztopo50Input="false"
+						   fractionalDigits="0" fractionalDigits.wgs84Input="7" 
+						   minValue="NaN" minValue.wgs84Input="-180" minValue.wgs84dmInput="-180" minValue.wgs84dmsInput="-180"
+						   maxValue="NaN" maxValue.wgs84Input="180" maxValue.wgs84dmInput="180" maxValue.wgs84dmsInput="180"
+						   />
+		<s:NumberValidator id="yValidator" source="{yInput}" required="true" property="text" 
+						   enabled="true" enabled.nzms260Input="false" enabled.nztopo50Input="false"
+						   fractionalDigits="0" fractionalDigits.wgs84Input="7" 
+						   minValue="NaN" minValue.wgs84Input="-180" minValue.wgs84dmInput="-180" minValue.wgs84dmsInput="-180"
+						   maxValue="NaN" maxValue.wgs84Input="180" maxValue.wgs84dmInput="180" maxValue.wgs84dmsInput="180"
+						   />
+		
+		<s:NumberValidator id="longMinuteValidator" source="{xMinutes}" required="true" property="text"
+						   minValue="0" maxValue="60" fractionalDigits="0" fractionalDigits.wgs84dmInput="7" />
+		<s:NumberValidator id="latMinuteValidator" source="{yMinutes}" required="true" property="text" 
+						   minValue="0" maxValue="60" fractionalDigits="0" fractionalDigits.wgs84dmInput="7" />
+		
+		<s:NumberValidator id="longSecondValidator" source="{xSeconds}" required="true" property="text" 
+						   minValue="0" maxValue="60" fractionalDigits="7" />
+		<s:NumberValidator id="latSecondValidator" source="{ySeconds}" required="true" property="text" 
+						   minValue="0" maxValue="60" fractionalDigits="7" />
+		
+		<components:GridCoordinateValidator id="xGridValidator" source="{xInput}" property="text" 
+											enabled="false" enabled.nzms260Input="true" enabled.nztopo50Input="true"
+											coordinateType="gridXCoordinate" coordinateRange="{sheetCombo.selectedItem}" />
+		<components:GridCoordinateValidator id="yGridValidator" source="{yInput}" property="text" 
+											enabled="false" enabled.nzms260Input="true" enabled.nztopo50Input="true"
+											coordinateType="gridYCoordinate" coordinateRange="{sheetCombo.selectedItem}" />
+		
+		<!--- Geometry service for basic projection actions-->
+		<esri:GeometryService  id="geometryService" />
+		
+	</fx:Declarations>
+	
+	<viewer:WidgetTemplate id="wTemplate"
+						   width="565" height="245"
+						   closed="widget_closedHandler(event)"
+						   minHeight="245"
+						   minWidth="565"
+						   open="widget_openHandler(event)"
+						   visible="false">
+		
+		<viewer:layout>
+			<s:VerticalLayout gap="5" paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5" />
+		</viewer:layout>
+		
+		<s:Label id="instructionLabel" text="{_instructionLabel}" width="100%" visible="true" visible.working="false"
+				 includeInLayout="true" includeInLayout.working="false"/>
+		
+		<mx:Spacer width="100%" />
+		
+		<s:HGroup width="100%" gap="5" verticalAlign="middle" visible="true" visible.working="false"
+				  includeInLayout="true" includeInLayout.working="false" >
+
+			<s:Label text="Input Coordinate Type:" verticalAlign="middle" height="20" styleName="WidgetTitle" />
+			
+			<s:DropDownList id="modeList" width="100%" selectedIndex="0" toolTip="{_modeTooltip}"
+							change="modeBar_changeHandler(event)" labelField="label" height="20">
+				<s:ArrayCollection>
+				</s:ArrayCollection>
+			</s:DropDownList>
+		</s:HGroup>
+		
+		<!--- Coordinate Entry Form -->
+		<s:Form id="coordEntryForm" width="100%" visible="true" visible.working="false"
+				includeInLayout="true" includeInLayout.working="false" keyDown="coordEntryForm_keyDownHandler(event)" >
+			<s:layout>
+				<s:FormLayout gap="-14" paddingLeft="-20" paddingTop="0" paddingBottom="0" />
+			</s:layout>
+			
+			<!--- Map Sheet Selection Group -->
+			<s:FormItem id="sheetItem" label="{_sheetLabel}" styleName="WidgetTitle" required="true" includeIn="nzms260Input, nztopo50Input" >
+				<s:ComboBox id="sheetCombo" width="100" prompt="Type or select sheet" buttonMode="true" useHandCursor="true" 
+							change="sheetCombo_changeHandler(event)" />
+				
+				<s:helpContent>
+					<s:Label text.nzms260Input="{_nzms260SheetExampleLabel}" text.nztopo50Input="{_nztopo50SheetExampleLabel}"/>      
+				</s:helpContent>
+			</s:FormItem>
+			
+			<!--- X Coordinate Entry Group -->
+			<s:FormItem id="xItem" label="{_xLabel}" label.wgs84Input="{_longitudeLabel}" 
+						label.wgs84dmInput="{_longitudeLabel}" label.wgs84dmsInput="{_longitudeLabel}" styleName="WidgetTitle" required="true">
+				<s:layout>
+					<s:HorizontalLayout/>
+				</s:layout>
+				
+				<s:TextInput id="xInput" prompt="{_promptXLabel}" width="100" 
+							 restrict="0-9\.\-" restrict.wgs84dmInput="0-9\-" restrict.wgs84dmsInput="0-9\-"
+							 maxChars="7" maxChars.nzms260Input="5" maxChars.nztopo50Input="5" maxChars.webmercatorInput="8"
+							 maxChars.wgs84Input="12" maxChars.wgs84dmInput="4" maxChars.wgs84dmsInput="3" 
+							 />
+				<s:TextInput id="xMinutes" prompt="{_promptMinutesLabel}" width="100" 
+							 restrict="0-9\." restrict.wgs84dmsInput="0-9" 
+							 maxChars.wgs84dmInput="12" maxChars.wgs84dmsInput="2" 
+							 includeIn="wgs84dmInput, wgs84dmsInput" />
+				<s:TextInput id="xSeconds" prompt="{_promptSecondsLabel}" width="100" 
+							 restrict="0-9\." 
+							 maxChars="12"		
+							 includeIn="wgs84dmsInput" />
+				
+				<s:helpContent>
+					<s:Label id="xExampleLabel" text.nzmgInput="{_nzmgXExampleLabel}" text.nztmInput="{_nztmXExampleLabel}" 
+							 text.wgs84Input="{_wgs84LongitudeExampleLabel}" text.wgs84dmInput="{_wgs84DMLongitudeExampleLabel}" 
+							 text.wgs84dmsInput="{_wgs84DMSLongitudeExampleLabel}" text.webmercatorInput="{_webmercatorXExampleLabel}" />      
+				</s:helpContent>
+			</s:FormItem>
+			
+			<!--- Y Coordinate Entry Group -->
+			<s:FormItem id="yItem" label="{_yLabel}" label.wgs84Input="{_latitudeLabel}" 
+						label.wgs84dmInput="{_latitudeLabel}" label.wgs84dmsInput="{_latitudeLabel}" styleName="WidgetTitle" required="true">
+				<s:layout>
+					<s:HorizontalLayout/>
+				</s:layout>
+				
+				<s:TextInput id="yInput" prompt="{_promptYLabel}" width="100" 
+							 restrict="0-9\.\-" restrict.wgs84dmInput="0-9\-" restrict.wgs84dmsInput="0-9\-"
+							 maxChars="7" maxChars.nzms260Input="5" maxChars.nztopo50Input="5" maxChars.webmercatorInput="8"
+							 maxChars.wgs84Input="12" maxChars.wgs84dmInput="3" maxChars.wgs84dmsInput="3"
+							 />
+				<s:TextInput id="yMinutes" prompt="{_promptMinutesLabel}" width="100"
+							 restrict="0-9\." restrict.wgs84dmsInput="0-9" 
+							 maxChars.wgs84dmInput="12" maxChars.wgs84dmsInput="2" 
+							 includeIn="wgs84dmInput, wgs84dmsInput" />
+				<s:TextInput id="ySeconds" prompt="{_promptSecondsLabel}" width="100" 
+							 restrict="0-9\." 
+							 maxChars="12"
+							 includeIn="wgs84dmsInput" />
+				
+				<s:helpContent>
+					<s:Label  id="yExampleLabel" text.nzmgInput="{_nzmgYExampleLabel}" text.nztmInput="{_nztmYExampleLabel}" 
+							  text.wgs84Input="{_wgs84LatitudeExampleLabel}" text.wgs84dmInput="{_wgs84DMLatitudeExampleLabel}" 
+							  text.wgs84dmsInput="{_wgs84DMSLatitudeExampleLabel}" text.webmercatorInput="{_webmercatorYExampleLabel}" />      
+				</s:helpContent>
+			</s:FormItem>
+			
+			<!--- Action Buttons Group -->
+			<s:HGroup width="100%" horizontalAlign="center" gap="5" paddingTop="15" >
+				<s:Button id="locateButton" label="{_locateLabel}" click="locateButton_clickHandler(event)" toolTip="{_locateTooltip}" />
+				<s:Button id="resetButton" label="{_resetLabel}" click="resetButton_clickHandler(event)" toolTip="{_resetTooltip}" />
+			</s:HGroup>
+			
+		</s:Form>
+		
+		<!--- Working Message Group -->
+		<s:HGroup id="hgrpWorking" gap="5" width="100%" height="100%" 
+				  horizontalAlign="center" verticalAlign="middle"  
+				  visible="false" visible.working="true" 
+				  includeInLayout="false" includeInLayout.working="true" >
+			<mx:Image id="swfMessage"
+					  source="assets/images/loader.swf"
+					  visible="true" height="50" width="50"/>
+			<s:Label id="txtMessage"
+					 text="Working"/>
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>

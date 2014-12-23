@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:MXTreeItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					  xmlns:s="library://ns.adobe.com/flex/spark" 
+					  xmlns:mx="library://ns.adobe.com/flex/mx"
+					  creationComplete="mxtreeitemrenderer1_creationCompleteHandler(event)"
+					  >
+
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.XMLListCollection;
+			import mx.events.FlexEvent;
+
+			private var _baseColor:uint;
+			
+			
+			/**
+			 * @private
+			 */
+			override protected function commitProperties():void
+			{
+				super.commitProperties();
+
+				if (data && data.@selected == "true")
+				{
+					this.check.selected = true; 
+				}
+				else 
+				{
+					this.check.selected = false;
+				}
+
+/* 				if (data && data.@layerName == "Regional Boundaries") 
+				{
+					trace(data.@layerName + ":" + getStyle("color").toString());
+				}
+				
+				if (data && data.@visible != "true")
+				{
+					setStyle("color", 0xCC0000); 
+				}
+				else 
+				{
+					setStyle("color", this._baseColor);
+				} */
+			}
+			
+			
+			override public function set data(value:Object):void 
+			{
+				super.data = value; 
+
+/* 				if (value && value.@visible != "true")
+				//if (treeListData.item.@visible != "true")
+				{
+					setStyle("color", 0xCC0000); 
+				}
+				else
+				{
+					setStyle("color", this._baseColor);
+				} */
+			}
+			
+			protected function checkbox_changeHandler(event:Event):void
+			{
+                var node:XML = XML(this.treeListData.item);
+				node.@selected = this.check.selected;
+				
+                // toggle parents on
+				if (this.check.selected) {
+					setParentSelected(node.parent(), this.check.selected);
+				}
+				
+				// toggle children
+				setChildrenSelected(new XMLListCollection(node.children()), this.check.selected);
+			}
+
+            private function setParentSelected(parent:XML, selected:Boolean):void
+            {
+                if (parent) 
+                {
+                    parent.@selected = selected;
+                    setParentSelected(parent.parent(), selected);
+                }
+            }
+            
+            private function setChildrenSelected(children:XMLListCollection, selected:Boolean):void
+            {
+                if (children) 
+                {
+                    for each (var child:XML in children)
+                    {
+                        child.@selected = selected;
+                        setChildrenSelected(new XMLListCollection(child.children()), selected);
+                    }
+                }
+            }
+        
+			protected function mxtreeitemrenderer1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Set the default colour
+				this._baseColor = getStyle("color");
+			}
+		]]>
+	</fx:Script>
+	
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="hovered" />
+		<s:State name="selected" />
+	</s:states>
+	<s:HGroup left="0" right="0" verticalCenter="0" verticalAlign="middle">
+		<s:Rect id="indentationSpacer" width="{treeListData.indent}" height="22" alpha="0">
+			<s:fill>
+				<s:SolidColor color="0xFFFFFF" />
+			</s:fill>
+		</s:Rect>
+		<s:Group id="disclosureGroup">
+			<s:BitmapImage source="{treeListData.disclosureIcon}" width="16" height="16" visible="{treeListData.hasChildren}" />
+		</s:Group>
+		<s:CheckBox id="check" change="checkbox_changeHandler(event)" />
+		<!--<s:CheckBox id="check" selected="{treeListData.item.@selected == 'true'}" change="checkbox_changeHandler(event)" />-->
+		<s:Label id="labelField" text="{treeListData.label}" paddingTop="2"/>
+	</s:HGroup>
+	
+</s:MXTreeItemRenderer>

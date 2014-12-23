@@ -1,0 +1,83 @@
+<?xml version="1.0" ?>
+<configuration>
+  <!-- Name of graphics layer that will be used to display results -->
+  <graphicsLayerName alias="Identification Results">IdentifyResultGraphicsLayer</graphicsLayerName>
+
+  <!-- Name of graphics layer whener the convert to drawn graphic functionality sends the results -->
+  <drawnGraphicsLayerName alias="Drawn Graphics">RedLiningGraphicsLayer</drawnGraphicsLayerName>
+
+  <!-- Enter the name of the search widget as shown in the main application config.xml.  This is used to allow search functionality 
+		 to open the Search Widget and initiate a search, based on the suggestions class type.  If this tag is left empty, the search 
+		 functionality will centre the map on the selected suggestion location and will place a label on the map (providing the suggestion 
+		 contains spatial info). -->
+  <searchWidgetName>Search</searchWidgetName>
+
+  <!-- Search Layer Settings -->
+  <mapLayers>
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" >
+      <idLayers type="include">5,6</idLayers>
+      <layerSummaryFields>
+        <layer id="5" layerName="Roads" >FULLNAME</layer>
+        <layer id="6" layername="Land Parcels" >Valuation_No,Appellation,Calc_Area</layer>
+      </layerSummaryFields>
+      <layerLinks>
+        <layer id="6" layername="Land Parcels" linkField="Valuation_No" linkButtonLabel="Show Valuation Intranet page">http://intranet/ecanstuff/Pages/RegionRoll.aspx?ValuationNo=[value]</layer>
+        <layer id="6" layername="Land Parcels" linkField="Valuation_No" linkButtonLabel="Show Valuation Summary page">http://reportingservices/ReportServer/Pages/ReportViewer.aspx?%2fGIS-Reports%2fValuation.Summary&amp;rs:Command=Render&amp;rc:Parameters=false&amp;ValuationNo=[value]</layer>
+      </layerLinks>
+      <imageLinks>
+      </imageLinks>
+      <layerSortFields>
+        <layer id="5" layername="Roads" varType="String" sortOrder="ASC" >FULLNAME</layer>
+        <layer id="6" layername="Land Parcels" varType="String" sortOrder="ASC" >Valuation_No</layer>
+      </layerSortFields>
+    </mapLayer>
+
+    <!-- Basemap Layers -->
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" >
+      <idLayers type="include">1,5,6</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" >
+      <idLayers type="include">7</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" >
+      <idLayers type="exclude">all</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base_Labels/MapServer" >
+      <idLayers type="exclude">all</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/No_Background/MapServer" >
+      <idLayers type="exclude">all</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Imagery/MapServer" >
+      <idLayers type="include">0</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Topoimagery/MapServer" >
+      <idLayers type="exclude">all</idLayers>
+    </mapLayer>
+
+    <mapLayer url="http://gis.ecan.govt.nz/arcgis/rest/services/SimpleBasemap/MapServer" >
+      <idLayers type="exclude">all</idLayers>
+    </mapLayer>
+
+  </mapLayers>
+
+  <!-- Result formatting settings -->
+  <formats>
+    <date>dd MMM yyyy</date>
+  </formats>
+
+  <!-- Label settings -->
+  <labels>
+    <!-- Help label settings -->
+    <helplabel>Help</helplabel>
+  </labels>
+
+  <!-- Help Location Settings -->
+  <helplocationurl>../Help/Help?topic=IdentifyTool</helplocationurl>
+</configuration>

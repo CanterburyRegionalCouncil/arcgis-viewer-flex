@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<configuration>
+	<xfield>X Coord</xfield>
+	<yfield>Y Coord</yfield>
+	<titlefield>Title</titlefield>
+	<linkfield></linkfield>
+	<linkalias></linkalias>
+	<zoomscale>10000</zoomscale>
+	<message>The .xls file must have at least two columns &#13; with the headings 'X Coord' and 'Y Coord' on the first Worksheet. &#13; A heading labelled 'Title' is optional.</message>
+
+	<labels>
+		<helplabel>Help</helplabel>
+	</labels>
+
+	<helplocationurl>http://somewebsite.com/HelpTopoc</helplocationurl>
+</configuration>

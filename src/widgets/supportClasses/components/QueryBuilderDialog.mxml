@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx"
+			   xmlns:components=	"widgets.supportClasses.components.*"			  
+			   close=				"closeHandler(event)" 
+			   creationComplete=	"creationCompleteHandler(event)" 
+			   title=				"{Title}"			   
+			   width=				"400" 
+			   height=				"415" 
+			   defaultButton=		"{butSubmit}" >
+	<fx:Script>
+		<![CDATA[
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+			
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Define Query Expression"  */
+			[Bindable]
+			public static var Title:String = "Define Query Expression";
+			
+			/** Label text for the dialog instructions. Defaults to "Enter the radius to buffer the selected feature(s) by and press BUFFER."  */
+/* 			[Bindable]
+			public static var InstructionLabel:String = "Enter the radius to buffer the selected feature(s) by and press BUFFER.";
+ */			
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel the buffer action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel the buffer action and close dialog";
+			
+			/** Label text for the submit button.  Defaults to "Submit" */
+			[Bindable]
+			public static var SubmitButtonLabel:String = "Submit";
+			
+			/** Tooltip text for the submit button.  Defaults to "Click to submit the query and close dialog" */
+			[Bindable]
+			public static var SubmitButtonTooltip:String = "Click to submit the query and close dialog";
+			
+
+			
+			/* QUERY BUILDER PROPERTIES
+			-------------------------------------------------------------------------- */
+			
+			// Search Layer properties
+			
+			/**
+			 * Display name of the feature layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Display name of the layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerName():String
+			{
+				return this.queryBuilder.layerName;	
+			}
+			
+			public function set layerName(value:String):void
+			{
+				this.queryBuilder.layerName = value;	
+			}
+
+			
+			/**
+			 * URL path of the feature layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Full URL of the layer's REST service end point.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerURL():String
+			{
+				return this.queryBuilder.layerURL;	
+			}
+			
+			public function set layerURL(value:String):void
+			{
+				this.queryBuilder.layerURL = value;	
+			}
+			
+
+			/**
+			 * List of field details associated with the layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Array]: </i>List of the layers field details.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get layerFields():Array
+			{
+				return this.queryBuilder.layerFields;	
+			}
+			
+			public function set layerFields(value:Array):void
+			{
+				this.queryBuilder.layerFields = value;	
+			}
+			
+			// Query String
+			
+			/**
+			 * Current Query String Property.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Full URL of the layer's REST service end point.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get queryText():String
+			{
+				return this.queryBuilder.queryText;	
+			}
+			
+			public function set queryText(value:String):void
+			{
+				this.queryBuilder.queryText = value;	
+			}
+			
+			
+			
+			/* COMPONENT EVENT HANDLERS
+			---------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the dialog is closed
+			 */
+			protected function closeHandler(event:CloseEvent):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			
+			/** 
+			 * Called when the title window gets the focus
+			 */ 
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				focusManager.setFocus(queryBuilder.queryFilter);
+			}
+			
+			protected function queryBuilder_queryChangedHandler(event:FlexEvent):void
+			{
+				//butSubmit.enabled = queryBuilder.queryText.length > 0;
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<s:VGroup width="100%" height="100%" gap="5" paddingTop="3" paddingLeft="3" paddingRight="3" paddingBottom="3">
+		<components:QueryBuilder id="queryBuilder" 
+								 width="100%" height="100%"
+								 queryChanged="queryBuilder_queryChangedHandler(event)" />
+
+		<s:HGroup width="100%" gap="5" horizontalAlign="right">			
+			<s:Button id="butCancel" 
+					  label="{CancelButtonLabel}" 
+					  toolTip="{CancelButtonTooltip}"
+					  buttonMode="true"
+					  useHandCursor="true" />
+			<s:Button id="butSubmit" 
+					  label="{SubmitButtonLabel}" 
+					  toolTip="{SubmitButtonTooltip}" 
+					  enabled="true"
+					  buttonMode="true"
+					  useHandCursor="true" />		
+		</s:HGroup>		
+	</s:VGroup>
+	
+</s:TitleWindow>

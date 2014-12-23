@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <actionScriptProperties analytics="false" mainApplicationPath="index.mxml" projectUUID="034d1e94-f1a9-4d3b-a1f5-4df718f153ab" version="10">
-  <compiler additionalCompilerArguments="-locale=en_US -source-path=locale/{locale} -keep-all-type-selectors=true" autoRSLOrdering="true" copyDependentFiles="true" fteInMXComponents="false" generateAccessible="true" htmlExpressInstall="true" htmlGenerate="true" htmlHistoryManagement="false" htmlPlayerVersionCheck="true" includeNetmonSwc="false" outputFolderPath="bin-debug" sourceFolderPath="src" strict="true" targetPlayerVersion="0.0.0" useApolloConfig="false" useDebugRSLSwfs="false" verifyDigests="true" warn="true">
+  <compiler additionalCompilerArguments="-locale=en_US -source-path=locale/{locale} -keep-all-type-selectors=true" autoRSLOrdering="true" copyDependentFiles="true" fteInMXComponents="false" generateAccessible="true" htmlExpressInstall="true" htmlGenerate="true" htmlHistoryManagement="false" htmlPlayerVersionCheck="true" includeNetmonSwc="false" outputFolderPath="bin-debug" removeUnusedRSL="true" sourceFolderPath="src" strict="true" targetPlayerVersion="0.0.0" useApolloConfig="false" useDebugRSLSwfs="false" verifyDigests="true" warn="true">
     <compilerSourcePath/>
     <libraryPath defaultLinkType="0">
       <libraryPathEntry kind="4" path="">
@@ -10,6 +10,10 @@
         </excludedEntries>
       </libraryPathEntry>
       <libraryPathEntry kind="1" linkType="1" path="libs"/>
+      <libraryPathEntry kind="3" linkType="1" path="${DCD_LIB_LOCATION}/serializers.swc" useDefaultLinkType="false"/>
+      <libraryPathEntry kind="3" linkType="1" path="${DCD_FIBER_LOCATION}/fiber.swc" useDefaultLinkType="false"/>
+      <libraryPathEntry kind="3" linkType="1" path="${DCD_FIBER_LOCALE_LOCATION}/fiber_rb.swc" useDefaultLinkType="false"/>
+      <libraryPathEntry kind="3" linkType="1" path="${DCD_LOCALE_LOCATION}/serializers_rb.swc" useDefaultLinkType="false"/>
     </libraryPath>
     <sourceAttachmentPath/>
   </compiler>
@@ -23,7 +27,7 @@
     <module application="src/index.mxml" destPath="widgets/Chart/ChartWidget.swf" optimize="true" sourcePath="src/widgets/Chart/ChartWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/DataExtract/DataExtractWidget.swf" optimize="true" sourcePath="src/widgets/DataExtract/DataExtractWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Draw/DrawWidget.swf" optimize="true" sourcePath="src/widgets/Draw/DrawWidget.mxml"/>
-	<module application="src/index.mxml" destPath="widgets/Directions/DirectionsWidget.swf" optimize="true" sourcePath="src/widgets/Directions/DirectionsWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Directions/DirectionsWidget.swf" optimize="true" sourcePath="src/widgets/Directions/DirectionsWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Edit/EditWidget.swf" optimize="true" sourcePath="src/widgets/Edit/EditWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Geoprocessing/GeoprocessingWidget.swf" optimize="true" sourcePath="src/widgets/Geoprocessing/GeoprocessingWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/GeoRSS/GeoRSSWidget.swf" optimize="true" sourcePath="src/widgets/GeoRSS/GeoRSSWidget.mxml"/>
@@ -44,6 +48,31 @@
     <module application="src/index.mxml" destPath="widgets/StaticImage/StaticImageWidget.swf" optimize="true" sourcePath="src/widgets/StaticImage/StaticImageWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Time/TimeWidget.swf" optimize="true" sourcePath="src/widgets/Time/TimeWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/WidgetContainer/WidgetContainerWidget.swf" optimize="true" sourcePath="src/widgets/WidgetContainer/WidgetContainerWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/AddExcel/AddExcelWidget.swf" optimize="true" sourcePath="src/widgets/AddExcel/AddExcelWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/AddShapefile/ShapeFilesWidget.swf" optimize="true" sourcePath="src/widgets/AddShapefile/ShapeFilesWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/BookmarkEnhanced/BookmarkWidget.swf" optimize="true" sourcePath="src/widgets/BookmarkEnhanced/BookmarkWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/AttributeTableEnhanced/AttributeTableWidget.swf" optimize="true" sourcePath="src/widgets/AttributeTableEnhanced/AttributeTableWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/DrawAdvanced/DrawWidget.swf" optimize="true" sourcePath="src/widgets/DrawAdvanced/DrawWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/CoordinateCapture/CoordinateCaptureWidget.swf" optimize="true" sourcePath="src/widgets/CoordinateCapture/CoordinateCaptureWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/CoordinateEnhanced/CoordinateWidget.swf" optimize="true" sourcePath="src/widgets/CoordinateEnhanced/CoordinateWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/DataExtractEnhanced/DataExtractWidget.swf" optimize="true" sourcePath="src/widgets/DataExtractEnhanced/DataExtractWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/EditEnhanced/EditWidget.swf" optimize="true" sourcePath="src/widgets/EditEnhanced/EditWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/ElevationProfile/ElevationProfileWidget.swf" optimize="true" sourcePath="src/widgets/ElevationProfile/ElevationProfileWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/HeaderControllerEnhanced/HeaderControllerWidget.swf" optimize="true" sourcePath="src/widgets/HeaderControllerEnhanced/HeaderControllerWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Identify/IDWidget.swf" optimize="true" sourcePath="src/widgets/Identify/IDWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Identify/IdentifyWidget.swf" optimize="true" sourcePath="src/widgets/Identify/IdentifyWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/LayerListEnhanced/LayerListWidget.swf" optimize="true" sourcePath="src/widgets/LayerListEnhanced/LayerListWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/LocatePoint/LocateCoordinateWidget.swf" optimize="true" sourcePath="src/widgets/LocatePoint/LocateCoordinateWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/MapSwitcherEnhanced/MapSwitcherWidget.swf" optimize="true" sourcePath="src/widgets/MapSwitcherEnhanced/MapSwitcherWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Measure/MeasureWidget.swf" optimize="true" sourcePath="src/widgets/Measure/MeasureWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/PrintEnhanced/PrintWidget.swf" optimize="true" sourcePath="src/widgets/PrintEnhanced/PrintWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/SearchEnhanced/SearchURLHandler.swf" optimize="true" sourcePath="src/widgets/SearchEnhanced/SearchURLHandler.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/SearchEnhanced/SearchWidget.swf" optimize="true" sourcePath="src/widgets/SearchEnhanced/SearchWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/SearchEnhanced/SelectBufferFindWidget.swf" optimize="true" sourcePath="src/widgets/SearchEnhanced/SelectBufferFindWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/SplashEnhanced/SplashWidget.swf" optimize="true" sourcePath="src/widgets/SplashEnhanced/SplashWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/StreetView/StreetViewWidget.swf" optimize="true" sourcePath="src/widgets/StreetView/StreetViewWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Workspace/WorkspaceURLHandler.swf" optimize="true" sourcePath="src/widgets/Workspace/WorkspaceURLHandler.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Workspace/WorkspaceWidget.swf" optimize="true" sourcePath="src/widgets/Workspace/WorkspaceWidget.mxml"/>
   </modules>
   <buildCSSFiles/>
   <flashCatalyst validateFlashCatalystCompatibility="false"/>

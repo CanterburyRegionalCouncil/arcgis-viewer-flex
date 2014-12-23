@@ -1,0 +1,1253 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<s:Group xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+		 xmlns:s=				"library://ns.adobe.com/flex/spark"
+		 xmlns:mx=				"library://ns.adobe.com/flex/mx"
+		 xmlns:esri=			"http://www.esri.com/2008/ags"
+		 xmlns:components=		"widgets.supportClasses.*"
+		 xmlns:draw=			"widgets.DrawAdvanced.components.*"
+		 minWidth=				"300" 
+		 minHeight.normal=		"50" 
+		 minHeight=				"312" 
+		 minHeight.edittext=	"427" 
+		 mouseChildren=			"true" 
+		 creationComplete=		"creationCompleteHandler(event)" xmlns:components1="widgets.supportClasses.components.*">
+	
+	<fx:Metadata>
+		[Event(name="editClicked", type="widgets.DrawAdvanced.events.GraphicInspectorEvent")] 
+		[Event(name="zoomClicked", type="widgets.DrawAdvanced.events.GraphicInspectorEvent")] 
+		[Event(name="deleteClicked", type="widgets.DrawAdvanced.events.GraphicInspectorEvent")] 
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.symbols.*;
+			
+			import flash.net.navigateToURL;
+			
+			import flashx.textLayout.conversion.TextConverter;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			import spark.events.TextOperationEvent;
+			import spark.formatters.NumberFormatter;
+			
+			import widgets.DrawAdvanced.components.supportClasses.DrawWidgetLabelFormatter;
+			import widgets.DrawAdvanced.events.GraphicInspectorEvent;
+			
+			
+			/* -------------------------------------------------------------------
+			Component variables
+			---------------------------------------------------------------------- */
+			
+			private var _componentLoaded:Boolean = false;
+			
+			// Component property variables
+			[Bindable]
+			private var _graphic:Graphic;
+			private var _graphicChanged:Boolean = false;
+			
+			[Bindable]
+			private var _attributes:ArrayCollection = new ArrayCollection();
+			
+			[Bindable]
+			private var _map:Map;
+			private var _mapChanged:Boolean = false;
+			
+			[Bindable]
+			private var _graphicsLayer:GraphicsLayer;
+			private var _graphicsLayerChanged:Boolean = false;
+			
+			private var _numberFormatter:NumberFormatter;
+			
+			[Bindable]
+			private var _allowEdits:Boolean = true;
+			private var _allowEditsChanged:Boolean = false;
+			
+			[Bindable]
+			private var _areaMeasurementSettings:Object;
+			[Bindable]
+			private var _lengthMeasurementSettings:Object;
+			private var _measurementSettingsChanged:Boolean = false;			
+			
+			[Bindable]
+			private var _showMeasurementDetails:Boolean = false;
+			[Bindable]
+			private var _showAttributeDetails:Boolean = false;
+
+			private var _defaultMode:String = "edit";
+			
+			
+			// Graphic property values
+			[Bindable]
+			private var _link:String;
+			
+			[Bindable]
+			private var _title:String;
+			
+			[Bindable]
+			private var _showMeasurements:Boolean;
+			
+			private var _content:String;
+			
+
+			// Label property variables
+			[Bindable]
+			private var _linkLabel:String = "Link";
+			private var _linkLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _zoomLabel:String = "Zoom";
+			private var _zoomLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _editLabel:String = "Edit";
+			private var _editLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _deleteLabel:String = "Delete";
+			
+			[Bindable]
+			private var _applyLabel:String = "Apply";
+
+			[Bindable]
+			private var _cancelLabel:String = "Cancel";
+
+
+			// Tooltip property variables
+			[Bindable]
+			private var _linkToolTip:String = "Click to open the link in a new browser window";
+			
+			[Bindable]
+			private var _zoomToolTip:String = "Click to zoom to extent of the graphic";
+
+			[Bindable]
+			private var _editToolTip:String = "Click to edit the symbology, shape and properties of the graphic";
+
+			[Bindable]
+			private var _deleteToolTip:String = "Click to remove this graphic from the map";
+
+			[Bindable]
+			private var _applyToolTip:String = "Click to apply the symbology and property changes to this graphic";
+
+			[Bindable]
+			private var _cancelToolTip:String = "Click to cancel the symbology and property changes to this graphic and revert to the original settings";
+
+			[Bindable]
+			private var _measurementToolTip:String = "Click to show the measurements associated with graphics";
+			
+			[Bindable]
+			private var _attributeToolTip:String = "Click to show the attributes associated with graphics";
+			
+			
+			// Measurement property variables
+			[Bindable]
+			private var _areaLabel:String = "Area:";
+			private var _areaLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _lengthLabel:String = "Length:";
+			private var _lengthLabelChanged:Boolean = false;				
+			
+			[Bindable]
+			private var _perimeterLabel:String = "Perimeter:";
+			private var _perimeterLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _xLabel:String = "X:";
+			private var _xLabelChanged:Boolean = false;	
+			
+			[Bindable]
+			private var _yLabel:String = "Y:";
+			private var _yLabelChanged:Boolean = false;	
+			
+			
+			// Measurement display variables
+			[Bindable]
+			private var _areaValue:String;
+			[Bindable]
+			private var _lengthValue:String;
+			[Bindable]
+			private var _xValue:String;
+			[Bindable]
+			private var _yValue:String;
+			
+			
+			/* -------------------------------------------------------------------
+			Component properties
+			---------------------------------------------------------------------- */
+			/**
+			 * Default edit state mode - values are 'edit' and 'normal'
+			 */
+			public function get defaultMode():String
+			{
+				return _defaultMode;
+			}
+			
+			public function set defaultMode(value:String):void
+			{
+				switch(value)
+				{
+					case "normal":
+					case "edit":
+					{
+						_defaultMode = value;
+						break;
+					}
+					default:
+					{
+						_defaultMode = "edit";
+					}
+				}
+				commitProperties();
+			}
+			
+			public function setDefaultState():void
+			{
+				if (_defaultMode == "normal")
+				{
+					setStateNormal();
+				}
+				else
+				{
+					setStateEdit();
+				}
+			}
+			
+			
+			/* --------------------------------------------------------------------
+			Graphic Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Graphic that is being inspected.
+			 */
+			public function set graphic(value:Graphic):void
+			{
+				_graphic = value;
+				_graphicChanged = true;
+				
+				if (_graphic.attributes)
+				{
+					_title = _graphic.attributes._title;
+					_link = _graphic.attributes._link;
+					_showMeasurements = _graphic.attributes._showMeasurements;
+					_content = _graphic.attributes._content;
+					
+					// Populate the attributes 
+					_attributes = getAttributes(_graphic.attributes);
+					
+					setDefaultState();
+				}
+				else
+				{
+					_title = "";
+					_link = "";
+					_showMeasurements = false;
+					_content = "";
+					
+					// Populate the attributes 
+					_attributes = new ArrayCollection();
+				}
+				commitProperties();
+			}
+			
+			public function get graphic():Graphic
+			{
+				return _graphic;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Map Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Map that the inspected graphic is being displayed on.
+			 */
+			public function set map(value:Map):void
+			{
+				_map = value;
+				_mapChanged = true;
+				commitProperties();
+			}
+			
+			public function get map():Map
+			{
+				return _map;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Graphics Layer Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Graphics layer that the inspected graphic is being displayed in.
+			 */
+			public function set graphicsLayer(value:GraphicsLayer):void
+			{
+				_graphicsLayer = value;
+				_graphicsLayerChanged = true;
+				commitProperties();
+			}
+			
+			public function get graphicsLayer():GraphicsLayer
+			{
+				return _graphicsLayer;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Allow Graphic Edits Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Property specifies whether the component will show the graphic edit screens. 
+			 */
+			public function set allowEdits(value:Boolean):void
+			{
+				_allowEdits = value;
+				_allowEditsChanged = true;
+				commitProperties();
+			}
+			
+			public function get allowEdits():Boolean
+			{
+				return _allowEdits;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Area Measurment Settings Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Property specifies object that contains the properties for area unit and conversion factor from map units. 
+			 */
+			public function set areaMeasurementSettings(value:Object):void
+			{
+				_areaMeasurementSettings = value;
+				_measurementSettingsChanged = true;
+				commitProperties();
+			}
+			
+			public function get areaMeasurementSettings():Object
+			{
+				return _areaMeasurementSettings;
+			}
+			
+			
+			/* --------------------------------------------------------------------
+			Length Measurment Settings Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Property specifies object that contains the properties for length unit and conversion factor from map units. 
+			 */
+			public function set lengthMeasurementSettings(value:Object):void
+			{
+				_lengthMeasurementSettings = value;
+				_measurementSettingsChanged = true;
+				commitProperties();
+			}
+			
+			public function get lengthMeasurementSettings():Object
+			{
+				return _lengthMeasurementSettings;
+			}
+			
+			/* --------------------------------------------------------------------
+			Zoom Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the zoom button in the action bar. 
+			 */			
+			public function set zoomLabel(value:String):void
+			{
+				_zoomLabel = value;
+				_zoomLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get zoomLabel():String
+			{
+				return _zoomLabel;
+			}
+			
+			/* --------------------------------------------------------------------
+			Link Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the link button in the action bar. 
+			 */			
+			public function set linkLabel(value:String):void
+			{
+				_linkLabel = value;
+				_linkLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get linkLabel():String
+			{
+				return _linkLabel;
+			}
+			
+			/* --------------------------------------------------------------------
+			Edit Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the edit button in the action bar. 
+			 */			
+			public function set editLabel(value:String):void
+			{
+				_editLabel = value;
+				_editLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get editLabel():String
+			{
+				return _editLabel;
+			}
+			
+			/* --------------------------------------------------------------------
+			Delete Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the delete button in the action bar. 
+			 */			
+			public function set deleteLabel(value:String):void
+			{
+				_deleteLabel = value;
+				//_deleteLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get deleteLabel():String
+			{
+				return _deleteLabel;
+			}
+
+			/* --------------------------------------------------------------------
+			Apply Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the apply button in the action bar. 
+			 */			
+			public function set applyLabel(value:String):void
+			{
+				_applyLabel = value;
+				//_applyLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get applyLabel():String
+			{
+				return _applyLabel;
+			}
+
+			/* --------------------------------------------------------------------
+			Cancel Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the cancel button in the action bar. 
+			 */			
+			public function set cancelLabel(value:String):void
+			{
+				_cancelLabel = value;
+				//_cancelLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get cancelLabel():String
+			{
+				return _cancelLabel;
+			}
+
+
+			/* --------------------------------------------------------------------
+			Zoom ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the zoom button in the action bar. 
+			 */			
+			public function set zoomToolTip(value:String):void
+			{
+				_zoomToolTip = value;
+			}
+			
+			public function get zoomToolTip():String
+			{
+				return _zoomToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Link ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the link button in the action bar. 
+			 */			
+			public function set linkToolTip(value:String):void
+			{
+				_linkToolTip = value;
+			}
+			
+			public function get linkToolTip():String
+			{
+				return _linkToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Edit ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the edit button in the action bar. 
+			 */			
+			public function set editToolTip(value:String):void
+			{
+				_editToolTip = value;
+			}
+			
+			public function get editToolTip():String
+			{
+				return _editToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Delete ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the delete button in the action bar. 
+			 */			
+			public function set deleteToolTip(value:String):void
+			{
+				_deleteToolTip = value;
+			}
+			
+			public function get deleteToolTip():String
+			{
+				return _deleteToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Apply ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the apply button in the action bar. 
+			 */			
+			public function set applyToolTip(value:String):void
+			{
+				_applyToolTip = value;
+			}
+			
+			public function get applyToolTip():String
+			{
+				return _applyToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Cancel ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the tooltip for the cancel button in the action bar. 
+			 */			
+			public function set cancelToolTip(value:String):void
+			{
+				_cancelToolTip = value;
+			}
+			
+			public function get cancelToolTip():String
+			{
+				return _cancelToolTip;
+			}
+
+			/* --------------------------------------------------------------------
+			Measurement ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the show measurements button in the action bar. 
+			 */			
+			public function set measurementToolTip(value:String):void
+			{
+				_measurementToolTip = value;
+			}
+			
+			public function get measurementToolTip():String
+			{
+				return _measurementToolTip;
+			}
+			
+			/* --------------------------------------------------------------------
+			Attributes ToolTip Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the show attributes button in the action bar. 
+			 */			
+			public function set attributeToolTip(value:String):void
+			{
+				_attributeToolTip = value;
+			}
+			
+			public function get attributeToolTip():String
+			{
+				return _attributeToolTip;
+			}
+			
+			
+			/* --------------------------------------------------------------------
+			Area Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the area label in the measurements. 
+			 */			
+			public function set areaMeasurementLabel(value:String):void
+			{
+				_areaLabel = value;
+				_areaLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get areaMeasurementLabel():String
+			{
+				return _areaLabel;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Length Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the length label in the measurements. 
+			 */			
+			public function set lengthMeasurementLabel(value:String):void
+			{
+				_lengthLabel = value;
+				_lengthLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get lengthMeasurementLabel():String
+			{
+				return _lengthLabel;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Perimeter Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the perimeter label in the measurements. 
+			 */			
+			public function set perimeterMeasurementLabel(value:String):void
+			{
+				_perimeterLabel = value;
+				_perimeterLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get perimeterMeasurementLabel():String
+			{
+				return _perimeterLabel;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			X Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the X label in the measurements. 
+			 */			
+			public function set xMeasurementLabel(value:String):void
+			{
+				_xLabel = value;
+				_xLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get xMeasurementLabel():String
+			{
+				return _xLabel;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Y Label Property
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Text that is displayed on the Y label in the measurements. 
+			 */			
+			public function set yMeasurementLabel(value:String):void
+			{
+				_yLabel = value;
+				_yLabelChanged = true;
+				commitProperties();
+			}
+			
+			public function get yMeasurementLabel():String
+			{
+				return _yLabel;
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Component functions
+			---------------------------------------------------------------------- */
+			
+			override protected function commitProperties():void
+			{
+				super.commitProperties();
+				
+				if (_graphicChanged || _measurementSettingsChanged )
+				{
+					// Refresh the displayed settings
+					
+					switch(_graphic.geometry.type)
+					{
+						case Geometry.MAPPOINT:
+						{
+							// Set the X and Y values
+							var pt:MapPoint =  MapPoint(_graphic.geometry);
+							_xValue = DrawWidgetLabelFormatter.createPointXMeasurementLabel(pt,_numberFormatter);
+							_yValue = DrawWidgetLabelFormatter.createPointYMeasurementLabel(pt,_numberFormatter);
+							
+							break;
+						}
+							
+						case Geometry.MULTIPOINT:
+						{
+							
+							break;
+						}
+							
+						case Geometry.EXTENT:
+						case Geometry.POLYGON:
+						{
+							// Update the area and perimeter measurement labels
+							_areaValue = DrawWidgetLabelFormatter.createAreasAndLengthsLabel(
+								_graphic.attributes["_areaMeasurement"] * _areaMeasurementSettings.conversion ,"",
+								_areaMeasurementSettings.abbr, _areaMeasurementSettings.precision,
+								0, null, null, 0,_numberFormatter);
+							
+							_lengthValue = DrawWidgetLabelFormatter.createAreasAndLengthsLabel(0, null, null, 0,
+								_graphic.attributes["_lengthMeasurement"] * _lengthMeasurementSettings.conversion ,"",
+								_lengthMeasurementSettings.abbr, _lengthMeasurementSettings.precision, _numberFormatter);
+							
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							// Update length measurement label
+							_lengthValue = DrawWidgetLabelFormatter.createAreasAndLengthsLabel(0, null, null, 0,
+								_graphic.attributes["_lengthMeasurement"] * _lengthMeasurementSettings.conversion ,"",
+								_lengthMeasurementSettings.abbr, _lengthMeasurementSettings.precision, _numberFormatter);
+							
+							break;
+						}
+					}				
+					
+					
+					// Reset the _graphicChanged flag
+					_graphicChanged = false;
+					
+					// Reset the _measurementSettingsChanged flag
+					_measurementSettingsChanged = false;
+				}
+				
+				if (_mapChanged)
+				{
+					// Refresh the displayed settings
+					
+					// Reset the _mapChanged flag
+					_mapChanged = false;
+				}
+			}
+			
+			private function getAttributes(attributes:Object):ArrayCollection
+			{
+				var col:ArrayCollection = new ArrayCollection();
+				
+				if (attributes != null)
+				{
+					for (var fldName:String in attributes)
+					{
+						var value:Object = { field: fldName, value: attributes[fldName] };
+						col.addItem(value);
+					}
+				}
+				
+				return col;
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Component state functions
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Sets the component to the noirmal state. 
+			 */
+			public function setStateNormal():void
+			{
+				// Set the current state to normal
+				currentState = "normal";
+			}
+			
+			/**
+			 * Changes the inspector to edit mode
+			 */
+			public function setStateEdit():void
+			{
+				if (_graphic && _componentLoaded)
+				{
+					// Construct the editor
+					symbolEdit.symbol = _graphic.symbol;
+					
+					if (_graphic.symbol is TextSymbol)
+					{
+						txtLabelText.text = TextSymbol(_graphic.symbol).text;
+						currentState = "edittext";
+					}
+
+					if (_graphic.symbol is SimpleMarkerSymbol)
+					{
+						currentState = "editpoint";
+					}
+					
+					if (_graphic.symbol is SimpleLineSymbol)
+					{
+						currentState = "editline";
+					}
+
+					if (_graphic.symbol is SimpleFillSymbol)
+					{
+						currentState = "editpoly";
+					}
+				}
+			}
+			
+			
+			/* -------------------------------------------------------------------
+			Component child control functions and handlers
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the content box text is updated.
+			 */
+			protected function txtContent_changeHandler(event:Event):void
+			{
+				_content = txtContent.htmlText;
+			}
+			
+			/**
+			 * Called when the show measurements checkbox state is updated.
+			 */
+			protected function chkShowMeasurements_changeHandler(event:Event):void
+			{
+				_showMeasurements = chkShowMeasurements.selected;
+			}
+			
+			/**
+			 * Called when the link box text is updated.
+			 */
+			protected function txtLink_changeHandler(event:TextOperationEvent):void
+			{
+				_link = txtLink.text;
+			}
+			
+			/**
+			 * Called when the title box text is updated.
+			 */
+			protected function txtTitle_changeHandler(event:TextOperationEvent):void
+			{
+				_title = txtTitle.text;
+			}
+			
+			/**
+			 * Called when the user clicks on the test link event
+			 */
+			protected function butTestLink_clickHandler(event:MouseEvent):void
+			{
+				// Execute the navigation event to a new window
+				navigateToURL(new URLRequest(txtLink.text),"_blank");
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Action bar functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the zoom button is clicked.
+			 */ 
+			protected function zoomButton_clickHandler(event:MouseEvent):void
+			{
+				if (_graphic && _map)
+				{
+					if (_graphic.geometry.type == Geometry.MAPPOINT)
+					{
+						_map.centerAt(_graphic.geometry as MapPoint);	
+					}
+					else
+					{
+						_map.extent = _graphic.geometry.extent.expand(1.25);
+					}
+				}
+				
+				// Dispatch the delect clicked event
+				dispatchEvent(new GraphicInspectorEvent(GraphicInspectorEvent.ZoomClicked,_graphic));
+			}
+			
+			/**
+			 * Called when the edit button is clicked.
+			 */ 
+			protected function editButton_clickHandler(event:MouseEvent):void
+			{
+				setStateEdit();
+				
+				// Dispatch the delect clicked event
+				dispatchEvent(new GraphicInspectorEvent(GraphicInspectorEvent.EditClicked,_graphic));
+			}
+			
+			/**
+			 * Called when the finish button is clicked.
+			 */ 
+			protected function finishButton_clickHandler(event:MouseEvent):void
+			{
+				// Update the symbol properties
+				_graphic.symbol = symbolEdit.NewSymbol;
+				
+				// Check for a text symbol
+				if (_graphic.symbol is TextSymbol)
+				{
+					TextSymbol(_graphic.symbol).text = txtLabelText.text;
+				}
+				
+				// Update the graphic properties
+				if (!_graphic.attributes)
+				{
+					_graphic.attributes = {};
+				}
+				
+				_graphic.attributes["_title"] = _title;
+				_graphic.attributes["_content"] = _content;
+				_graphic.attributes["_link"] = _link;
+				_graphic.attributes["_showMeasurements"] = _showMeasurements;
+				
+				// Reset the state to normal 
+				setStateNormal();
+			}
+			
+			/**
+			 * Called when the cancel button is clicked.
+			 */ 
+			protected function cancelButton_clickHandler(event:MouseEvent):void
+			{
+				// Reset the state to normal 
+				setStateNormal();
+			}
+			
+			/**
+			 * Called when the link button is clicked.
+			 */
+			protected function linkButton_clickHandler(event:MouseEvent):void
+			{
+				// Execute the navigation event to a new window
+				if (_graphic.attributes["_link"] && _graphic.attributes["_link"].length > 0)
+				{
+					navigateToURL(new URLRequest(_graphic.attributes["_link"]),"_blank");
+				}
+			}
+			
+			/**
+			 * Called when the Delete button is clicked.
+			 */
+			protected function deleteButton_clickHandler(event:MouseEvent):void
+			{
+				// Remove this graphic from the map
+				if (_graphic)
+				{
+					_graphicsLayer.remove(_graphic);
+				}
+				
+				// Dispatch the delect clicked event
+				dispatchEvent(new GraphicInspectorEvent(GraphicInspectorEvent.DeleteClicked,_graphic));
+			}
+			
+			protected function showMeasurementDetailsToggleButton_clickHandler(event:MouseEvent):void
+			{
+				_showMeasurementDetails = showMeasurementDetailsToggleButton.selected;
+			}
+
+			protected function showAttributeDetailsToggleButton_clickHandler(event:MouseEvent):void
+			{
+				_showAttributeDetails = showAttributeDetailsToggleButton.selected;
+			}
+
+			
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				// Set loaded flag
+				_componentLoaded = true;
+
+				// Add listener for copy and paste actions
+				this.addEventListener(KeyboardEvent.KEY_UP, componentKeyPressUpHandler);
+				
+				// Call the commit propeties method
+				commitProperties();
+			}
+			
+			private function componentKeyPressUpHandler(event:KeyboardEvent):void
+			{
+				switch(event.charCode)
+				{
+					case 86: // V key
+					{
+						// Check for the control key being pressed
+						if (event.ctrlKey)
+						{
+							event.stopImmediatePropagation();
+						}
+						break;
+					}
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingBottom="3" paddingLeft="3" paddingRight="3" paddingTop="3" gap="5" />
+	</s:layout>
+	
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="editpoint"/>
+		<s:State name="editline"/>
+		<s:State name="editpoly"/>
+		<s:State name="edittext"/>
+	</s:states>
+	
+	<s:VGroup id="vgrpEdit" visible="true" width="100%" height="100%" includeInLayout="true"
+			  paddingLeft="5" paddingRight="5" paddingTop="5"
+			  visible.normal="false" includeInLayout.normal="false">
+		
+		<!--- Tab bar for edit options -->
+		<s:TabBar id="tabs" buttonMode="true" dataProvider="{settingTabs}" useHandCursor="true"/>
+		
+		<mx:ViewStack id="settingTabs" width="100%" height="100%" clipContent="true"
+					  paddingBottom="3" paddingLeft="3" paddingRight="3" paddingTop="3">
+			
+			<!--- Symbol Properties Tab -->
+			<s:NavigatorContent id="symbolTab" label="Symbol Settings">
+				<s:layout>
+					<s:VerticalLayout gap="5"/>
+				</s:layout>
+
+				<components1:SymbolEditor id="symbolEdit" width="100%"/>
+				
+				<s:HGroup id="textSymbolSettings" width="100%" gap="5" verticalAlign="middle" height="110"
+							  visible="{_graphic.symbol is TextSymbol &amp;&amp; _graphic.attributes._showMeasurements == false}"
+							  includeInLayout="{_graphic.symbol is TextSymbol &amp;&amp; _graphic.attributes._showMeasurements == false}" >
+					<s:Label width="30%" styleName="WidgetTitle" text="Label Text"/>
+					<s:TextArea id="txtLabelText" width="70%" height="100" />
+				</s:HGroup>
+				
+			</s:NavigatorContent> 
+			
+			<!--- Graphic Properties Tab -->
+			<s:NavigatorContent id="propertyTab" label="Graphic Settings">
+				<s:layout>
+					<s:VerticalLayout gap="5"/>
+				</s:layout>
+				
+				<s:HGroup width="100%" gap="5" verticalAlign="middle">
+					<s:Label width="30%" styleName="WidgetTitle" text="Title"/>
+					<s:TextInput id="txtTitle" width="70%" change="txtTitle_changeHandler(event)"
+								 text="{_graphic.attributes._title}"/>
+				</s:HGroup>
+				
+				<s:Label width="100%" styleName="WidgetTitle" text="Content"/>
+				<mx:RichTextEditor id="txtContent" width="100%" height="100%" minHeight="140"
+								   change="txtContent_changeHandler(event)" headerHeight="0"
+								   htmlText="{_graphic.attributes._content}"/>				
+				
+				<s:HGroup width="100%" gap="5" verticalAlign="middle">
+					<s:Label width="30%" styleName="WidgetTitle" text="Show Measurements"/>
+					<s:CheckBox id="chkShowMeasurements"
+								change="chkShowMeasurements_changeHandler(event)"
+								selected="{_graphic.attributes._showMeasurements}"/>
+				</s:HGroup>
+				
+				<s:HGroup width="100%" gap="5" verticalAlign="middle">
+					<s:Label width="30%" styleName="WidgetTitle" text="Link"/>
+					<s:TextInput id="txtLink" width="55%" change="txtLink_changeHandler(event)"
+								 text="{_graphic.attributes._link}"/>
+					<s:Button id="butTestLink" width="15%" label="Test"
+							  click="butTestLink_clickHandler(event)"
+							  enabled="{txtLink.text.length &gt; 0}"
+							  toolTip="Click to test this link"/>
+				</s:HGroup>
+				
+			</s:NavigatorContent> 
+			
+		</mx:ViewStack>
+		
+	</s:VGroup>
+	
+	<!--- Content viewframe -->
+	<s:VGroup id="vgrpContent" visible="false" width="100%" height="100%" gap="5"
+			  includeInLayout="false"
+			  visible.normal="true" includeInLayout.normal="true">
+		<!--- Title Area -->
+		<s:Label id="graphicTitle" width="100%" styleName="WidgetTitle"
+				 text="{_graphic.attributes._title}"/>			
+		
+		<!--- Content Area -->
+		<s:RichText id="graphicContent" width="100%" height="100%" visible="{_graphic.attributes._content.length &gt; 0}"
+					includeInLayout="{_graphic.attributes._content.length &gt; 0}"
+					textFlow="{TextConverter.importToFlow(_graphic.attributes._content, TextConverter.TEXT_FIELD_HTML_FORMAT)}"/>		
+		
+		<!--- Attributes Area -->
+		<mx:DataGrid id="attributes" minWidth="250" width="100%" height="100%" dataProvider="{_attributes}" 
+					 horizontalScrollPolicy="off" verticalScrollPolicy="auto" 
+					 visible="{_attributes != null &amp;&amp; _showAttributeDetails}" 
+					 includeInLayout="{_attributes != null &amp;&amp; _showAttributeDetails}" >
+			<mx:columns>
+				<mx:DataGridColumn id="fieldNameColumn" headerText="Field" dataField="field" dataTipField="field" showDataTips="true"/>
+				<mx:DataGridColumn id="valueColumn" headerText="Value" dataField="value" dataTipField="value" showDataTips="true" />
+			</mx:columns>
+		</mx:DataGrid>
+		
+		<!--- Measurements Area -->
+		<s:HGroup id="hgrpArea" visible="{_graphic.geometry.type == Geometry.POLYGON &amp;&amp; _showMeasurementDetails}" width="100%"
+				  gap="5" includeInLayout="{_graphic.geometry.type == Geometry.POLYGON &amp;&amp; _showMeasurementDetails}">
+			<s:Label id="areaLabel" width="30%" styleName="WidgetTitle" text="{_areaLabel}"/>
+			<s:Label id="areaMeasurement" width="65%" text="{_areaValue}"/>
+		</s:HGroup>
+		
+		<s:HGroup id="hgrpLength"
+				  visible="{(_graphic.geometry.type == Geometry.POLYGON || _graphic.geometry.type == Geometry.POLYLINE) 
+				  &amp;&amp; _showMeasurementDetails }"
+				  width="100%" gap="5"
+				  includeInLayout="{(_graphic.geometry.type == Geometry.POLYGON || _graphic.geometry.type == Geometry.POLYLINE) 
+				  &amp;&amp; _showMeasurementDetails}">
+			<s:Label id="lengthLabel" visible="{_graphic.geometry.type == Geometry.POLYLINE}"
+					 width="30%" includeInLayout="{_graphic.geometry.type == Geometry.POLYLINE}"
+					 styleName="WidgetTitle" text="{_lengthLabel}"/>
+			<s:Label id="perimeterLabel" visible="{_graphic.geometry.type == Geometry.POLYGON}"
+					 width="30%" includeInLayout="{_graphic.geometry.type == Geometry.POLYGON}"
+					 styleName="WidgetTitle" text="{_perimeterLabel}"/>
+			<s:Label id="lengthMeasurement" width="65%" text="{_lengthValue}"/>
+		</s:HGroup>
+		
+		<s:HGroup id="hgrpX" visible="{_graphic.geometry.type == Geometry.MAPPOINT &amp;&amp; _showMeasurementDetails}" width="100%"
+				  gap="5" includeInLayout="{_graphic.geometry.type == Geometry.MAPPOINT &amp;&amp; _showMeasurementDetails}">
+			<s:Label id="xLabel" width="30%" styleName="WidgetTitle" text="{_xLabel}"/>
+			<s:Label id="xMeasurement" width="65%" text="{_xValue}"/>
+		</s:HGroup>
+		
+		<s:HGroup id="hgrpY" visible="{_graphic.geometry.type == Geometry.MAPPOINT &amp;&amp; _showMeasurementDetails}" width="100%"
+				  gap="5" includeInLayout="{_graphic.geometry.type == Geometry.MAPPOINT &amp;&amp; _showMeasurementDetails}">
+			<s:Label id="yLabel" width="30%" styleName="WidgetTitle" text="{_yLabel}"/>
+			<s:Label id="yMeasurement" width="65%" text="{_yValue}"/>
+		</s:HGroup>
+		
+	</s:VGroup>
+	
+	<!--- Actionbar -->
+	<s:HGroup id="hgrpActions" width="100%" gap="3">
+		<s:HGroup id="hgrpLinkButtons" width="100%" gap="3">
+
+			<mx:LinkButton id="zoomButton" visible.normal="{_map != null}" label="{_zoomLabel}"
+						   click="zoomButton_clickHandler(event)" includeInLayout.normal="{_map != null}"
+						   styleName="WidgetTitle" toolTip="{_zoomToolTip}"
+						   visible="false" includeInLayout="false"/>
+			
+			<mx:LinkButton id="linkButton" visible.normal="{_graphic.attributes._link.length &gt; 0}"
+						   label="{_linkLabel}" click="linkButton_clickHandler(event)"
+						   includeInLayout.normal="{_graphic.attributes._link.length &gt; 0}"
+						   styleName="WidgetTitle"  toolTip="{_linkToolTip}"
+						   visible="false" includeInLayout="false"/>
+			
+			<mx:LinkButton id="editButton" visible.normal="{_allowEdits}" label="{_editLabel}"
+						   click="editButton_clickHandler(event)" includeInLayout.normal="{_allowEdits}"
+						   styleName="WidgetTitle"  toolTip="{_editToolTip}"
+						   visible="false" includeInLayout="false"/>
+			
+			<mx:LinkButton id="deleteButton" visible.normal="{_allowEdits}" label="{_deleteLabel}"
+						   click="deleteButton_clickHandler(event)" includeInLayout.normal="{_allowEdits}"
+						   styleName="WidgetTitle" toolTip="{_deleteToolTip}"
+						   visible="false" includeInLayout="false"/>
+			
+			<mx:LinkButton id="finishButton" visible.normal="false" label="{_applyLabel}"
+						   click="finishButton_clickHandler(event)" includeInLayout.normal="false"
+						   styleName="WidgetTitle"  toolTip="{_applyToolTip}"
+						   visible="true" includeInLayout="true"/>
+			
+			<mx:LinkButton id="cancelButton" visible.normal="false" label="{_cancelLabel}"
+						   click="cancelButton_clickHandler(event)" includeInLayout.normal="false"
+						   styleName="WidgetTitle"  toolTip="{_cancelToolTip}"
+						   visible="true" includeInLayout="true"/>
+		</s:HGroup>
+		
+		<s:ToggleButton id="showMeasurementDetailsToggleButton" selected="{_showMeasurementDetails}"
+						click="showMeasurementDetailsToggleButton_clickHandler(event)"
+						width="20" height="20" toolTip="{_measurementToolTip}"
+						visible.normal="true" visible="false"
+						includeInLayout.normal="true" includeInLayout="false" 
+						buttonMode="true" useHandCursor="true" 
+						skinClass="widgets.DrawAdvanced.skins.GraphicInspectorMeasurementsToggleButtonSkin" />
+		
+		<s:ToggleButton id="showAttributeDetailsToggleButton" selected="{_showAttributeDetails}"
+						click="showAttributeDetailsToggleButton_clickHandler(event)"
+						width="20" height="20" toolTip="{_attributeToolTip}"
+						visible.normal="true" visible="false"
+						includeInLayout.normal="true" includeInLayout="false" 
+						buttonMode="true" useHandCursor="true" 
+						skinClass="widgets.DrawAdvanced.skins.GraphicInspectorAttributesToggleButtonSkin" />
+		
+	</s:HGroup>
+	
+</s:Group>

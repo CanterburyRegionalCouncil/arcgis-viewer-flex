@@ -1,0 +1,631 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright (c) 2012 ESRI
+
+All rights reserved under the copyright laws of the United States
+and applicable international laws, treaties, and conventions.
+
+You may freely redistribute and use this sample code, with or
+without modification, provided you include the original copyright
+notice and use restrictions.
+
+See use restrictions in use_restrictions.txt.
+-->
+<!---
+The default skin class for the AttributeTable component.
+<p><b>Since:</b> ArcGIS API 3.1 for Flex</p>
+-->
+<s:SparkSkin xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+			 xmlns:s=				"library://ns.adobe.com/flex/spark"
+			 xmlns:mx=				"library://ns.adobe.com/flex/mx"
+			 xmlns:esri=			"http://www.esri.com/2008/ags"
+			 xmlns:supportClasses=	"com.esri.ags.skins.supportClasses.*"
+			 xmlns:fieldClasses=	"com.esri.ags.skins.fieldClasses.*"
+			 initialize=			"attributeTableSkin_initializeHandler(event)"
+			 creationComplete=		"attributeTableSkin_creationCompleteHandler(event)"
+			 resize=				"attributeTableSkin_resizeHandler(event)" >
+	
+	<!-- host component -->
+	<fx:Metadata>
+		/**
+		* A strongly typed property that references the component to which this skin is applied.
+		*/
+		[HostComponent("com.esri.ags.components.AttributeTable")]
+	</fx:Metadata>
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+		]]>
+	</fx:Script>
+
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Map;
+			import mx.events.CloseEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.supportClasses.FeatureLayerDetails;
+			import com.esri.ags.layers.supportClasses.FeatureTableDetails;
+			import com.esri.viewer.AppEvent;
+			
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ResizeEvent;
+			
+			import spark.components.Image;
+			
+			[Bindable]
+			private var featureLayerDisplayLabel:String;
+			private var featureLayerLoad:Boolean;
+			private var isOptionsMenuVisible:Boolean;
+			
+			[Bindable]
+			[Embed(source="assets/images/loader.swf")]
+			private var loader:Class;
+
+			[Bindable]
+			[Embed(source="widgets/AttributeTableEnhanced/assets/images/i_draw2.png")]
+			private var convertGraphics:Class;
+
+			[Bindable]
+			[Embed(source="widgets/AttributeTableEnhanced/assets/images/i_clear.png")]
+			private var clearRecords:Class;
+
+			[Bindable]
+			private var _records:ArrayCollection;
+			
+			
+			/* Zoom All Button Labels
+			-------------------------------------------------------------------- */
+			[Bindable]
+			public static var ZoomAllButtonLabel:String = "Zoom to All Features";
+
+			[Bindable]
+			public static var ZoomAllButtonTootip:String = "Click to show all of the features of the current tab";
+			
+			
+			/* Export to CSV Button Labels
+			-------------------------------------------------------------------- */
+			[Bindable]
+			public static var ExportToCSVButtonLabel:String = "Export Features to CSV";
+
+			[Bindable]
+			public static var ExportToCSVButtonTooltip:String = "Click to export the selected features of the current tab to CSV"; 
+			
+			/* Export to CSV Warning
+			-------------------------------------------------------------------- */
+			[Bindable]
+			public static var ExportToCSVWarning:String = "You are currently only viewing a subset of the total records.  Pressing 'OK' will export only those records currently displayed in the table.  If you wish to export all of the records associated with this layer, click 'Cancel', zoom to the full extent of the records and try again."; 
+
+			
+			
+			public static const EXPORT_TO_CSV:String = "exportToCSV";
+			
+			
+			/* Define the symbol fill items that should be colored by the "symbolColor" style.*/
+			private static const symbols:Array = [ "borderLineSymbol" ];
+			
+			/**
+			 * @private
+			 */
+			override public function get symbolItems():Array
+			{
+				return symbols;
+			}
+			
+			public function get records():ArrayCollection
+			{
+				return hostComponent.featureLayer.graphicProvider as ArrayCollection;
+			}
+			
+			protected function attributeTableSkin_initializeHandler(event:FlexEvent):void
+			{
+				// Update the layer reference
+				const featureLayer:FeatureLayer = hostComponent.featureLayer;
+				if (featureLayer)
+				{
+					if (featureLayer.loaded)
+					{
+						getFeatureLayerDisplayLabel(featureLayer);
+						updateOptions(featureLayer);
+					}
+					else
+					{
+						featureLayer.addEventListener(LayerEvent.LOAD, featureLayer_loadHandler);
+					}
+				}
+			}
+			
+			protected function attributeTableSkin_resizeHandler(event:ResizeEvent):void
+			{
+				if (isOptionsMenuVisible)
+				{
+					optionsMenu.remove();
+				}
+			}
+			
+			private function featureLayer_loadHandler(event:LayerEvent):void
+			{
+				featureLayerLoad = true;
+				invalidateProperties();
+			}
+			
+			/**
+			 * @private
+			 */
+			override protected function commitProperties():void
+			{
+				super.commitProperties();
+				
+				if (featureLayerLoad)
+				{
+					featureLayerLoad = false;
+					getFeatureLayerDisplayLabel(hostComponent.featureLayer);
+					updateOptions(hostComponent.featureLayer);
+				}
+			}
+			
+			private function getFeatureLayerDisplayLabel(featureLayer:FeatureLayer):void
+			{
+				var name:String = getQualifiedClassName(featureLayer);
+				// If there is a package name, strip it off.
+				var index:int = name.indexOf("::");
+				if (index != -1)
+				{
+					name = name.substr(index + 2);
+				}
+				var regExp:RegExp = new RegExp("^" + name + "\\d*$", "");
+				if (featureLayer.name.search(regExp) != -1)
+				{
+					featureLayerDisplayLabel = featureLayer.layerDetails ? featureLayer.layerDetails.name : featureLayer.tableDetails.name;
+				}
+				else
+				{
+					featureLayerDisplayLabel = featureLayer.name;
+				}
+			}
+			
+			private function updateOptions(featureLayer:FeatureLayer):void
+			{
+				if (featureLayer.featureCollection)
+				{
+					_records = new ArrayCollection(featureLayer.featureCollection.featureSet.features);
+				}
+				else if (featureLayer.graphicProvider) 
+				{
+					_records = (featureLayer.graphicProvider as ArrayCollection);
+				}
+				else
+				{
+					_records = new ArrayCollection();
+				}
+				
+				dataGrid.editable = isFeatureLayerUpdateAllowed(featureLayer);
+				
+				optionsMenu.showZoomToSelectionOption = featureLayer.map && featureLayer.layerDetails;
+				optionsMenu.showDeleteOption = isDeleteOptionShown(featureLayer);
+				optionsMenu.showAttachmentsOption = isAttachmentsOptionShown(featureLayer);
+				optionsMenu.showRelatedRecordsOption = isRelatedRecordsOptionShown(featureLayer);
+			}
+			
+			private function isFeatureLayerUpdateAllowed(featureLayer:FeatureLayer):Boolean
+			{
+				var result:Boolean;
+				
+				if (hostComponent.updateEnabled && featureLayer.isEditable)
+				{
+					if (featureLayer.layerDetails is FeatureLayerDetails)
+					{
+						result = (featureLayer.layerDetails as FeatureLayerDetails).isUpdateAllowed;
+					}
+					else if (featureLayer.tableDetails is FeatureTableDetails)
+					{
+						result = (featureLayer.tableDetails as FeatureTableDetails).isUpdateAllowed;
+					}
+				}
+				
+				return result;
+			}
+			
+			private function isDeleteOptionShown(featureLayer:FeatureLayer):Boolean
+			{
+				var result:Boolean;
+				
+				if (hostComponent.deleteEnabled && featureLayer.isEditable)
+				{
+					if (featureLayer.layerDetails is FeatureLayerDetails)
+					{
+						result = (featureLayer.layerDetails as FeatureLayerDetails).isDeleteAllowed;
+					}
+					else if (featureLayer.tableDetails is FeatureTableDetails)
+					{
+						result = (featureLayer.tableDetails as FeatureTableDetails).isDeleteAllowed;
+					}
+				}
+				
+				return result;
+			}
+			
+			private function isAttachmentsOptionShown(featureLayer:FeatureLayer):Boolean
+			{
+				return hostComponent.showAttachments && featureLayer.layerDetails && featureLayer.layerDetails.hasAttachments;
+			}
+			
+			private function isRelatedRecordsOptionShown(featureLayer:FeatureLayer):Boolean
+			{
+				var result:Boolean;
+				
+				if (hostComponent.showRelatedRecords)
+				{
+					if (featureLayer.layerDetails)
+					{
+						result = featureLayer.layerDetails.relationships && featureLayer.layerDetails.relationships.length;
+					}
+					else if (featureLayer.tableDetails)
+					{
+						result = featureLayer.tableDetails.relationships && featureLayer.tableDetails.relationships.length;
+					}
+				}
+				
+				return result;
+			}
+			
+			private function headerGroup_mouseOverHandler(event:MouseEvent):void
+			{
+				if (event.target != tableOptions && isOptionsMenuVisible)
+				{
+					optionsMenu.remove();
+				}
+			}
+			
+			private function tableOptions_clickHandler(event:MouseEvent):void
+			{
+				if (!isOptionsMenuVisible)
+				{
+					var originPoint:Point = new Point(tableOptions.x + tableOptions.width, tableOptions.y);
+					if (layoutDirection == 'ltr')
+					{
+						originPoint.x -= optionsMenu.width;
+					}
+					var globalPoint:Point = localToGlobal(originPoint);
+					optionsMenu.add(this, globalPoint.x, globalPoint.y + tableOptions.height);
+				}
+				else
+				{
+					optionsMenu.remove();
+				}
+			}
+			
+			private function optionsMenu_removedFromStageHandler(event:Event):void
+			{
+				isOptionsMenuVisible = false;
+			}
+			
+			private function optionsMenu_addedToStageHandler(event:Event):void
+			{
+				isOptionsMenuVisible = true;
+			}
+			
+			private function label_rollOverHandler(event:MouseEvent):void
+			{
+				var label:Label = Label(event.target);
+				label.setStyle("textDecoration", "underline");
+			}
+			
+			private function label_rollOutHandler(event:MouseEvent):void
+			{
+				var label:Label = Label(event.target);
+				label.setStyle("textDecoration", "");
+			}
+
+			private function convertToGraphics_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch("SearchLayer_ConverResultsToGraphics", { layerid: hostComponent.featureLayer.id, records: getSelectedRecordIds() });
+				optionsMenu.remove();
+			}
+
+			private function clearRecords_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch("SearchLayer_ClearSelection", { layerid: hostComponent.featureLayer.id, records: getSelectedRecordIds() });
+				optionsMenu.remove();
+			}
+			
+			private function getSelectedRecordIds():Array
+			{
+				var records:Array = [];
+				if (dataGrid.selectionLength > 0)
+				{
+					// Get the record id field
+					var objectidfield:String = hostComponent.featureLayer.layerDetails.objectIdField;
+					
+					var selRecords:Vector.<Object> = dataGrid.selectedItems;
+					var numItems:Number = selRecords.length;
+					for (var i:Number = 0; i < numItems; i++){
+						var record:Object = selRecords[i];
+						var id:int = record.originalGraphicAttributes[objectidfield];
+						records.push(id);
+					}
+				}
+				return records;
+			}
+			
+			private function prepareConverToGraphicsOption():void
+			{
+				// Insert additonal menu item
+				var cont:VGroup = optionsMenu.zoomToSelectionGroup.parent as VGroup;
+				var menuPosition:int = cont.getChildIndex(optionsMenu.zoomToSelectionGroup);
+				
+				var newgrp:HGroup = new HGroup();
+				newgrp.id = "convertSelectionToGraphicGroup";
+				newgrp.percentWidth = 100;
+				newgrp.buttonMode = true;
+				newgrp.verticalAlign = "middle";
+				newgrp.addEventListener(MouseEvent.CLICK, convertToGraphics_clickHandler);
+				
+				var newimg:Image = new Image();
+				newimg.width = 16;
+				newimg.height = 16;
+				newimg.source = convertGraphics;
+				newgrp.addElement(newimg);
+				
+				var newlab:Label = new Label();
+				newlab.percentWidth = 100;
+				newlab.maxDisplayedLines = 1;
+				newlab.addEventListener(MouseEvent.ROLL_OVER, label_rollOverHandler);
+				newlab.addEventListener(MouseEvent.ROLL_OUT, label_rollOutHandler);
+				newlab.showTruncationTip = true;
+				newlab.text = "Convert to graphics";
+				newgrp.addElement(newlab);
+				
+				cont.addElementAt(newgrp,menuPosition + 1);				
+			}
+			
+			private function prepareClearRecordsOption():void
+			{
+				// Insert additonal menu item
+				var cont:VGroup = optionsMenu.clearSelectionGroup.parent as VGroup;
+				var menuPosition:int = cont.getChildIndex(optionsMenu.clearSelectionGroup);
+				
+				var newgrp:HGroup = new HGroup();
+				newgrp.id = "clearRecordsGroup";
+				newgrp.percentWidth = 100;
+				newgrp.buttonMode = true;
+				newgrp.verticalAlign = "middle";
+				newgrp.addEventListener(MouseEvent.CLICK, clearRecords_clickHandler);
+				
+				var newimg:Image = new Image();
+				newimg.width = 16;
+				newimg.height = 16;
+				newimg.source = clearRecords;
+				newgrp.addElement(newimg);
+				
+				var newlab:Label = new Label();
+				newlab.percentWidth = 100;
+				newlab.maxDisplayedLines = 1;
+				newlab.addEventListener(MouseEvent.ROLL_OVER, label_rollOverHandler);
+				newlab.addEventListener(MouseEvent.ROLL_OUT, label_rollOutHandler);
+				newlab.showTruncationTip = true;
+				newlab.text = resourceManager.getString('ESRIMessages', 'attributeTableClearSelection');
+				newgrp.addElement(newlab);
+				
+				cont.addElementAt(newgrp,menuPosition + 1);				
+			}
+			
+			private function updateClearSelectionOption():void
+			{
+				var lab:Label = optionsMenu.clearSelectionGroup.getElementAt(1) as Label;
+				lab.text = "Clear highlighted features";
+			}
+
+			private function updateZoomToSelectionOption():void
+			{
+				var lab:Label = optionsMenu.zoomToSelectionGroup.getElementAt(1) as Label;
+				lab.text = "Zoom to highlighted features";
+			}
+
+			
+			protected function attributeTableSkin_creationCompleteHandler(event:FlexEvent):void
+			{
+				optionsMenu.addEventListener(FlexEvent.CREATION_COMPLETE, optionsMenu_creationCompleteHandler);
+			}
+			
+			protected function optionsMenu_creationCompleteHandler(event:FlexEvent):void
+			{
+				updateClearSelectionOption();
+				updateZoomToSelectionOption();
+				prepareConverToGraphicsOption();
+				prepareClearRecordsOption();
+			}
+			
+			/**
+			 * Called when the export to CSV button is clicked.  Sends a request to the attribute table to export the records.
+			 */
+			protected function exportCSVButton_clickHandler(event:MouseEvent):void
+			{
+				// Check if all records are visible
+				if (_records.length == dataGrid.dataProvider.length)
+				{
+					optionsMenu.dispatchEvent(new Event(EXPORT_TO_CSV));
+				}
+				else 
+				{
+					Alert.show(ExportToCSVWarning, ExportToCSVButtonLabel, Alert.OK|Alert.CANCEL, null, export_ProceedHandler, null, Alert.OK);
+					
+					function export_ProceedHandler(event:CloseEvent):void
+					{
+						if (event.detail == Alert.OK)
+						{
+							optionsMenu.dispatchEvent(new Event(EXPORT_TO_CSV));
+						}
+					}
+				}
+			}
+			
+			/**
+			 * Called when the zoom all button is clicked.  Sends a request to the show all of the records on the map.
+			 */
+			protected function zoomAllButton_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch("SearchLayer_ZoomToResults", { layerid: hostComponent.featureLayer.id });
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<!-- states -->
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="loading" stateGroups="loadingAndNoFeatures"/>
+		<s:State name="layerNotVisible" stateGroups="loadingAndNoFeatures,noFeatures"/>
+		<s:State name="layerOutOfScale" stateGroups="loadingAndNoFeatures,noFeatures"/>
+		<s:State name="noFeaturesInCurrentExtent" stateGroups="loadingAndNoFeatures,noFeatures"/>
+		<s:State name="attachments"/>
+		<s:State name="relatedRecords"/>
+		<s:State name="noFeatureSelected"/>
+	</s:states>
+	
+	<fx:Declarations>
+		<supportClasses:AttributeTableOptionsMenu id="optionsMenu"
+										 addedToStage="optionsMenu_addedToStageHandler(event)"
+										 dataGrid="{dataGrid}"
+										 removedFromStage="optionsMenu_removedFromStageHandler(event)"
+										 rollOut="{optionsMenu.remove()}" />
+
+		<fx:Component id="codedValueDomainField">
+			<fieldClasses:CodedValueDomainField/>
+		</fx:Component>
+		<fx:Component id="dateField">
+			<fieldClasses:CalendarField/>
+		</fx:Component>
+		<fx:Component id="doubleField">
+			<fieldClasses:DoubleField/>
+		</fx:Component>
+		<fx:Component id="integerField">
+			<fieldClasses:IntegerField/>
+		</fx:Component>
+		<fx:Component id="labelField">
+			<fieldClasses:LabelField/>
+		</fx:Component>
+		<fx:Component id="memoField">
+			<fieldClasses:MemoField/>
+		</fx:Component>
+		<fx:Component id="rangeDomainField">
+			<fieldClasses:RangeDomainField/>
+		</fx:Component>
+		<fx:Component id="singleField">
+			<fieldClasses:DoubleField/>
+		</fx:Component>
+		<fx:Component id="smallIntegerField">
+			<fieldClasses:IntegerField/>
+		</fx:Component>
+		<fx:Component id="stringField">
+			<fieldClasses:StringField/>
+		</fx:Component>
+		<fx:Component id="typeField">
+			<fieldClasses:TypeField/>
+		</fx:Component>	
+	</fx:Declarations>
+	
+	<s:HGroup width="100%" height="100%">
+		<s:VGroup width="100%" height="100%"
+				  gap="0">
+			<s:HGroup width="100%"
+					  mouseOver="headerGroup_mouseOverHandler(event)"
+					  verticalAlign="middle">
+				<s:Label fontSize="14"
+						 fontWeight="bold"
+						 includeInLayout="{hostComponent.showTitle}"
+						 paddingLeft="2"
+						 text="{featureLayerDisplayLabel}"
+						 textDecoration="underline"
+						 visible="{hostComponent.showTitle}"/>
+				<s:Group width="100%"/>
+				<s:Button id="tableOptions"
+						  click="tableOptions_clickHandler(event)"
+						  label="{resourceManager.getString('ESRIMessages', 'attributeTableOptions')}"
+						  skinClass="com.esri.ags.skins.AttributeTableOptionsButtonSkin"/>
+			</s:HGroup>
+			
+			<!--- DataGrid -->
+			<s:DataGrid id="dataGrid"
+						width="100%" height="100%"
+						alpha.noFeatures="0.2"
+						itemEditor="com.esri.ags.skins.supportClasses.AttributeTableItemEditor"
+						itemRenderer="com.esri.ags.skins.supportClasses.AttributeTableItemRenderer"
+						selectionMode="multipleRows"/>
+			
+			<!--- Count labels section -->
+			<s:HGroup width="100%" height="25" gap="5" horizontalAlign="right" verticalAlign="middle" paddingTop="5" paddingBottom="3" >
+				<s:Label id="labFeatureCount" 
+						 width="100%" 
+						 styleName="WidgetTitle"
+						 text="{dataGrid.dataProvider.length} visible feature{dataGrid.dataProvider.length == 1 ? '':'s' } [of {hostComponent.featureLayer.numGraphics} feature{dataGrid.dataProvider.length == 1 ? '':'s' }]" />
+				<s:Button id="zoomAllButton" 
+						  label="{ZoomAllButtonLabel}" 
+						  click="zoomAllButton_clickHandler(event)"
+						  enabled.noFeatureSelected="false"
+						  enabled="true" 
+						  toolTip="{ZoomAllButtonTootip}" />
+				<s:Button id="exportCSVButton" 
+						  label="{ExportToCSVButtonLabel}" 
+						  click="exportCSVButton_clickHandler(event)"
+						  enabled.noFeatures="false"
+						  enabled="true" 
+						  toolTip="{ExportToCSVButtonTooltip}" />
+			</s:HGroup>
+		</s:VGroup>
+		
+		<!--- AttachmentInspector/RelationshipInspector -->
+		<s:Group width="350" height="100%"
+				 includeIn="noFeatureSelected,attachments">
+			<s:Rect left="0" right="0" top="0" bottom="0"
+					radiusX="5"
+					radiusY="5">
+				<s:stroke>
+					<s:SolidColorStroke id="borderLineSymbol"
+										color="black"
+										weight="1"/>
+				</s:stroke>
+			</s:Rect>
+			<esri:AttachmentInspector id="attachmentInspector"
+									  width="350" height="100%"
+									  left="5" right="5" top="5" bottom="5"
+									  addEnabled="{hostComponent.updateEnabled}"
+									  deleteEnabled="{hostComponent.deleteEnabled}"
+									  includeIn="attachments"/>
+			<s:Label width="100%"
+					 horizontalCenter="0"
+					 includeIn="noFeatureSelected"
+					 maxDisplayedLines="3"
+					 paddingLeft="5"
+					 paddingRight="5"
+					 showTruncationTip="true"
+					 text="{resourceManager.getString('ESRIMessages', 'attributeTableNoFeatureSelected')}"
+					 textAlign="center"
+					 verticalCenter="0"/>
+		</s:Group>
+		<esri:RelationshipInspector id="relationshipInspector"
+									width="350" height="100%"
+									editEnabled="{hostComponent.updateEnabled}"
+									includeIn="relatedRecords"/>
+	</s:HGroup>
+	<!--- Loading, no features feedback message -->
+	<s:VGroup width="100%" height="100%"
+			  top="0"
+			  horizontalAlign="center"
+			  includeIn="loadingAndNoFeatures"
+			  verticalAlign="middle">
+		<s:SWFLoader width="35" height="35"
+					 includeIn="loading"
+					 source="{loader}"/>
+		<s:Label fontSize="16"
+				 includeIn="layerNotVisible"
+				 text="{resourceManager.getString('ESRIMessages', 'attributeTableLayerNotVisibleText')}"/>
+		<s:Label fontSize="16"
+				 includeIn="layerOutOfScale"
+				 text="{resourceManager.getString('ESRIMessages', 'attributeTableLayerOutOfScaleText')}"/>
+		<s:Label fontSize="16"
+				 includeIn="noFeaturesInCurrentExtent"
+				 text="{resourceManager.getString('ESRIMessages', 'attributeTableNoFeaturesInCurrentExtentText')}"/>
+	</s:VGroup>
+</s:SparkSkin>

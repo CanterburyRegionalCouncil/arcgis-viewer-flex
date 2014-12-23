@@ -1,0 +1,166 @@
+<?xml version="1.0" ?>
+<configuration>
+    <about>
+       <label>About</label>
+       <visible>true</visible>
+       <width>375</width>
+       <height>375</height>
+       <content>
+        <![CDATA[<p align='center'><img src='assets/images/globe.png' width='140' height='140' /></p>
+        <font size="16"><b>Welcome to ArcGIS Viewer for Flex.</b></font>
+        <br><p>This application is developed with ArcGIS Viewer for Flex 2.</p>
+        <br>More information at links below:
+        <textformat indent="25"><p><br><a href="http://help.arcgis.com/en/webapps/flexviewer/" target='_blank'><font color='#FFFF00'>ArcGIS Viewer for Flex</font></a>
+        <br><a href="http://help.arcgis.com/en/webapi/flex/" target='_blank'><font color='#FFFF00'>ArcGIS API for Flex</font></a>
+        <br><a href="http://www.esri.com" target='_blank'><font color='#FFFF00'>Esri</font></a></p></textformat>
+        ]]>
+        </content>
+        <btnlabel>OK</btnlabel>
+    </about>
+    
+     <!-- Graphics layer utilised to display locations from predictive search -->
+    <graphicsLayerName alias="Predictive Search Locations">PredictiveSearchGraphicsLayer</graphicsLayerName>
+    
+    <!-- Predictive Search Service - leave blank to hide/disable the search functionality -->
+	<predictiveSearchURL>[PATH TO SEARCH SERVICE]/search.ashx</predictiveSearchURL>
+	
+	<!-- Maximum number of suggestions to return from the predictive search service.  Enter a number greater than 0. -->
+	<predictiveServiceLimit>10</predictiveServiceLimit>
+
+	<!-- Default number of characters the user must enter into the search box before making a call to the predictive search service.  
+		 Enter a number greater than 0. -->
+	<predictiveSearchInputMinChars>3</predictiveSearchInputMinChars>
+
+	<!-- No filters set - current usable filters are PAR (parcels), WEL (wells), CON (consents), NAM (place names) -->
+	<predictiveSearchFilters></predictiveSearchFilters>
+
+	<!-- Predictive Search Service input limits - listings of minimum number of characters the user must enter before predictive search service 
+		 is called, based on the first three characters.  The minlength attribute is the total number of characters that must be typed before 
+		 the service is called, including the standard minimum 3 characters. -->
+	<predictiveSearchInputLimits>
+		<!-- Consent numbers starting with CRC -->
+		<inputLimit minlength = "6">^[cC][rR][cC]</inputLimit>
+
+		<!-- Consent numbers starting with NYC -->
+		<inputLimit minlength = "6">^[nN][yY][cC]</inputLimit>
+
+		<!-- Consent numbers starting with SYC -->
+		<inputLimit minlength = "6">^[sS][yY][cC]</inputLimit>
+
+		<!-- Consent numbers starting with BCA -->
+		<inputLimit minlength = "6">^[bB][cC][aA]</inputLimit>
+
+		<!-- Consent numbers starting with MLB -->
+		<inputLimit minlength = "6">^[mM][lL][bB]</inputLimit>
+
+		<!-- Consent numbers starting with WKT -->
+		<inputLimit minlength = "6">^[wW][tT][kK]</inputLimit>
+
+		<!-- Well number reference starting with a map sheet followed by a / -->
+		<inputLimit minlength = "5\">^[a-zA-Z][0-9][0-9]/</inputLimit>
+	</predictiveSearchInputLimits>
+    
+    <!-- Predictive Search Display Icons - add icons that appear next to search item suggests as an indicator of what it refers to -->
+	<predictiveIcons>
+		<icon predictiveID="CON" inassets="true">consents1.png</icon>
+		<icon predictiveID="WEL" inassets="true">i_hydro.png</icon>
+		<icon predictiveID="VAL" inassets="true">i_home.png</icon>
+		<icon predictiveID="LEG" inassets="true">i_home.png</icon>
+		<icon predictiveID="PAR" inassets="true">i_home.png</icon>
+		<icon predictiveID="SWQ" inassets="true">i_hydro.png</icon>
+		<icon predictiveID="GWQ" inassets="true">i_hydro.png</icon>
+		<icon predictiveID="STM" inassets="true">i_hydro.png</icon>
+		<icon predictiveID="MOR" inassets="true">boat.png</icon>
+		<icon predictiveID="NAM" inassets="true">i_pin2.png</icon> 
+		<icon predictiveID="SWM" inassets="true">swim.png</icon> 
+		<icon predictiveID="RDI" inassets="true">i_sign64.png</icon> 
+		<icon predictiveID="PAA" inassets="true">i_Sign Post.png</icon> 
+		<icon predictiveID="PAL" inassets="true">i_Sign Post.png</icon>
+		<icon predictiveID="PAP" inassets="true">i_Sign Post.png</icon>
+	</predictiveIcons>
+
+	<!-- Default List of expression ids used by search widget - used in case the search widget config load action takes too long. -->
+	<predictiveExpressionClasses>ADD,VAL,LEG,PAR,CON,AFT,ACT,RDI,WEL,SWQ,GWQ</predictiveExpressionClasses>
+
+	<!-- Enter the name of the search widget as shown in the main application config.xml.  This is used to allow search functionality 
+		 to open the Search Widget and initiate a search, based on the suggestions class type.  If this tag is left empty, the search 
+		 functionality will centre the map on the selected suggestion location and will place a label on the map (providing the suggestion 
+		 contains spatial info). -->
+	<searchWidgetName>Search</searchWidgetName>
+
+	<!-- Delay to apply between initiating a call to the search widget -->
+	<URLPreloadDelay>100</URLPreloadDelay>
+
+	<!-- Show a clear selection button on the header controller next to the predictive search - true=show button|false= hide button-->
+    <showClearSelection>true</showClearSelection>
+    
+    <!-- Status icons displayed in the header when a widget updates the viewer active status/tools -->
+    <statusIcons>
+    	<!-- Navigation Actions -->
+    	<statusIcon statustext="Pan" inassets="true">i_pan.png</statusIcon>
+    	<statusIcon statustext="Zoom in" inassets="true">i_zoomin.png</statusIcon>
+    	<statusIcon statustext="Zoom out" inassets="true">i_zoomout.png</statusIcon>
+    
+    	<!-- Drawing Widget Actions -->
+    	<statusIcon statustext="Draw Point" inassets="true">i_draw_point.png</statusIcon>
+    	<statusIcon statustext="Draw Circle" inassets="true">i_draw_circle.png</statusIcon>
+    	<statusIcon statustext="Draw Ellipse" inassets="true">i_draw_ellipse.png</statusIcon>
+    	<statusIcon statustext="Draw Line" inassets="true">i_draw_line.png</statusIcon>
+    	<statusIcon statustext="Draw Freehand Line" inassets="true">i_draw_freeline.png</statusIcon>
+    	<statusIcon statustext="Draw Polygon" inassets="true">i_draw_poly.png</statusIcon>
+    	<statusIcon statustext="Draw Freehand Polygon" inassets="true">i_draw_freepoly.png</statusIcon>
+    	<statusIcon statustext="Draw Rectangle" inassets="true">i_draw_rect.png</statusIcon>
+    	<statusIcon statustext="Add Text" inassets="true">i_draw_text.png</statusIcon>
+    	<statusIcon statustext="Select Graphics" inassets="true">i_draw_select.png</statusIcon>
+    	<statusIcon statustext="Set Default Symbology" inassets="true">i_options.png</statusIcon>
+
+    	<!-- Measurement Widget Actions -->
+    	<statusIcon statustext="Measure Point" inassets="true">i_draw_point.png</statusIcon>
+    	<statusIcon statustext="Measure Circle" inassets="true">i_draw_circle.png</statusIcon>
+    	<statusIcon statustext="Measure Line" inassets="true">i_draw_line.png</statusIcon>
+    	<statusIcon statustext="Measure Polygon" inassets="true">i_draw_poly.png</statusIcon>
+    	<statusIcon statustext="Measure Rectangle" inassets="true">i_draw_rect.png</statusIcon>
+    	
+    	<!-- Coordinates Widget Actions -->
+    	<statusIcon statustext="Click for Coordinate" inassets="true">i_draw_point.png</statusIcon>
+    	
+    	<!-- ID Tool Actions -->
+    	<statusIcon statustext="ID by Point" inassets="true">i_draw_point.png</statusIcon>
+    	<statusIcon statustext="ID by Line" inassets="true">i_draw_line.png</statusIcon>
+    	<statusIcon statustext="ID by Freehand Line" inassets="true">i_draw_freeline.png</statusIcon>
+    	<statusIcon statustext="ID by Polygon" inassets="true">i_draw_poly.png</statusIcon>
+    	<statusIcon statustext="ID by Freehand Polygon" inassets="true">i_draw_freepoly.png</statusIcon>
+    	<statusIcon statustext="ID by Rectangle" inassets="true">i_draw_rect.png</statusIcon>
+    	<statusIcon statustext="Identify Features" inassets="true">i_info.png</statusIcon>
+    
+		<!-- Search Tool Actions -->
+    	<statusIcon statustext="Search Feature" inassets="false">assets/buttons/featureselect.png</statusIcon>
+    	<statusIcon statustext="Search by Point" inassets="true">i_draw_point.png</statusIcon>
+    	<statusIcon statustext="Search by Line" inassets="true">i_draw_line.png</statusIcon>
+    	<statusIcon statustext="Search by Freehand Line" inassets="true">i_draw_freeline.png</statusIcon>
+    	<statusIcon statustext="Search by Polygon" inassets="true">i_draw_poly.png</statusIcon>
+    	<statusIcon statustext="Search by Freehand Polygon" inassets="true">i_draw_freepoly.png</statusIcon>
+    	<statusIcon statustext="Search by Rectangle" inassets="true">i_draw_rect.png</statusIcon>
+    </statusIcons>
+    
+    <!-- Links to other applications/pages --> 
+    <links>
+    	<link label="Link to some site" tooltip="Click to open the ths web page" icon="i_help.png" url="http://SomeWebSite.Com/Topic" />
+    </links>
+    
+    <!-- Help location settings -->
+	<helplocationurl>http://somewebsite.com/HelpTopic</helplocationurl>
+    
+    <!-- Label settings -->
+    <labels>
+	    <searchprompttext>Search</searchprompttext>
+	    <searchlabeltext></searchlabeltext>
+	    <searchcleartooltip>Click to clear the search box text</searchcleartooltip>
+    </labels>
+    
+</configuration>
+
+<!--
+    See HeaderController widget tag reference at
+    http://links.esri.com/headercontrollerwidget
+-->

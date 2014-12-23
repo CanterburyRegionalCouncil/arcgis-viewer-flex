@@ -1,0 +1,181 @@
+<?xml version="1.0" ?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright © 2008 - 2009 ESRI
+//
+// All rights reserved under the copyright laws of the United States.
+// You may freely redistribute and use this software, with or
+// without modification, provided you include the original copyright
+// and use restrictions.  See use restrictions in the file:
+// <install location>/FlexViewer/License.txt
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+<configuration>
+	<!-- Search Configuration Settings -->
+	<zoomscale>5000</zoomscale>
+	<maxSearchScale>50000</maxSearchScale>
+	<identifytolerance>5</identifytolerance>
+	<geometryservice>http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer</geometryservice>
+
+	<!-- Enter the name of the search widget as shown in the main application config.xml.  This is used to allow search functionality 
+		 to open the Search Widget and initiate a search, based on the suggestions class type.  If this tag is left empty, the search 
+		 functionality will centre the map on the selected suggestion location and will place a label on the map (providing the suggestion 
+		 contains spatial info). -->
+	<searchWidgetName>Search</searchWidgetName>
+
+	<!-- Selection Graphics Layer Name -->
+    <graphicsLayerName alias="Select Buffer Find Drawn Features" >SelectBufferFindDrawingGraphicsLayer</graphicsLayerName>
+    <identifygraphicsLayerName alias="Select Buffer Find Identified Features" >SelectBufferFindIdentifytGraphicsLayer</identifygraphicsLayerName>
+    <highlightgraphicsLayerName alias="Select Buffer Find Highlighted Features" >SelectBufferFindHighlightGraphicsLayer</highlightgraphicsLayerName>
+
+	<!-- Feature Identification Layer Settings -->
+	<identifylayers>
+		<!-- Default setting for services that have not been added below. Possible values: 'exclude' - no layers in service id'ed,  'include' - visible layers id'ed-->
+		<defaultSetting>exclude</defaultSetting>
+
+		<!-- Excluded layers -->
+		<excludelayer name="Aerials" />
+		<excludelayer name="Topo" />
+		<excludelayer name="Ngai Tahu" />
+		<excludelayer name="Land Resources and Conservation" />
+		<excludelayer name="Planning Zones" />
+		
+		<!-- Included layers -->
+		<includelayer name="Regional Base">
+			<includeids>6</includeids>
+		</includelayer>
+		<includelayer name="Resource Consents, Wells and Springs">
+			<includeids>0</includeids>
+		</includelayer>
+		<includelayer name="Water Quality and Monitoring">
+			<includeids>0,1</includeids>
+		</includelayer>
+		<includelayer name="Natural Resources">
+			<includeids>4</includeids>
+		</includelayer>
+		<includelayer name="Hydrological Features">
+			<includeids>4</includeids>
+		</includelayer>		
+		<includelayer name="Activity Areas" />
+
+	</identifylayers>
+
+
+	<!-- Buffer Settings -->
+	<defaultbufferfeatures>false</defaultbufferfeatures>
+	<bufferranges>
+		<bufferrange distance="25">25 metres</bufferrange>
+		<bufferrange distance="30">30 metres</bufferrange>
+		<bufferrange distance="50">50 metres</bufferrange>
+		<bufferrange distance="100">100 metres</bufferrange>
+		<bufferrange distance="250">250 metres</bufferrange>
+		<bufferrange distance="500">500 metres</bufferrange>
+	</bufferranges>	
+	<defaultbufferindex>3</defaultbufferindex>
+
+	<!-- Buffer Symbol Settings -->
+	<buffersymbolcolour>0x000000</buffersymbolcolour>
+	<buffersymbolalpha>0.5</buffersymbolalpha>
+	<buffersymbolfillstyle>solid</buffersymbolfillstyle>
+	<buffersymboloutlinecolour>0x000000</buffersymboloutlinecolour>
+	<buffersymboloutlinealpha>0.9</buffersymboloutlinealpha>
+	<buffersymboloutlinewidth>2</buffersymboloutlinewidth>
+	<buffersymboloutlinestyle>solid</buffersymboloutlinestyle>
+
+	<!-- Spatial Operator Settings -->
+	<spatialoperators>
+		<operator label="Contains" data="esriSpatialRelContains" description="Selects any feature in the target layer that is contained within or shares a boundary with the provided shape."/>
+		<operator label="Envelope Intersect" data="esriSpatialRelEnvelopeIntersects" description="Selects any feature in the target layer where the bounding rectangle of that feature intersects with the bounding rectangle of the provided shape."/>
+		<operator label="Intersects" data="esriSpatialRelIntersects" description="Selects any feature in the target layer where any part of that feature touches or overlaps the provided shape."/>
+		<operator label="Overlaps" data="esriSpatialRelOverlaps" description="Selects any feature in the target layer which overlaps the provided shape."/>
+		<operator label="Touches" data="esriSpatialRelTouches" description="Selects any feature in the target layer which touches the boundary of the provided shape."/>
+		<operator label="Within" data="esriSpatialRelWithin" description="Selects any feature in the target layer that completely encloses the provided shape and does not touch its boundary."/>
+	</spatialoperators>
+	<defaultspatialoperatorindex>2</defaultspatialoperatorindex>
+
+	<!-- Label and Tooltip Settings -->
+	<labels>
+		<!-- Draw Tool Tooltip Settings -->
+		<featuretoollabel>Select a feature to use in search</featuretoollabel>
+		<pointtoollabel>Draw point</pointtoollabel>
+		<linetoollabel>Draw line</linetoollabel>
+		<freehandlinetoollabel>Trace a freehand line</freehandlinetoollabel>
+		<polygontoollabel>Draw polygon</polygontoollabel>
+		<freehandpolygontoollabel>Trace a freehand polygon</freehandpolygontoollabel>
+		<rectangletoollabel>Draw rectangle</rectangletoollabel>
+		<circletoollabel>Draw circle</circletoollabel>
+			
+		<!-- Draw Tool Instruction Settings -->
+		<featureToolInstructionLabel>Click on a feature in the map. This will provide a selection of found features to choose from to provide the geometry to use in the search.</featureToolInstructionLabel>
+		<pointToolInstructionLabel>Draw a single point on the map as interaction geometry.</pointToolInstructionLabel>
+		<lineToolInstructionLabel>Draw a polyline on the map as interaction geometry.</lineToolInstructionLabel>
+		<freehandLineToolInstructionLabel>Trace a freehand line on the map as interaction geometry.</freehandLineToolInstructionLabel>
+		<polygonToolInstructionLabel>Draw a polygon on the map as interaction geometry.</polygonToolInstructionLabel>
+		<freehandPolygonToolInstructionLabel>Trace a freehand polygon on the map as interaction geometry.</freehandPolygonToolInstructionLabel>
+		<rectangleToolInstructionLabel>Draw rectangle on the map as interaction geometry.</rectangleToolInstructionLabel>
+			
+		<!-- Menu Item Label Settings -->
+		<clearlabel>Reset Search</clearlabel>
+		<cleartooltip>Click to clear and reset the search tool</cleartooltip> 
+		<searchlabel>Search Features</searchlabel>
+		<helplabel>Help</helplabel>
+
+		<!-- Screen Instruction Settings -->
+		<searchToolsInstructionLabel>Select one of the tools below to either select a feature in the map you wish to use to define the extent of the search, or draw a shape to define the extent. You must be zoomed in to 1:[value] scale to perform a search.</searchToolsInstructionLabel >
+		<featureSelectInstructionLabel>Select the feature(s) that will be used to select features from the target layer.  Clicking on the feature in the list will highlight it in the map. Hold down the shift or control keys while clicking options in the list to select multiple features.</featureSelectInstructionLabel>
+		<bufferSelectInstructionLabel>Choose whether you want to apply a buffer distance to the feature you have selected/created when you do your search e.g. find all features within 50m of the shape.  Choose a buffer distance from the list, or choose custom distance and enter you own search distance.</bufferSelectInstructionLabel>
+		<targetSelectInstructionLabel>Choose the search type from the drop box you wish to perform, and then press [value] to continue.</targetSelectInstructionLabel>
+
+		<!-- Screen Button Label Settings -->
+		<cancellabel>Reset</cancellabel>
+		<canceltooltip>Click to restart this process from the beginning</canceltooltip>
+		<backlabel>Back</backlabel>
+		<backtooltip>Click to go back to the previous step</backtooltip>
+		<nextlabel>Next</nextlabel>
+		<nexttooltip>Click to go to the next step</nexttooltip>
+
+		<!-- Buffer Unit Label Settings -->
+		<bufferunitlabel>Buffer:</bufferunitlabel>
+		<bufferunittooltip>Select distance to buffer graphics by</bufferunittooltip>
+		<bufferdistancelabel>Distance (m):</bufferdistancelabel>
+		<bufferdistancetooltip>Specify the exact distance you wish to use when generating buffer rings</bufferdistancetooltip>
+		<bufferdisplaygraphiclabel>Display buffered shape on map</bufferdisplaygraphiclabel>
+		<bufferdisplaygraphictooltip>Tick to display the buffered shape on the map</bufferdisplaygraphictooltip>
+		
+		<!-- Target Layer Label Settings -->
+		<targetLayerLabel>Search layer:</targetLayerLabel>
+		<targetLayerTooltip>Select the layer that will be searched from the list of preconfigured layers</targetLayerTooltip>
+		<spatialOperatorLabel>Overlap method:</spatialOperatorLabel>
+		<spatialOperatorTooltip>Select the way that the search will use the shape provided to select features</spatialOperatorTooltip>
+		<executeSearchLabel>Start Search</executeSearchLabel>
+		<executeSearchTooltip>Click to begin the search with settings you have provided</executeSearchTooltip>
+		<nolayerLabel>No search layer defined</nolayerLabel>
+		<filterInstructionLabel>The box below can be used to filter the returned search results based on the text you enter. Use the example text as a guide for what you can enter into the box.</filterInstructionLabel>
+
+		<!-- Working Message Settings -->
+		<loadingLabel>Loading...</loadingLabel>
+		<noFeaturesFoundLabel>No features found</noFeaturesFoundLabel>
+		<selectionLabel>Features Selected:</selectionLabel>
+		<overMaxScaleMsg>You must be zoomed in to 1:[value] scale or less to identify features </overMaxScaleMsg>
+	</labels>
+
+	<!-- Buffer Symbol Settings selected -->
+	<buffersymbol colour="0x000000" alpha="0.5" fillstyle="solid" 
+		outlinecolour="0x000000" outlinealpha="0.7" outlinewidth="2" outlinestyle="solid" />
+
+	<!-- Feature Symbol Settings selected -->
+	<featuresymbol colour="0x00FF00" alpha="0.4" linewidth="2" pointsize="10" 
+		fillstyle="solid" linestye="solid" pointstyle="square" 
+		outlinecolour="0x120A8F" outlinealpha="0.9" outlinewidth="4" outlinestyle="solid" />
+	
+	<!-- Identify Symbol Settings -->
+	<identifysymbol colour="0xFFEEDD" alpha="0.4" linewidth="2" pointsize="10" 
+		fillstyle="solid" linestye="solid" pointstyle="square" 
+		outlinecolour="0x120A8F" outlinealpha="0.9" outlinewidth="4" outlinestyle="solid" />
+	
+	<!-- Help Location Settings -->
+	<helplocationurl>start.html?helpfile=help/SelectBufferFindWidget.html</helplocationurl>	
+	
+</configuration>	

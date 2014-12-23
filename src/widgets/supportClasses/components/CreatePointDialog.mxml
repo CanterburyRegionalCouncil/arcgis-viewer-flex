@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY				: 	Dialog which can be popped to allow user to create a point feature using input X 
+						and Y coordinates entered by the user.  The dialog then dispatches an AppEvent 
+						which a listening component can use to signal that they can take the point feature
+						and perform some action. 
+
+SOURCE				: 	ECAN
+
+DEVELOPED BY	 	: 	Ryan Elley, ECan.
+
+CREATED				: 	22/06/2013
+DEPENDENCIES		: 	None.
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan)	| 22/06/2013	| Initial Development.
+-->
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+			   width=				"400" 
+			   height=				"300"
+			   title=				"{Title}" 
+			   close=				"closeHandler(event)"
+			   defaultButton=		"{butGenerate}" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.CloseEvent;
+			import mx.events.ValidationResultEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+
+			[Bindable]
+			private var _map:Map;
+
+			[Bindable]
+			private var _graphic:Graphic;
+			
+			[Bindable]
+			private var _XValid:Boolean = false;
+			[Bindable]
+			private var _YValid:Boolean = false;
+
+			
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Create Point By XY"  */
+			[Bindable]
+			public static var Title:String = "Create Point By XY";
+
+			/** Validation error message for required fields. Defaults to "Required"  */
+			[Bindable]
+			public static var InstructionLabel:String = "Enter the point and press CREATE POINT.";
+
+			/** Label text for the X coordinate input text box. Defaults to "X Coordinate:"  */
+			[Bindable]
+			public static var XCoordinateInputLabel:String = "X Coordinate:";
+
+			/** Label text for the Y coordinate input text box. Defaults to "Y Coordinate:"  */
+			[Bindable]
+			public static var YCoordinateInputLabel:String = "Y Coordinate:";
+
+			/** Label text for the coordinate system warning message. Defaults to "Note:  The XY coordinates you enter must be in the local map coodinate system currently being displayed."  */
+			[Bindable]
+			public static var CoordinateSystemWarningLabel:String = "Note:  The XY coordinates you enter must be in the local map coodinate system currently being displayed.";
+
+			
+			/** Validation error message for required fields. Defaults to "Required"  */
+			[Bindable]
+			public static var RequiredFieldLabel:String = "Required";
+
+			/** Validation error message for invalid characters. Defaults to "Invalid character"  */
+			[Bindable]
+			public static var InvalidCharLabel:String = "Invalid Character";
+
+			
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel the create point action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel the create point action and close dialog";
+
+			/** Label text for the create point button.  Defaults to "Create Point" */
+			[Bindable]
+			public static var CreatePointButtonLabel:String = "Create Point";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to create a point feature and close dialog" */
+			[Bindable]
+			public static var CreatePointButtonTooltip:String = "Click to create a point feature and close dialog";
+			
+			
+			
+			/* COMPONENT PROPERTIES
+			---------------------------------------------------------------------------- */
+			
+			/* Map Property */
+			
+			/**
+			 * ESRI Map component that contains the displayable features to be copied.   Sets the map object which contains the source layers that can be used as copy sources.
+			 */ 
+			public function set map(linkedMap:Map):void
+			{
+				// Set the map object				
+				_map = linkedMap;
+			}
+			
+			public function get map():Map
+			{
+				return _map;
+			}
+
+			
+			/* VALIDATOR UI FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the number validitors on the text entry return true
+			 */ 
+			protected function Validator_validHandler(event:ValidationResultEvent):void
+			{
+				if (event.currentTarget == xValidator) 
+				{
+					_XValid = true;
+				}
+				
+				if (event.currentTarget == yValidator) 
+				{
+					_YValid = true;
+				}
+			}
+			
+			/** 
+			 * Called when the number validitors on the text entry return false
+			 */ 
+			protected function Validator_invalidHandler(event:ValidationResultEvent):void
+			{
+				if (event.currentTarget == xValidator) 
+				{
+					_XValid = false;
+				}
+				
+				if (event.currentTarget == yValidator) 
+				{
+					_YValid = false;
+				}			
+			}
+			
+			/**
+			 * Called when the dialog is closed.
+			 */
+			protected function closeHandler(event:CloseEvent):void
+			{
+				// Clear the sample graphic
+				removeGraphic();
+			}
+			
+			/**
+			 * Called when text is entered into the coordinate input text boxes.  
+			 * Updates the location of the display point 
+			 */
+			protected function Coordinate_changeHandler(event:TextOperationEvent):void
+			{
+				if (_map && _XValid && _YValid)
+				{
+					if (_graphic == null)
+					{
+						_graphic = new Graphic();
+					}
+					
+					var x:Number = parseFloat(txtXCoordinate.text);
+					var y:Number = parseFloat(txtYCoordinate.text);
+					var pt:MapPoint = new MapPoint(x, y, _map.spatialReference);
+					
+					_graphic.geometry = pt;
+					_graphic.symbol = new SimpleMarkerSymbol("circle", 15, 0x008000, 0.7, 0, 0, 0, null);
+					
+					// Add the sample graphic to the map if it is not already there
+					addGraphic();
+				}
+				else
+				{
+					// Remove the sample graphic to the map if is already there
+					removeGraphic();
+				}
+			}
+			
+			/**
+			 * Adds the sample graphic if it is not currently being displayed.
+			 */
+			private function addGraphic():void
+			{
+				if (_graphic && _map)
+				{
+					var graphics:ArrayCollection = _map.defaultGraphicsLayer.graphicProvider as ArrayCollection;
+					if (graphics.getItemIndex(_graphic) == -1)
+					{
+						_map.defaultGraphicsLayer.add(_graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Removes the sample graphic if it is currently being displayed.
+			 */
+			private function removeGraphic():void
+			{
+				if (_graphic && _map)
+				{
+					var graphics:ArrayCollection = _map.defaultGraphicsLayer.graphicProvider as ArrayCollection;
+					if (graphics.getItemIndex(_graphic) > -1)
+					{
+						_map.defaultGraphicsLayer.remove(_graphic);
+					}
+				}
+			}
+			
+			protected function buttton_clickHandler(event:MouseEvent):void
+			{
+				// Clear the sample graphic
+				removeGraphic();
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<s:NumberValidator id="xValidator" source="{txtXCoordinate}" required="true" property="text" 
+							domain="real" enabled="true" triggerEvent="change" requiredFieldError="{RequiredFieldLabel}"  parseError="{InvalidCharLabel}"
+							valid="Validator_validHandler(event)" invalid="Validator_invalidHandler(event)" invalidCharError="{InvalidCharLabel}" />
+		<s:NumberValidator id="yValidator" source="{txtYCoordinate}" required="true" property="text" 
+							domain="real" enabled="true" triggerEvent="change" requiredFieldError="{RequiredFieldLabel}" parseError="{InvalidCharLabel}"
+							valid="Validator_validHandler(event)" invalid="Validator_invalidHandler(event)" invalidCharError="{InvalidCharLabel}" />
+	</fx:Declarations>
+	
+	<s:VGroup width="100%" height="100%">
+		
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10" paddingTop="10">
+			<s:Label id="labInstructions" width="100%" 
+					 text="{InstructionLabel}" />
+		</s:HGroup>
+		
+		<mx:Form width="100%" height="100%" id="frmPointSettings" visible="true" >
+			<mx:FormItem id="frmItmX" label="{XCoordinateInputLabel}" width="100%">
+				<s:TextInput id="txtXCoordinate" width="100%" restrict="-1234567890."
+							 change="Coordinate_changeHandler(event)" />
+			</mx:FormItem>
+			
+			<mx:FormItem id="frmItmY" label="{YCoordinateInputLabel}" width="100%">
+				<s:TextInput id="txtYCoordinate" width="100%" restrict="-1234567890." 
+							 change="Coordinate_changeHandler(event)" />
+			</mx:FormItem>
+			
+		</mx:Form>
+		
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10" paddingTop="10">
+			<s:Label id="labMapCoordinateSystem" width="100%" 
+					 text="{CoordinateSystemWarningLabel}" />
+		</s:HGroup>
+		
+		<s:HGroup width="100%" verticalAlign="middle" paddingLeft="10">
+			<s:HGroup width="100%"  horizontalAlign="right" paddingLeft="10" paddingRight="10" paddingBottom="10" paddingTop="10" gap="10">
+				<s:Button id="butCancel" 
+						  label="{CancelButtonLabel}" 
+						  toolTip="{CancelButtonTooltip}" 
+						  click="buttton_clickHandler(event)"
+						  buttonMode="true"
+						  useHandCursor="true" />
+				<s:Button id="butGenerate" 
+						  label="{CreatePointButtonLabel}" 
+						  toolTip="{CreatePointButtonTooltip}" 
+						  click="buttton_clickHandler(event)" 
+						  enabled="{_XValid &amp;&amp; _YValid}"
+						  buttonMode="true"
+						  useHandCursor="true" />
+			</s:HGroup>
+		</s:HGroup>
+		
+	</s:VGroup>
+</s:TitleWindow>

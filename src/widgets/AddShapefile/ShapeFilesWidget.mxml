@@ -1,0 +1,1546 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Original contributers Abdul Mannan Mohammed, Wesley Chow, Iain Campion
+//
+// Enhanced, sparked, localized and maintained by Robert Scheitlin
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+				   xmlns:s=					"library://ns.adobe.com/flex/spark"
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx"
+				   xmlns:Shapefiles=		"widgets.AddShapefile.*"
+				   xmlns:viewer=			"com.esri.viewer.*"
+				   widgetConfigLoaded=		"init()"
+				   x=						"600"
+				   y=						"300">
+	
+	<viewer:states>
+		<s:State name="StateLoad" />
+		<s:State name="StateColors" />
+	</viewer:states>
+	<viewer:transitions>
+		<s:Transition toState="*" autoReverse="true">
+			<s:Fade targets="{[StateLoad,StateColors]}" />
+		</s:Transition>
+	</viewer:transitions>
+	
+	<fx:Declarations>
+		<esri:GeometryService id="geometryService"/>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.FeatureSet;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.supportClasses.DrawingInfo;
+			import com.esri.ags.layers.supportClasses.FeatureCollection;
+			import com.esri.ags.layers.supportClasses.Field;
+			import com.esri.ags.layers.supportClasses.LayerDetails;
+			import com.esri.ags.portal.PopUpRenderer;
+			import com.esri.ags.portal.supportClasses.PopUpFieldFormat;
+			import com.esri.ags.portal.supportClasses.PopUpFieldInfo;
+			import com.esri.ags.portal.supportClasses.PopUpInfo;
+			import com.esri.ags.renderers.SimpleRenderer;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.symbols.SimpleFillSymbol;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			import com.esri.ags.symbols.TextSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.DatumTransform;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			import com.esri.ags.utils.GraphicUtil;
+			import com.esri.viewer.components.toc.utils.MapUtil;
+			import com.esri.viewer.utils.ErrorMessageUtil;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.controls.Alert;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.utils.Base64Decoder;
+			import mx.utils.StringUtil;
+			
+			import org.vanrijkom.dbf.DbfField;
+			import org.vanrijkom.dbf.DbfHeader;
+			import org.vanrijkom.dbf.DbfRecord;
+			import org.vanrijkom.dbf.DbfTools;
+			
+			import spark.collections.Sort;
+			import spark.components.supportClasses.ItemRenderer;
+			
+			import widgets.AddShapefile.nochump.util.zip.ZipEntry;
+			import widgets.AddShapefile.nochump.util.zip.ZipFile;
+			
+			private var m_fileReference:FileReference;
+            
+            private var m_ShapeFileName:String;
+			
+			private var graArr:Array = [];
+			
+			private var geomArr:Array = [];
+			
+			private var lblarray:Array = [];
+			
+			private var fldsArray:Array = [];
+
+			private var lastGeomProj:Number;
+			
+			private var more2process:Boolean;
+			
+			private var projectParams:ProjectParameters;
+			
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/AddShapefile/assets/images/";
+
+			
+			[Bindable] private var textBoldLabel:String;
+			
+			[Bindable] private var textBoldTooltip:String;
+			
+			[Bindable] private var textItalicLabel:String;
+			
+			[Bindable] private var textItalicTooltip:String;
+			
+			[Bindable] private var textUnderlineLabel:String;
+			
+			[Bindable] private var textUnderlineTooltip:String;
+			
+			[Bindable] private var textInstructions:String;
+			
+			[Bindable] private var clearButtonLabel:String;
+			
+			//points
+			[Bindable] private var markerAlphaLabel:String;
+			
+			[Bindable] private var markerColorLabel:String;
+			
+			[Bindable] private var markerSizeLabel:String;
+			
+			[Bindable] private var markerStyleLabel:String;
+			
+			[Bindable] private var markerRotationLabel:String;
+			
+			//Polygons
+			[Bindable] private var fillAlphaLabel:String;
+			
+			[Bindable] private var fillColorLabel:String;
+			
+			[Bindable] private var fillStyleLabel:String;
+			
+			[Bindable] private var fillOutlineColorLabel:String;
+			
+			[Bindable] private var fillOutlineWidthLabel:String;
+			
+			[Bindable] private var fillOutlineAlphaLabel:String;
+			
+			//Polyline
+			[Bindable] private var lineAlphaLabel:String;
+			
+			[Bindable] private var lineColorLabel:String;
+			
+			[Bindable] private var lineStyleLabel:String;
+			
+			[Bindable] private var lineWidthLabel:String;
+			
+			//Text
+			[Bindable] private var textLabel:String;
+			
+			[Bindable] private var textColorLabel:String;
+			
+			[Bindable] private var textFontLabel:String;
+			
+			[Bindable] private var textSizeLabel:String;
+			
+			//Placement
+			[Bindable] private var textPlacementMiddle:String;
+			
+			[Bindable] private var textPlacementAbove:String;
+			
+			[Bindable] private var textPlacementBelow:String;
+			
+			[Bindable] private var textPlacementEnd:String;
+			
+			[Bindable] private var textPlacementStart:String;
+			
+			[Bindable] private var fontList:ArrayList;
+			
+			[Bindable] private var msgVisible:Boolean = false;
+			
+			[Bindable] private var shapeResultAC:ArrayCollection;
+			
+			[Bindable] private var loadBtnLbl:String;
+			
+			[Bindable] private var addBtnLbl:String;
+			
+			[Bindable] private var optionBtnLbl:String;
+			
+			[Bindable] private var readingMsg:String;
+			
+			[Bindable] private var reproMsg:String;
+			
+			[Bindable] private var numFeatsMsg:String;
+			
+			[Bindable] private var addedMsg:String;
+			
+			[Bindable] private var addLabels:String;
+			
+			[Bindable] private var labelPlacement:String;
+			
+			[Bindable] private var incOutlineLbl:String;
+			
+			[Bindable] private var lblByDefault:Boolean;
+			
+			[Bindable] private var labelsTextToAdd:String;
+			
+			private var removeMsg:String;
+			
+			private var lblField:String;
+			
+			private var autoZoom:Boolean;
+            
+            private var shpByteArrayArray:Array = [];
+            
+            private var dbfByteArrayArray:Array = [];
+            
+            private var prjByteArrayArray:Array = [];
+            
+            private var shpNameStrArray:Array = [];
+			
+			private static const ANNOTATION:String = "iVBORw0KGgoAAAANSUhEUgAAAB0AAAASCAYAAACnxdXaAAAEuElEQVR42oWVaUxcVRTH+900avxiP1g1aqxptKhV0ZDU2CYk1frBSmxsQ43axSpVEm0LirTaIlWwDVRBEGhIsbQwlLTAsAxLB2QpQ4FhnzczDDPzeMPs7Mzy3t9z3xuM8cPjJicvc+ee8zvbPXfTpv+sm/WdvN7oxIAlCIPZDwPnQ9+UB72TbvRMzKF7TEDXCI/OESf0Rgc6huwkNrQOTENnsKKl34Lmexy0vVNo6J7EH9e1uJhfZtqktvSjs7zFJ8K/CoSiwBrJUhhYDAELJAHa95F4lgE3iWsRmCXhFwDHPDDDJADYfIDVJ6GdnCqqblWHdhJUmBchSsDymgj3QhSueUUEEj4QxSz9714BhCUy7hdh9YqweERwbhEmdxSTrggmXGGYaa+Tslaq6dgAauR535KI1ZAE01wII/waxoUQJoSwLGYPMOpcRlMfh7vDDpgJODUXJYkQLCzL+OyaLBxB2ZnijSLVDzt5L0GDqyLGYkBmkImJjMxRqv+sbsXmx3bgpbfexzDl0xaEDGBRKpGGZb11aFGVTh1KNeDdiyICy5KcpkmKgilzHgl2qttMcBXHTmXjybjdeHpnIspu6eAmR8xewOJD7KzigNkryY1WWNmsDm0bnJGh/hWCxqJjylYy6F4DBi0OxL25Hye/+xUv707C8dMX4I9IVFtgWm4eyOfXoe2DMyi4vgFUN2DjXQsifCuK18x7ZtBBKQxEgIKKOuzY9R4a9MP4JPUH7NyTBKNVgJc6eobO2QJKxAzIvm33bfitQrsR1MqzLvXSdeBiEdrJkIs6NRAK49DnaXjnUArYatYb8PDWOGia2kFM2TF7UIEzPSt92f29UtGgDm0xWHmeoG6CWL2KASeLkuo2xDnxWuIB7Hr3MArKa/HtT7/jgUefQ0r6RQTpfw/p8EHFSZYdBmXDIq+8Th3afM/MO4NRzC0qQOb9LDUQZRsabRseeSoez7/xNl5I2Iftr+/FQ4+/iO3xe+Hy+UFXWj7L04BwBJRUkz1cvnpHHdrYa+IdfhoGpGyPRckGgW85io9SMvDsq4mYsDgRpuFBDPySX4rNDz6B6vo2UMnlCSXMKxGzaJv6CFp2Wx3a1D3F2wnKRhvzdpYMBGn8jU87sGVbAj775kcZJkFZ/UYTtmzdhv0HDsu/WQMyh4XYOGRDJLf0ljpU+/ckP+2LyJ46SUkgA4tE0TR24plXEqGp08nGQxRWRKRoo1F8mHwE8Ql74HB5sUx7rnlFj0G1PSbklNSoQ+90jfNTNHZYM7DasK5lnRyke8uGf5iBSKT1UCUlavY4LKxJ8oPgJR2lEaMge/i5qFodWnt3lB91rsr1YC+HsKgIqxVzgH1ZkzGjc7H9f5snKFHzifIjYPFEYLQvobbDiAsFlerQvJKbfE3bUOxdNMs10fZMoZ7exrquCdzWj4EcQ027EZo2I6pah1DVch83mgdQ2WRAZWM//mrow7W6blyt1ePc5TKcTMtSh+bmF/Z8n1MsnC+4YTqbd43LvFTOpeeUcGeyi7lTWYVc6rkr3FeZ+dwXGZe4E2m53NHT2dynX2dxH6ee55K/PMsdPJHBfXA8jUs6cobbl5xqOXg0dT49M0v3f84/BgU/5R2fBwQAAAAASUVORK5CYII=";
+            
+            //Build Constants
+            protected const VERSION:String = "3.3.1";
+            protected const BUILDDATE:String = "7/2/2013";
+            
+			private const fieldTypeInt:uint = 78;  //N
+			private const fieldTypeFloat:uint = 70;  //N
+			private const fieldTypeChar:uint = 67;	//C
+			private const fieldTypeDate:uint = 68;	//D
+			private const fieldTypeBool:uint = 76;	//L
+			private const fieldTypeMemo:uint = 77;	//M
+			private const fieldTypeBinary:uint = 66;	//B
+			
+			// Popup Content Formats
+			private var dateFormat:String = "";
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+			
+			private const nzmgwkid:Number = 27200;
+			private const nztmwkid:Number = 2193;
+			private const wgs84wkid:Number = 4326;
+			private const webmercatorwkid:Number = 102100;
+			
+			private const NZGD_1949_To_WGS_1984_2:Number = 1564;
+			private const NZGD_2000_To_WGS_1984_1:Number = 1565;
+			private const New_Zealand_1949_To_NZGD_2000_3_NTv2:Number = 1568;
+			
+			// Listings of the coordinate system used by this widget
+			private const spatialDetails:Array = [
+				{ inputWKID: nzmgwkid, outputWKID: nzmgwkid, datTransform: null, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: nztmwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: wgs84wkid, datTransform: NZGD_1949_To_WGS_1984_2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: webmercatorwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				
+				{ inputWKID: nztmwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: nztmwkid, outputWKID: nztmwkid, datTransform: null , transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: wgs84wkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: webmercatorwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				
+				{ inputWKID: wgs84wkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: wgs84wkid, datTransform: null , transformForward: true },
+				{ inputWKID: wgs84wkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true },
+				
+				{ inputWKID: webmercatorwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: wgs84wkid, datTransform: null, transformForward: true },
+				{ inputWKID: webmercatorwkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true }
+			];
+			
+			// Labels
+			private var _helpLabel:String;
+			
+			// Help file URL 
+			private var _helpLocation:String;
+			
+			
+            //Resources
+            [Embed(source="widgets/AddShapefile/assets/images/i_about.png")]
+            private var iconClass:Class;
+
+			// Projection record count
+			private var projectionLimit:int = 50;
+			
+			// Registered Spatial References
+			private var spatialReferences:Array = [];
+			
+			private function init():void
+			{
+				geometryService.url = GeometryServiceSingleton.instance.url;
+				geometryService.token = GeometryServiceSingleton.instance.token;
+				geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+				
+				if (configXML){
+					initializeFontList();
+					textPlacementMiddle = configXML.labels.textplacementmiddle || "Middle";
+					textPlacementAbove = configXML.labels.textplacementabove || "Above";
+					textPlacementBelow = configXML.labels.textplacementbelow || "Below";
+					textPlacementEnd = configXML.labels.textplacementend || "End";
+					textPlacementStart = configXML.labels.textplacementstart || "Start";
+					textPlacement.selectedIndex = 0;
+					labelsTextToAdd = configXML.labels.labelstexttoadd + "_" || "Labels_";
+					removeMsg = configXML.labels.removeresultmessage || "Remove Shapefile";
+					textLabel = configXML.labels.textlabel || getDefaultString("textLabel");
+					textBoldLabel = configXML.labels.textboldlabel || getDefaultString("textBoldLabel");
+					textBoldTooltip = configXML.labels.textboldtooltip || getDefaultString("textBoldTooltip");
+					textItalicLabel = configXML.labels.textitaliclabel || getDefaultString("textItalicLabel");
+					textItalicTooltip = configXML.labels.textitalictooltip || getDefaultString("textItalicTooltip");
+					textUnderlineLabel = configXML.labels.textunderlinelabel || getDefaultString("textUnderlineLabel");
+					textUnderlineTooltip = configXML.labels.textunderlinetooltip || getDefaultString("textUnderlineTooltip");
+					textColorLabel = configXML.labels.textcolorlabel || getDefaultString("textColorLabel");
+					textFontLabel = configXML.labels.textfontlabel || getDefaultString("textFontLabel");
+					textSizeLabel = configXML.labels.sizelabel || getDefaultString("textSizeLabel");
+					clearButtonLabel = configXML.labels.clearbuttonlabel || getDefaultString("clearLabel");
+					textInstructions = configXML.labels.instructions || "To load a shapefile the files must be zipped.\n\nAt a minimum there must be 2 files in the zip, 1 .shp, 1 .dbf, and an optional .prj file.\n\nClick the button below to upload a shapefile from your computer.\n\nTo change symbology and other preferences click on the wrench icon above.";
+					markerColorLabel = configXML.labels.markercolorlabel || getDefaultString("markerColorLabel");
+					markerAlphaLabel = configXML.labels.markeralphalabel || getDefaultString("markerAlphaLabel");
+					markerSizeLabel = configXML.labels.markersizelabel || getDefaultString("markerSizeLabel");
+					markerStyleLabel = configXML.labels.markerstylelabel || getDefaultString("markerStyleLabel");
+					markerRotationLabel = configXML.labels.markerrotationlabel || "Angle";
+					lineAlphaLabel = configXML.labels.linealphalabel || getDefaultString("lineAlphaLabel");
+					lineColorLabel = configXML.labels.linecolorlabel || getDefaultString("lineColorLabel");
+					lineStyleLabel = configXML.labels.linestylelabel || getDefaultString("lineStyleLabel");
+					lineWidthLabel = configXML.labels.linewidthlabel || getDefaultString("lineWidthLabel");
+					fillAlphaLabel = configXML.labels.fillalphalabel || getDefaultString("fillAlphaLabel");
+					fillColorLabel = configXML.labels.fillcolorlabel || getDefaultString("fillColorLabel");
+					fillStyleLabel = configXML.labels.fillstylelabel || getDefaultString("fillStyleLabel");
+					fillOutlineColorLabel = configXML.labels.filloutlinecolorlabel || getDefaultString("fillOutlineColorLabel");
+					fillOutlineWidthLabel = configXML.labels.filloutlinewidthlabel || getDefaultString("fillOutlineWidthLabel");
+					fillOutlineAlphaLabel = configXML.labels.filloutlinealphalabel || getDefaultString("fillAlphaLabel");
+					loadBtnLbl = configXML.labels.loadbutton || "Load Local Shapefile...";
+					addBtnLbl = configXML.labels.addbutton || "Load Shapefile";
+					optionBtnLbl = configXML.labels.optionsbutton || "Preferences";
+					readingMsg = configXML.labels.readingmessage || "Reading shapefile";
+					reproMsg = configXML.labels.reprojectingmessage || "Reprojecting";
+					numFeatsMsg = configXML.labels.numberoffeaturesmessage || "Number of Features:";
+					addedMsg = configXML.labels.addedmessage || "Added Shapefiles:";
+					addLabels = configXML.labels.addlabels || "Add Labels from the first text field in the shapefile";
+					labelPlacement = configXML.labels.labelplacement || "Label placement";
+					incOutlineLbl = configXML.labels.includeoutline || "Include Outline";
+					lblByDefault = configXML.labelbydefault && configXML.labelbydefault == "true";
+					//Marker
+					(configXML.symbols.simplemarkersymbol.@style[0] != null) ? selectDDLItemByStyle(configXML.symbols.simplemarkersymbol.@style, styleMark) : selectDDLItemByStyle("circle", styleMark);
+					sizeMark.value = (configXML.symbols.simplemarkersymbol.@size[0] != null) ? configXML.symbols.simplemarkersymbol.@size : 15;
+					cpMark.selectedColor = (configXML.symbols.simplemarkersymbol.@color[0] != null) ? configXML.symbols.simplemarkersymbol.@color : 0xFF0000;
+					alphaMark.value = (configXML.symbols.simplemarkersymbol.@alpha[0] != null) ? configXML.symbols.simplemarkersymbol.@alpha * 100 : 100;
+					numMarkerAngle.value = (configXML.symbols.simplemarkersymbol.@angle[0] != null) ? configXML.symbols.simplemarkersymbol.@angle : 0;
+					mcpLine.selectedColor = (configXML.symbols.simplemarkersymbol.outline.@color[0] != null) ? configXML.symbols.simplemarkersymbol.outline.@color : 0x088802;
+					malphaLine.value = (configXML.symbols.simplemarkersymbol.outline.@alpha[0] != null) ? configXML.symbols.simplemarkersymbol.outline.@alpha * 100 : 80;
+					msizeLine.value = (configXML.symbols.simplemarkersymbol.outline.@width[0] != null) ? configXML.symbols.simplemarkersymbol.outline.@width : 2;
+					(configXML.symbols.simplemarkersymbol.outline.@style[0] != null) ? selectDDLItemByStyle(configXML.symbols.simplemarkersymbol.outline.@style, mstyleLine) : selectDDLItemByStyle("solid", mstyleLine); 
+					//Line
+					cpLine.selectedColor = (configXML.symbols.simplelinesymbol.@color[0] != null) ? configXML.symbols.simplelinesymbol.@color : 0x088802;
+					alphaLine.value = (configXML.symbols.simplelinesymbol.@alpha[0] != null) ? configXML.symbols.simplelinesymbol.@alpha * 100 : 80;
+					sizeLine.value = (configXML.symbols.simplelinesymbol.@width[0] != null) ? configXML.symbols.simplelinesymbol.@width : 2;
+					(configXML.symbols.simplelinesymbol.@style[0] != null) ? selectDDLItemByStyle(configXML.symbols.simplelinesymbol.@style, styleLine) : selectDDLItemByStyle("solid", styleLine);
+					//Fill
+					cpFill.selectedColor = (configXML.symbols.simplefillsymbol.@color[0] != null) ? configXML.symbols.simplefillsymbol.@color : 0x4dfe45;
+					alphaFill.value = (configXML.symbols.simplefillsymbol.@alpha[0] != null) ? configXML.symbols.simplefillsymbol.@alpha * 100 : 50;
+					(configXML.symbols.simplefillsymbol.@style[0] != null) ? selectDDLItemByStyle(configXML.symbols.simplefillsymbol.@style, styleFill) : selectDDLItemByStyle("solid", styleFill);
+					fcpLine.selectedColor = (configXML.symbols.simplefillsymbol.outline.@color[0] != null) ? configXML.symbols.simplefillsymbol.outline.@color : 0x088802;
+					falphaLine.value = (configXML.symbols.simplefillsymbol.outline.@alpha[0] != null) ? configXML.symbols.simplefillsymbol.outline.@alpha * 100 : 80;
+					fsizeLine.value = (configXML.symbols.simplefillsymbol.outline.@width[0] != null) ? configXML.symbols.simplefillsymbol.outline.@width : 2;
+					(configXML.symbols.simplefillsymbol.outline.@style[0] != null) ? selectDDLItemByStyle(configXML.symbols.simplefillsymbol.outline.@style, fstyleLine) : selectDDLItemByStyle("solid", fstyleLine); 
+					//Text
+					cpFont.selectedColor = (configXML.symbols.TextSymbol.@color[0] != null) ? configXML.symbols.TextSymbol.@color : 0x000000;
+					sizeFont.value = (configXML.symbols.TextSymbol.@size[0] != null) ? configXML.symbols.TextSymbol.@size : 16;
+					bIta.selected = configXML.symbols.TextSymbol.@italics[0] && configXML.symbols.TextSymbol.@italics[0] == "true";
+					bBold.selected = configXML.symbols.TextSymbol.@bold[0] && configXML.symbols.TextSymbol.@bold[0] == "true";
+					bUnd.selected = configXML.symbols.TextSymbol.@underline[0] && configXML.symbols.TextSymbol.@underline[0] == "true";
+					(configXML.symbols.TextSymbol.@font[0] != null) ? selectFontByName(configXML.symbols.TextSymbol.@font, fontNameSelection) : selectFontByName("Courier New", fontNameSelection);
+					
+					autoZoom = configXML.autozoom && configXML.autozoom == "true";
+					(configXML.defaultlabelplacement) ? selectDDLItemByStyle(configXML.defaultlabelplacement, textPlacement) : selectDDLItemByStyle(TextSymbol.PLACEMENT_MIDDLE, textPlacement);
+				
+					// Registered spatial references
+					var spRefList:XMLList = configXML.spatialreferences.spatialreference;
+					for (var i:int = 0; i < spRefList.length(); i++ )
+					{
+						var ref:Object = {
+							wkt: spRefList[i].@wkt,
+							wkid: int(spRefList[i].@wkid)
+						};
+						spatialReferences.push(ref);
+					}
+
+					// Popup Formats
+					dateFormat = configXML.popupformats.dateformat[0] || "DD MMM YYYY";
+					
+					
+					// Help Settings
+					_helpLocation = configXML.helplocationurl;
+					_helpLabel= configXML.labels.helplabel[0] || "Help";
+				}
+				
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_shapefile_add.png", addBtnLbl, showStateLoad);
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_shapefile_pref.png", optionBtnLbl, showStateColors);
+				shapeResultAC = new ArrayCollection();
+                wTemplate.header.addEventListener(MouseEvent.CLICK, DisplayVersion);
+				
+				// Add show help item
+				if (_helpLocation != "")
+				{
+					wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+				}
+				
+				// Add listeners for layer changes;
+				if (map)
+				{
+					map.addEventListener(MapEvent.LAYER_REMOVE, map_onLayerRemove, false, 0, true);
+					map.addEventListener(MapEvent.LAYER_REMOVE_ALL, map_onLayerRemoveAll, false, 0, true);
+				}
+			}
+			
+			private function selectDDLItemByStyle(itmName:String, obj:DropDownList):void
+			{
+				for ( var d:int=0; d<obj.dataProvider.length; d++){
+					var item:Object = obj.dataProvider.getItemAt(d);
+					if (item["style"] == itmName){ 
+						obj.selectedItem = item;
+					}
+				}
+			}
+			
+			private function selectFontByName(itmName:String, obj:ComboBox):void
+			{
+				for ( var d:int=0; d<obj.dataProvider.length; d++){
+					var item:Object = obj.dataProvider.getItemAt(d);
+					if (item == itmName){ 
+						obj.selectedItem = item;
+					}
+				}
+			}
+			
+			private function loadShapefile_clickHandler():void
+			{
+                shpByteArrayArray = [];
+                dbfByteArrayArray = [];
+                prjByteArrayArray = [];
+                shpNameStrArray = [];
+				m_fileReference = new FileReference();
+				m_fileReference.addEventListener(Event.SELECT, selectHandler);
+				m_fileReference.addEventListener(Event.CANCEL, cancelHandler);
+				m_fileReference.browse([new FileFilter("Zip Files", "*.zip")]);
+			}
+			
+			private function selectHandler(event:Event):void
+			{
+				showMessage(readingMsg + " " + m_fileReference.name + "...",true);
+				m_fileReference.addEventListener(Event.COMPLETE, completeHandler);
+				m_fileReference.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+				m_fileReference.load();
+			}
+			
+			private function completeHandler(event:Event):void
+			{
+				var shpByteArray:ByteArray;
+				var dbfByteArray:ByteArray;
+				var prjByteArray:ByteArray;
+
+				const zipFile:ZipFile =  new ZipFile(m_fileReference.data);                
+				for each (var entry:ZipEntry in zipFile.entries){
+					const name:String = entry.name.toLowerCase();
+					if (name.indexOf("__macosx") > -1){
+						continue;
+					}
+					if (name.indexOf(".shp") === name.length - 4){
+						shpByteArray = zipFile.getInput(entry);
+                        shpByteArrayArray.push(shpByteArray);
+                        var sIndx:int = (name.indexOf("/")>-1)?name.indexOf("/") + 1:0;
+                        shpNameStrArray.push(name.substring(sIndx,name.length - 4));
+					}
+					if (name.indexOf(".dbf") === name.length - 4){
+						dbfByteArray = zipFile.getInput(entry);
+                        dbfByteArrayArray.push(dbfByteArray);
+					}
+					if(name.indexOf(".prj") === name.length - 4){
+						prjByteArray = zipFile.getInput(entry);
+                        prjByteArrayArray.push(prjByteArray);
+					}
+				}
+				if (shpByteArrayArray[0] && shpByteArrayArray[0].length > 0 && dbfByteArrayArray[0] && dbfByteArrayArray[0].length > 0){
+					loadShapefile(shpByteArrayArray.shift(), dbfByteArrayArray.shift(), prjByteArrayArray.shift(), shpNameStrArray.shift());
+					lastGeomProj = 0;
+					more2process = false;
+				}
+			}
+			
+			/**
+			 * Modified to reference the registered spatial reference list 
+			 */
+			private function loadShapefile(shpByteArray:ByteArray, dbfByteArray:ByteArray, prjByteArray:ByteArray, shpNameStr:String):void
+			{
+                m_ShapeFileName = shpNameStr;
+				var index:int = 0;
+				const shpReader:ShpReader = new ShpReader(shpByteArray);
+				const dbfHeader:DbfHeader = new DbfHeader(dbfByteArray);
+				var hasObjectID:Boolean = false;
+				
+				for each(var fld:DbfField in dbfHeader.fields)
+				{
+					if (fld.name.toUpperCase() == "OBJECTID")
+					{
+						hasObjectID = true;
+						break;
+					}
+				}
+				
+				var WKTstr:String;
+				var WKID:int;
+				if(prjByteArray && prjByteArray.length >0){
+					WKTstr = prjByteArray.readUTFBytes(prjByteArray.length);
+					WKID = this.getRegisteredSpatialReferenceWKID(WKTstr);
+				}
+				/* Original Code
+				//const shpSpatialRef:SpatialReference = (WKTstr) ? new SpatialReference(Number.NaN, WKTstr) : map.spatialReference;
+				*/
+				const shpSpatialRef:SpatialReference = (WKTstr) ? ((WKID != -1) ? new SpatialReference(WKID, WKTstr) : new SpatialReference(Number.NaN, WKTstr)) : map.spatialReference;
+				
+				var shapeType:int = shpReader.readShpType();
+				var dbfRecord:DbfRecord;
+				
+				var gra:Graphic;
+				graArr = [];
+				lblarray = [];
+				geomArr = [];
+				
+				// Prepare the fields data
+				fldsArray = createFieldDetails(dbfHeader);
+				
+				var proPoint:MapPoint;
+				
+				while (shpReader.hasMore()) {
+					if (shapeType == 1 || shapeType == 11 || shapeType == 21) 
+					{
+						var shpPoint:ShpPoint = shpReader.readShpPoint();
+						dbfRecord = DbfTools.getRecord(dbfByteArray, dbfHeader, index++);
+						proPoint = shpPoint.toPoint(shpSpatialRef);
+						proPoint.spatialReference = shpSpatialRef;
+						geomArr.push(proPoint);
+						var mol:SimpleLineSymbol;
+						if(incOutlineChk.selected)
+						{
+							mol = new SimpleLineSymbol(mstyleLine.selectedItem.style, mcpLine.selectedColor, malphaLine.value/100, msizeLine.value)
+						}
+						gra = new Graphic(proPoint, new SimpleMarkerSymbol(styleMark.selectedItem.style, sizeMark.value, cpMark.selectedColor, alphaMark.value/100, 0, 0, numMarkerAngle.value, mol), dbfRecord.values);
+						
+						if (!hasObjectID)
+							gra.attributes["hasObjectID"] = index;
+						
+						graArr.push(gra);
+						if(addLabelsChk.selected)
+						{
+							addLabel(dbfHeader, dbfRecord, proPoint);
+						}
+					} 
+					else if (shapeType == 3 || shapeType == 13 || shapeType == 23) 
+					{
+						var shpLine:ShpLine = shpReader.readShpLine();
+						dbfRecord = DbfTools.getRecord(dbfByteArray, dbfHeader, index++);
+						var proLine:Polyline = shpLine.toLine(shpSpatialRef);
+						proLine.spatialReference = shpSpatialRef;
+						proPoint = new MapPoint(proLine.extent.xmax, proLine.extent.ymax, shpSpatialRef);
+						geomArr.push(proLine);
+						gra = new Graphic(proLine, new SimpleLineSymbol(styleLine.selectedItem.style, cpLine.selectedColor, alphaLine.value/100, sizeLine.value), dbfRecord.values);
+
+						if (!hasObjectID)
+							gra.attributes["OBJECTID"] = index;
+
+						graArr.push(gra);
+						if(addLabelsChk.selected)
+						{
+							addLabel(dbfHeader, dbfRecord, proPoint);
+						}
+					} 
+					else if (shapeType == 5 || shapeType == 15 || shapeType == 25) 
+					{
+						var shpPolygon:ShpPolygon = shpReader.readShpPolygon();
+						dbfRecord = DbfTools.getRecord(dbfByteArray, dbfHeader, index++);
+						var proPoly:Polygon = shpPolygon.toPolygon(shpSpatialRef);
+						proPoly.spatialReference = shpSpatialRef;
+						proPoint = proPoly.extent.center;
+						proPoint.spatialReference = shpSpatialRef;
+						geomArr.push(proPoly);
+						var fol:SimpleLineSymbol;
+						if(fincOutlineChk.selected)
+						{
+							fol = new SimpleLineSymbol(fstyleLine.selectedItem.style, fcpLine.selectedColor, falphaLine.value/100, fsizeLine.value)
+						}
+						gra = new Graphic(proPoly, new SimpleFillSymbol(styleFill.selectedItem.style, cpFill.selectedColor, alphaFill.value/100, fol), dbfRecord.values);
+
+						if (!hasObjectID)
+							gra.attributes["OBJECTID"] = index;
+
+						graArr.push(gra);
+						if(addLabelsChk.selected)
+						{
+							addLabel(dbfHeader, dbfRecord, proPoint);
+						}
+					}
+				}
+				
+				//Currently there is no way to check if a WKT and WKID Spatial Reference are equal (according to Bjorn) so we have to use geometryService.project no matter what.
+				if(!isNaN(shpSpatialRef.wkid) && shpSpatialRef.wkid != map.spatialReference.wkid){
+					// Project the results to match the map spatial reference
+					
+					projectParams = getProjectParams(shpSpatialRef.wkid,map.spatialReference.wkid);
+					if(geomArr.length > projectionLimit)
+					{
+						more2process = true;
+						projectParams.geometries = geomArr.slice(0, projectionLimit);
+					}
+					else
+					{
+						more2process = false;
+						projectParams.geometries = geomArr;
+					}
+					//projectParams.outSpatialReference = map.spatialReference;
+					showMessage(reproMsg + " " + m_fileReference.name + " ",true);
+					geometryService.project(projectParams, new AsyncResponder(geometryService_projectCompleteHandler, geometryService_faultHandler, more2process));
+				} 
+				else 
+				{
+					var sfr:ShapeFileResult = new ShapeFileResult();
+					sfr.title = m_fileReference.name;
+					sfr.symbol = (graArr[0] as Graphic).symbol;
+					sfr.extent = GraphicUtil.getGraphicsExtent(graArr);
+					sfr.content = numFeatsMsg + " " + graArr.length + "<br>Labeled: " + addLabelsChk.selected.toString();
+					sfr.removemsg = removeMsg;
+					
+					var featureSet:FeatureSet;
+					var layerDetails:LayerDetails;
+					var featureLayer:FeatureLayer;
+					
+					featureSet = new FeatureSet(graArr);
+					layerDetails = creatLayerDetails(sfr, map.spatialReference, false, fldsArray);
+					featureLayer = new FeatureLayer();
+					featureLayer.spatialReference = map.spatialReference;
+					featureLayer.name = m_fileReference.name + " - " + m_ShapeFileName;
+					
+					//featureLayer.mode = FeatureLayer.MODE_ON_DEMAND;
+					featureLayer.mode = FeatureLayer.MODE_SNAPSHOT;
+					featureLayer.featureCollection = new FeatureCollection(featureSet, layerDetails);
+					featureLayer.outFields = ["*"];
+					
+					// Create the popup renderer
+					featureLayer.infoWindowRenderer = createPopupRenderer(fldsArray);
+					
+					map.addLayer(featureLayer);
+					sfr.layerids.push(featureLayer.id);
+					
+					if(addLabelsChk.selected){
+						sfr.content += "<br>Label Field: " + lblField;
+						featureSet = new FeatureSet(lblarray);				
+						layerDetails = creatLayerDetails(sfr, map.spatialReference, true, fldsArray);
+						featureLayer = new FeatureLayer();
+						featureLayer.spatialReference = map.spatialReference;
+						featureLayer.name = labelsTextToAdd + m_fileReference.name + " - " + m_ShapeFileName;
+						featureLayer.featureCollection = new FeatureCollection(featureSet, layerDetails);
+						featureLayer.outFields = ["*"];
+						
+						map.addLayer(featureLayer);
+						sfr.layerids.push(featureLayer.id);
+					}
+					shapeResultAC.addItem(sfr);
+                    
+                    if(shpByteArrayArray.length > 0){
+                        if (shpByteArrayArray[0] && shpByteArrayArray[0].length > 0 && dbfByteArrayArray[0] && dbfByteArrayArray[0].length > 0){
+                            loadShapefile(shpByteArrayArray.shift(), dbfByteArrayArray.shift(), prjByteArrayArray.shift(), shpNameStrArray.shift());
+                            lastGeomProj = 0;
+                            more2process = false;
+                        }
+                        return;
+                    }
+					if(autoZoom)
+					{
+						map.zoomTo(GraphicUtil.getGraphicsExtent(graArr).expand(1.5));
+					}
+					
+					showMessage(addedMsg + " " + shapeResultAC.length, false);
+					m_fileReference = null;
+				}
+			}
+			
+			private function creatLayerDetails(sfr:ShapeFileResult, spatialReference:SpatialReference, isLabel:Boolean = false, fields:Array=null):LayerDetails
+			{
+				var layerDetails:LayerDetails = new LayerDetails();
+				layerDetails = new LayerDetails();
+				layerDetails.canModifyLayer = false;
+				layerDetails.canScaleSymbols = false;
+				layerDetails.copyright = "";
+				layerDetails.defaultVisibility = true;
+				layerDetails.extent = sfr.extent;
+				layerDetails.hasAttachments = false;
+				layerDetails.hasLabels = false;
+				layerDetails.hasM = layerDetails.hasZ = false;
+				layerDetails.isDataVersioned = false;
+				layerDetails.spatialReference = spatialReference;
+				layerDetails.version = Number.NaN;
+				layerDetails.name = sfr.title;
+				
+				if (fields)
+				{
+					layerDetails.fields = fields;
+				}
+				
+				layerDetails.objectIdField = "OBJECTID";
+				
+				var di:DrawingInfo = new DrawingInfo();
+				di.alpha = 1;
+				if(isLabel){
+					const base64Dec:Base64Decoder = new Base64Decoder();
+					base64Dec.decode(ANNOTATION);
+					di.renderer = new SimpleRenderer(new PictureMarkerSymbol(base64Dec.toByteArray()));
+				}else{
+					di.renderer = new SimpleRenderer(sfr.symbol);
+				}
+				
+				layerDetails.drawingInfo = di;
+
+				return layerDetails;
+			}
+			
+			private function addLabel(dbfHeader:DbfHeader, dbfRecord:DbfRecord, lblPoint:MapPoint):void
+			{
+				var txtSym:TextSymbol;
+				var fBold:Boolean;
+				var fItalic:Boolean;
+				var fUnder:Boolean;
+				txtSym = new TextSymbol;
+				txtSym.placement = textPlacement.selectedItem.style;
+				for(var fldIdx:int=0; fldIdx<dbfHeader.fields.length; fldIdx++){
+					if(dbfHeader.fields[fldIdx].type == 67){
+						lblField = dbfHeader.fields[fldIdx].name;
+						txtSym.text = StringUtil.trim(dbfRecord.values[dbfHeader.fields[fldIdx].name]);
+						break;
+					}
+				}
+				fBold = bBold.selected;
+				fItalic = bIta.selected;
+				fUnder = bUnd.selected;
+				txtSym.textFormat = new TextFormat(fontNameSelection.selectedItem, sizeFont.value, cpFont.selectedColor, fBold, fItalic, fUnder);
+				var gra:Graphic = new Graphic(lblPoint, txtSym, dbfRecord.values);
+				lblarray.push(gra);
+			}
+			
+			private function geometryService_projectCompleteHandler(event:Array,token:Object):void
+			{
+				//Update the graphics geoms
+				for(var g:int=0; g<event.length; g++)
+				{
+					(graArr[lastGeomProj + g] as Graphic).geometry = event[g];
+					
+					//Update the label graphics geoms
+					if(addLabelsChk.selected){
+						var geom:Geometry = (graArr[lastGeomProj + g] as Graphic).geometry;
+						if(geom.type == Geometry.MAPPOINT)
+						{
+							(lblarray[lastGeomProj + g] as Graphic).geometry = geom;
+						}
+						else if(geom.type == Geometry.POLYLINE)
+						{
+							(lblarray[lastGeomProj + g] as Graphic).geometry = new MapPoint(geom.extent.xmax, geom.extent.ymax);
+						}
+						else if(geom.type == Geometry.POLYGON)
+						{
+							(lblarray[lastGeomProj + g] as Graphic).geometry = geom.extent.center;
+						}
+					}
+				}
+				
+				if(token)
+				{
+					var pgeomArr:Array = geomArr.slice(lastGeomProj + projectionLimit);
+					if(pgeomArr.length > projectionLimit){
+						lastGeomProj += projectionLimit;
+						projectParams.geometries = geomArr.slice(lastGeomProj, lastGeomProj + projectionLimit);
+						more2process = true;
+						geometryService.project(projectParams, new AsyncResponder(geometryService_projectCompleteHandler, geometryService_faultHandler, more2process));
+					}
+					else
+					{
+                        lastGeomProj += projectionLimit;
+						projectParams.geometries = geomArr.slice(lastGeomProj);
+						more2process = false;
+						geometryService.project(projectParams, new AsyncResponder(geometryService_projectCompleteHandler, geometryService_faultHandler, more2process));
+					}
+					showMessage(reproMsg + " " + lastGeomProj + " out of " + geomArr.length ,true);
+				}
+				else
+				{
+					var sfr:ShapeFileResult = new ShapeFileResult();
+					sfr.title = m_fileReference.name + " - " + m_ShapeFileName;
+					sfr.symbol = (graArr[0] as Graphic).symbol;
+					sfr.extent = GraphicUtil.getGraphicsExtent(graArr);
+					sfr.content = numFeatsMsg + " " + graArr.length + "<br>Labeled: " + addLabelsChk.selected.toString();
+					sfr.removemsg = removeMsg;
+
+					var featureSet:FeatureSet;
+					var layerDetails:LayerDetails;
+					var featureLayer:FeatureLayer;
+					
+					featureSet = new FeatureSet(graArr);				
+					layerDetails = creatLayerDetails(sfr, map.spatialReference, false, fldsArray);
+					featureLayer = new FeatureLayer();
+					featureLayer.spatialReference = map.spatialReference;
+					featureLayer.name = m_fileReference.name + " - " + m_ShapeFileName;
+					
+					//featureLayer.mode = FeatureLayer.MODE_ON_DEMAND;
+					featureLayer.mode = FeatureLayer.MODE_SNAPSHOT;
+					featureLayer.featureCollection = new FeatureCollection(featureSet, layerDetails);
+					featureLayer.outFields = ["*"];
+
+					// Add popup renderer
+					featureLayer.infoWindowRenderer = createPopupRenderer(fldsArray);
+					
+					map.addLayer(featureLayer);
+					sfr.layerids.push(featureLayer.id);
+					
+					if(addLabelsChk.selected){
+						sfr.content += "<br>Label Field: " + lblField;
+						featureSet = new FeatureSet(lblarray);				
+						layerDetails = creatLayerDetails(sfr, map.spatialReference, true, fldsArray);
+						featureLayer = new FeatureLayer();
+						featureLayer.spatialReference = map.spatialReference;
+                        featureLayer.name = labelsTextToAdd + m_fileReference.name + " - " + m_ShapeFileName;
+						featureLayer.featureCollection = new FeatureCollection(featureSet, layerDetails);
+						featureLayer.outFields = ["*"];
+						
+						map.addLayer(featureLayer);
+						sfr.layerids.push(featureLayer.id);
+					}
+					
+					shapeResultAC.addItem(sfr);
+                    if(shpByteArrayArray.length > 0){
+                        if (shpByteArrayArray[0] && shpByteArrayArray[0].length > 0 && dbfByteArrayArray[0] && dbfByteArrayArray[0].length > 0){
+                            loadShapefile(shpByteArrayArray.shift(), dbfByteArrayArray.shift(), prjByteArrayArray.shift(), shpNameStrArray.shift());
+                            lastGeomProj = 0;
+                            more2process = false;
+                        }
+                        return;
+                    }
+					if(autoZoom){
+						map.zoomTo(GraphicUtil.getGraphicsExtent(graArr).expand(1.5));
+					}
+					
+					showMessage(addedMsg + " " + shapeResultAC.length, false);
+					m_fileReference = null;
+				}
+			}
+			
+			private function geometryService_faultHandler(fault:Fault, token:Object = null):void
+			{
+				showError(ErrorMessageUtil.makeHTMLSafe(fault.toString()), "Geometry Service Error");
+			}
+			
+			private function ioErrorHandler(event:IOErrorEvent):void
+			{
+				m_fileReference = null;
+			}
+			
+			private function cancelHandler(event:Event):void
+			{
+				m_fileReference = null;
+			}
+			
+			private function clear():void
+			{
+				var remlyrArr:Array = [];
+				MapUtil.forEachMapLayer(map, function(layer:Layer):void{
+					if(layer.name.indexOf(".zip") > -1){
+						remlyrArr.push(layer);
+					}
+				});
+				for each(var rlyr:Layer in remlyrArr){
+					map.removeLayer(rlyr);
+				}
+				remlyrArr = [];
+				graArr = [];
+				geomArr = [];
+				lblarray = [];
+				shapeResultAC.removeAll();
+				clearMessage();
+			}
+			
+			private function widgetClosedHandler(event:Event):void
+			{
+				setMapNavigation(null, null);
+			}
+			
+			private function widgetOpenedHandler(event:Event):void
+			{	
+				
+			}
+			
+			private function showStateLoad():void
+			{
+				if (this.currentState != "StateLoad"){
+					this.currentState = "StateLoad";
+				}
+			}
+			
+			private function showStateColors():void
+			{
+				if (this.currentState != "StateColors"){
+					this.currentState = "StateColors";
+				}
+			}
+			
+			private function showMessage(msg:String, swfVisible:Boolean):void
+			{
+				txtMessage.text = msg;
+				swfMessage.visible = swfVisible;
+				msgVisible = true;
+			}
+			
+			private function clearMessage():void
+			{
+				msgVisible = false;
+			}
+			
+			protected function shapeResultDG_shapefileDeleteHandler(event:Event):void
+			{
+				var shapeResult:ShapeFileResult = ItemRenderer(event.target).data as ShapeFileResult;
+				for (var i:Number = shapeResultAC.length - 1; i >= 0; i--){
+					if (shapeResultAC.getItemAt(i) === shapeResult){
+						shapeResultAC.removeItemAt(i);
+					}
+				}
+				
+				var remlyrArr:Array = [];
+				MapUtil.forEachMapLayer(map, function(layer:Layer):void{
+					if(shapeResult.layerids.length > 1){
+						if(layer.id == shapeResult.layerids[0]){
+							remlyrArr.push(layer);
+						}
+						if(layer.id == shapeResult.layerids[1]){
+							remlyrArr.push(layer);
+						}
+					}else{
+						if(layer.id == shapeResult.layerids[0]){
+							remlyrArr.push(layer);
+						}
+					}
+					/* if(layer.id == shapeResult.layerids. || layer.id == labelsTextToAdd + shapeResult.title){
+						remlyrArr.push(layer);
+					} */
+				});
+				for each(var rlyr:Layer in remlyrArr){
+					map.removeLayer(rlyr);
+				}
+				
+				if(shapeResultAC.length > 0){
+					showMessage(addedMsg + " " + shapeResultAC.length, false);
+				}else{
+					clearMessage();
+				}
+			}
+			
+			protected function shapeResultDG_shapefileResultClickHandler(event:Event):void
+			{
+				var shapeResult:ShapeFileResult = ItemRenderer(event.target).data as ShapeFileResult;
+				if (shapeResult.extent){
+                    map.zoomTo(shapeResult.extent.expand(1.5));
+				}
+			}
+			
+			private function numStepper_formatFunc(value:Number):String
+			{
+				return value + "%";
+			}
+			
+			private function numStepper_parseFunc(value:String):Number
+			{
+				return parseInt(value);
+			}
+			
+			private function numStepper_formatFunc2(value:Number):String
+			{
+				return value + "°";
+			}
+			
+			private function numStepper_parseFunc2(value:String):Number
+			{
+				return parseInt(value);
+			}
+			
+			private function initializeFontList():void
+			{
+				fontList = new ArrayList(prioritizeFontNames(getAvailableFontNames(),defaultFontNames));
+			}
+			
+			private function getAvailableFontNames():Array
+			{
+				var availableFonts:Array = Font.enumerateFonts(true);
+				var allFontNames:Array = [];
+				
+				for each (var font:Font in availableFonts){
+					allFontNames.push(font.fontName);
+				}
+				
+				const localeBasedSorter:spark.collections.Sort = new spark.collections.Sort();
+				localeBasedSorter.setStyle('locale', resourceManager.localeChain[0]);
+				localeBasedSorter.sort(allFontNames);
+				
+				return allFontNames;
+			}
+			
+			public function get defaultFontNames():Array
+			{
+				var fontNames:Array = [ getDefaultString('textFont1'),
+					getDefaultString('textFont2'),
+					getDefaultString('textFont3'),
+					getDefaultString('textFont4'),
+					getDefaultString('textFont5'),
+					getDefaultString('textFont6')];
+				
+				return fontNames.filter(validFontName);
+			}
+			
+			private function validFontName(fontName:String, index:int, array:Array):Boolean
+			{
+				return Boolean(fontName);
+			}
+			
+			private function prioritizeFontNames(fontNames:Array, preferredFontNames:Array):Array
+			{
+				var prioritizedFontNames:Array = preferredFontNames.concat();
+				var isFontNameUnique:Boolean;
+				
+				for each (var fontName:String in fontNames){
+					isFontNameUnique = (preferredFontNames.indexOf(fontName) == -1);
+					if (isFontNameUnique){
+						prioritizedFontNames.push(fontName);
+					}
+				}
+				return prioritizedFontNames;
+			}
+
+            private function DisplayVersion(evt:MouseEvent):void
+            {
+                if(evt.altKey){
+                    Alert.show("Shapefile Widget Version: " + VERSION + "\nBuild Date: " + BUILDDATE,
+                        wTemplate.widgetTitle, 4, null, null, iconClass);
+                }
+            }
+			
+			/**
+			 * Returns the wkid value for a spatial reference from its wkt value if registered with the widget .
+			 */
+			private function getRegisteredSpatialReferenceWKID(wkt:String):int
+			{
+				var wkid:int = -1;
+				for each(var ref:Object in this.spatialReferences)
+				{
+					if (ref.wkt == wkt)
+					{
+						wkid = ref.wkid;
+						break;
+					}
+				}
+				return wkid;
+			}
+			
+			/**
+			 * Prepare the fields for the
+			 */
+			private function createFieldDetails(dbfHeader:DbfHeader):Array
+			{
+				var hasOBJECTID:Boolean = false;
+				var fields:Array = [];
+				for each(var fld:DbfField in dbfHeader.fields)
+				{
+					var field:Field = new Field();
+					field.name = fld.name;
+					field.alias = fld.name;
+					field.editable = false;
+					
+					switch(fld.type)
+					{
+						case this.fieldTypeMemo:
+						case this.fieldTypeChar:
+							field.type = Field.TYPE_STRING;
+							field.length = fld.length;
+							break;
+						
+						case this.fieldTypeDate:
+							field.type = Field.TYPE_DATE;
+							field.length = fld.length;
+							break;
+						
+						case this.fieldTypeFloat:
+							field.type = Field.TYPE_DOUBLE;
+							field.length = fld.length;
+							break;
+
+						case this.fieldTypeInt:
+							field.type = Field.TYPE_INTEGER;
+							break;
+					}
+					
+					if (fld.name.toUpperCase() == "OBJECTID")
+						hasOBJECTID = true;
+					
+					fields.push(field);
+				}
+
+				if (!hasOBJECTID)
+				{
+					var ofield:Field = new Field();
+					ofield.name = ofield.alias = "OBJECTID";
+					ofield.type = Field.TYPE_OID;
+					fields.push(ofield);
+				}
+				
+				return fields;
+			}
+			
+			/**
+			 * Creates a popup renderer for the shapefile layer based on the supplied field array
+			 */
+			private function createPopupRenderer(fields:Array):ClassFactory
+			{
+				if (fields && fields.length > 0)
+				{
+					var popupFields:Array = [];
+					for each (var field:Field in fields)
+					{
+						var popupField:PopUpFieldInfo = new PopUpFieldInfo();
+						popupField.fieldName = field.name;
+						popupField.label = field.alias;
+						popupField.visible = true;
+
+						// Set the format for data fields						
+						if (field.type == Field.TYPE_DATE)
+						{
+							var popupDateFormat:PopUpFieldFormat = new PopUpFieldFormat();
+							popupDateFormat.dateFormat = dateFormat;
+							popupDateFormat.useUTC = false;
+							popupField.format = popupDateFormat;
+						}
+
+						// Set the format for integer fields						
+						if (field.type == Field.TYPE_INTEGER)
+						{
+							var popupIntFormat:PopUpFieldFormat = new PopUpFieldFormat();
+							popupIntFormat.useThousandsSeparator = true;
+							popupField.format = popupIntFormat;
+						}
+						
+						// Set the format for double fields						
+						if (field.type == Field.TYPE_DOUBLE)
+						{
+							var popupDblFormat:PopUpFieldFormat = new PopUpFieldFormat();
+							popupDblFormat.useThousandsSeparator = true;
+							popupDblFormat.precision = 4;
+							popupField.format = popupDblFormat; 
+						}
+						
+						// Add to the array
+						if (field.type != Field.TYPE_OID)
+						{
+							popupFields.push(popupField);
+						}
+					}
+
+					// Create the pop-up info
+					var popUpInfo:PopUpInfo = new PopUpInfo();
+					
+					// Tell the pop-up info about the field name template
+					popUpInfo.title = "";
+					popUpInfo.popUpFieldInfos = popupFields;
+					popUpInfo.showZoomToButton = false;
+					
+					// Create the class factory
+					var popUpRenderer:ClassFactory = new ClassFactory(PopUpRenderer);
+					// Set the "popUpInfo" key
+					popUpRenderer.properties = { "popUpInfo": popUpInfo };
+
+					return popUpRenderer;
+				}
+				else
+					return null;
+				
+			}
+			
+			/**
+			 * Opens the help file assoicated with this widget.
+			 */
+			private function showHelp():void
+			{
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_helpLocation),"_blank");
+			}
+			
+			/**
+			 * Removes the layer cache object(s) associated with removed layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when a layer is removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function map_onLayerRemove(event:MapEvent):void
+			{
+				// Find the layer in the cache
+				var layer:Layer = event.layer;
+				if (layer is FeatureLayer)
+				{
+					var layerID:String = layer.id;
+					var shapeResult:ShapeFileResult;
+					for (var i:Number = shapeResultAC.length - 1; i >= 0; i--)
+					{
+						shapeResult = shapeResultAC.getItemAt(i) as ShapeFileResult;
+
+						if (shapeResult.layerids.indexOf(layerID) > -1)
+						{
+							shapeResultAC.removeItemAt(i);
+							break;
+						}
+					}
+					
+					if(shapeResultAC.length > 0)
+					{
+						showMessage(addedMsg + " " + shapeResultAC.length, false);
+					}
+					else
+					{
+						clearMessage();
+					}
+				}
+			}
+			
+			/**
+			 * Clears the added shape files.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when all the layers are removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function map_onLayerRemoveAll(event:MapEvent):void
+			{
+				shapeResultAC.removeAll();
+				clearMessage();
+			}
+			
+			
+			/**
+			 * 
+			 */
+			private function getProjectParams(inputWKID:int, targetWKID:int):ProjectParameters
+			{
+				// Create a new project parameters
+				var projParam:ProjectParameters = new ProjectParameters();
+				projParam.outSpatialReference = new SpatialReference(targetWKID);
+				
+				// Create a datam transformation
+				var datTransform:DatumTransform = new DatumTransform();
+				
+				for (var i:int =0; i < spatialDetails.length; i++)
+				{
+					var sd:Object = spatialDetails[i];
+					if (sd.inputWKID == inputWKID &&
+						sd.outputWKID == targetWKID) {
+						
+						if (sd.datTransform != null)
+						{
+							datTransform.wkid = sd.datTransform;
+							projParam.datumTransform = datTransform;
+							projParam.transformForward = sd.transformForward;
+						}
+						break;
+					}
+				}
+				return projParam;
+			}
+			
+			
+		]]>
+	</fx:Script>	
+	<viewer:WidgetTemplate id="wTemplate"
+						   open="widgetOpenedHandler(event)"
+						   closed="widgetClosedHandler(event)"
+						   height="305"
+						   width="400">
+		<s:Group id="StateLoad" height="100%" width="100%" visible="false" visible.StateLoad="true">
+			<s:layout>
+				<s:VerticalLayout gap="6" horizontalAlign="center" paddingLeft="8"/>
+			</s:layout>
+			<s:HGroup id="boxMessage"
+					  includeInLayout="{msgVisible}"
+					  visible="{msgVisible}"
+					  width="100%" verticalAlign="middle">
+				<s:SWFLoader id="swfMessage"
+							 source="assets/images/loader.swf"
+							 visible="false"/>
+				<s:Label id="txtMessage"
+						 text=""
+						 width="90%"/>
+				<s:Label buttonMode="true" textAlign="right"
+						 click="clear()"
+						 fontWeight="bold"
+						 text="{clearButtonLabel}"
+						 visible="{shapeResultAC.length &gt; 0}"
+						 includeInLayout="{shapeResultAC.length &gt; 0}"
+						 textDecoration="underline"/>
+			</s:HGroup>
+			<s:Label id="txtInstructions" text="{textInstructions}"
+								width="100%" height="100%"
+								visible="{shapeResultDG.dataProvider.length == 0}"
+								includeInLayout="{shapeResultDG.dataProvider.length == 0}"/>
+			<s:Scroller width="100%" height="100%"
+						visible="{shapeResultAC.length &gt; 0}"
+						includeInLayout="{shapeResultAC.length &gt; 0}">
+				<Shapefiles:ShapeFileResultDataGroup id="shapeResultDG"
+													 dataProvider="{shapeResultAC}"
+													 shapefileDelete="shapeResultDG_shapefileDeleteHandler(event)"
+													 shapefileResultClick="shapeResultDG_shapefileResultClickHandler(event)">
+					<Shapefiles:layout>
+						<s:VerticalLayout gap="2"
+										  horizontalAlign="justify"
+										  useVirtualLayout="true"/>
+					</Shapefiles:layout>
+				</Shapefiles:ShapeFileResultDataGroup>
+			</s:Scroller>
+			<s:HGroup width="100%">
+				<s:Button label="{loadBtnLbl}" click="loadShapefile_clickHandler()" skinClass="widgets.AddShapefile.skins.LoadButtonSkin"/>
+			</s:HGroup>
+		</s:Group>
+		<s:Group id="StateColors"  width="100%" height="100%" visible.StateColors="true" visible="false">
+			<s:layout>
+				<s:VerticalLayout gap="6" horizontalAlign="center" paddingLeft="5"/>
+			</s:layout>
+			<s:Scroller width="100%" height="100%">
+				<s:HGroup width="100%" height="100%">
+					<s:VGroup height="100%" verticalAlign="middle">
+						<s:CheckBox id="addLabelsChk" selected="{lblByDefault}" label="Add Labels from the first text field in the shapefile" fontWeight="bold" />
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="Label placement" fontWeight="bold"/>
+							<s:DropDownList id="textPlacement" labelField="name">
+								<s:ArrayList>
+									<fx:Object name="{textPlacementMiddle}" style="{TextSymbol.PLACEMENT_MIDDLE}"/>
+									<fx:Object name="{textPlacementAbove}" style="{TextSymbol.PLACEMENT_ABOVE}"/>
+									<fx:Object name="{textPlacementBelow}" style="{TextSymbol.PLACEMENT_BELOW}"/>
+									<fx:Object name="{textPlacementEnd}" style="{TextSymbol.PLACEMENT_END}"/>
+									<fx:Object name="{textPlacementStart}" style="{TextSymbol.PLACEMENT_START}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:Line width="100%">
+							<s:stroke>
+								<s:SolidColorStroke color="{getStyle('color')}" weight="1"/>
+							</s:stroke>
+						</s:Line>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{textLabel + ' ' + textColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="cpFont"/>
+							<s:Label text="{textLabel + ' '  +textSizeLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="sizeFont" minimum="0" maximum="50" value="16"/>
+							<s:ToggleButton id="bBold"
+											width="32"
+											fontWeight="bold"
+											label="{textBoldLabel}"
+											toolTip="{textBoldTooltip}"/>
+							<s:ToggleButton id="bIta"
+											width="32"
+											fontStyle="italic"
+											fontWeight="bold"
+											label="{textItalicLabel}"
+											toolTip="{textItalicTooltip}"/>
+							<s:ToggleButton id="bUnd"
+											width="32"
+											fontWeight="bold"
+											label="{textUnderlineLabel}"
+											textDecoration="underline"
+											toolTip="{textUnderlineTooltip}"/>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{textLabel + ' ' +textFontLabel}" fontWeight="bold"/>
+							<s:ComboBox id="fontNameSelection"
+										dataProvider="{fontList}"
+										requireSelection="true"/>
+						</s:HGroup>
+						<s:Line width="100%">
+							<s:stroke>
+								<s:SolidColorStroke color="{getStyle('color')}" weight="1"/>
+							</s:stroke>
+						</s:Line>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{markerColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="cpMark" selectedColor="0x4dfe45"/>
+							<s:Label text="{markerStyleLabel}" fontWeight="bold"/>
+							<s:DropDownList id="styleMark" labelField="name" selectedIndex="0">
+								<s:ArrayList>
+									<fx:Object name="{getDefaultString('markerStyleCircle')}" style="{SimpleMarkerSymbol.STYLE_CIRCLE}"/>
+									<fx:Object name="{getDefaultString('markerStyleCross')}" style="{SimpleMarkerSymbol.STYLE_CROSS}"/>
+									<fx:Object name="{getDefaultString('markerStyleDiamond')}" style="{SimpleMarkerSymbol.STYLE_DIAMOND}"/>
+									<fx:Object name="{getDefaultString('markerStyleSquare')}" style="{SimpleMarkerSymbol.STYLE_SQUARE}"/>
+									<fx:Object name="{getDefaultString('markerStyleTriangle')}" style="{SimpleMarkerSymbol.STYLE_TRIANGLE}"/>
+									<fx:Object name="{getDefaultString('markerStyleX')}" style="{SimpleMarkerSymbol.STYLE_X}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{markerSizeLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="sizeMark" minimum="0" maximum="50" value="10"/>
+							<s:Label text="{markerAlphaLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="alphaMark" minimum="0" maximum="100" value="100"
+											  valueFormatFunction="numStepper_formatFunc"
+											  valueParseFunction="numStepper_parseFunc"/>
+							<s:Label text="{markerRotationLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="numMarkerAngle"
+											   maximum="360"
+											   minimum="-360"
+											   stepSize="1"
+											   value="0"
+											   width="60"
+											   valueFormatFunction="numStepper_formatFunc2"
+											   valueParseFunction="numStepper_parseFunc2"/>
+						</s:HGroup>
+						<s:CheckBox id="incOutlineChk" label="{incOutlineLbl}" fontWeight="bold" selected="true"/>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle" paddingLeft="18">
+							<s:Label text="{lineColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="mcpLine" selectedColor="0x088802"/>
+							<s:Label text="{lineStyleLabel}" fontWeight="bold"/>
+							<s:DropDownList id="mstyleLine" labelField="name" selectedIndex="0">
+								<s:ArrayList>
+									<fx:Object name="{getDefaultString('lineStyleSolid')}" style="{SimpleLineSymbol.STYLE_SOLID}"/>
+									<fx:Object name="{getDefaultString('lineStyleDash')}" style="{SimpleLineSymbol.STYLE_DASH}"/>
+									<fx:Object name="{getDefaultString('lineStyleDot')}" style="{SimpleLineSymbol.STYLE_DOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDot')}" style="{SimpleLineSymbol.STYLE_DASHDOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDotDot')}" style="{SimpleLineSymbol.STYLE_DASHDOTDOT}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle" paddingLeft="18">
+							<s:Label text="{lineWidthLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="msizeLine" minimum="0" maximum="50" value="2"/>
+							<s:Label text="{lineAlphaLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="malphaLine" minimum="0" maximum="100" value="100"
+											  valueFormatFunction="numStepper_formatFunc"
+											  valueParseFunction="numStepper_parseFunc"/>
+						</s:HGroup>
+						<s:Line width="100%">
+							<s:stroke>
+								<s:SolidColorStroke color="{getStyle('color')}" weight="1"/>
+							</s:stroke>
+						</s:Line>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{lineColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="cpLine" selectedColor="0x088802"/>
+							<s:Label text="{lineStyleLabel}" fontWeight="bold"/>
+							<s:DropDownList id="styleLine" labelField="name" selectedIndex="0">
+								<s:ArrayList>
+									<fx:Object name="{getDefaultString('lineStyleSolid')}" style="{SimpleLineSymbol.STYLE_SOLID}"/>
+									<fx:Object name="{getDefaultString('lineStyleDash')}" style="{SimpleLineSymbol.STYLE_DASH}"/>
+									<fx:Object name="{getDefaultString('lineStyleDot')}" style="{SimpleLineSymbol.STYLE_DOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDot')}" style="{SimpleLineSymbol.STYLE_DASHDOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDotDot')}" style="{SimpleLineSymbol.STYLE_DASHDOTDOT}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{lineWidthLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="sizeLine" minimum="0" maximum="50" value="2"/>
+							<s:Label text="{lineAlphaLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="alphaLine" minimum="0" maximum="100" value="100"
+											  valueFormatFunction="numStepper_formatFunc"
+											  valueParseFunction="numStepper_parseFunc"/>
+						</s:HGroup>
+						<s:Line width="100%">
+							<s:stroke>
+								<s:SolidColorStroke color="{getStyle('color')}" weight="1"/>
+							</s:stroke>
+						</s:Line>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{fillColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="cpFill" selectedColor="0x4dfe45"/>
+							<s:Label text="{fillStyleLabel}" fontWeight="bold"/>
+							<s:DropDownList id="styleFill" labelField="name" selectedIndex="0" 
+											typicalItem="{getDefaultString('fillStyleBackwardDiagonal')}">
+								<s:ArrayList>
+									<fx:Object name="{getDefaultString('fillStyleSolid')}" style="{SimpleFillSymbol.STYLE_SOLID}"/>
+									<fx:Object name="{getDefaultString('fillStyleBackwardDiagonal')}" style="{SimpleFillSymbol.STYLE_BACKWARD_DIAGONAL}"/>
+									<fx:Object name="{getDefaultString('fillStyleCross')}" style="{SimpleFillSymbol.STYLE_CROSS}"/>
+									<fx:Object name="{getDefaultString('fillStyleForwardDiagonal')}" style="{SimpleFillSymbol.STYLE_FORWARD_DIAGONAL}"/>
+									<fx:Object name="{getDefaultString('fillStyleHorizontal')}" style="{SimpleFillSymbol.STYLE_HORIZONTAL}"/>
+									<fx:Object name="{getDefaultString('fillStyleVertical')}" style="{SimpleFillSymbol.STYLE_VERTICAL}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle">
+							<s:Label text="{fillAlphaLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="alphaFill" minimum="0" maximum="100" value="40" 
+											  valueFormatFunction="numStepper_formatFunc"
+											  valueParseFunction="numStepper_parseFunc"/>
+						</s:HGroup>
+						<s:CheckBox id="fincOutlineChk" label="{incOutlineLbl}" fontWeight="bold" selected="true"/>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle" paddingLeft="18">
+							<s:Label text="{lineColorLabel}" fontWeight="bold"/>
+							<mx:ColorPicker id="fcpLine" selectedColor="0x088802"/>
+							<s:Label text="{lineStyleLabel}" fontWeight="bold"/>
+							<s:DropDownList id="fstyleLine" labelField="name" selectedIndex="0">
+								<s:ArrayList>
+									<fx:Object name="{getDefaultString('lineStyleSolid')}" style="{SimpleLineSymbol.STYLE_SOLID}"/>
+									<fx:Object name="{getDefaultString('lineStyleDash')}" style="{SimpleLineSymbol.STYLE_DASH}"/>
+									<fx:Object name="{getDefaultString('lineStyleDot')}" style="{SimpleLineSymbol.STYLE_DOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDot')}" style="{SimpleLineSymbol.STYLE_DASHDOT}"/>
+									<fx:Object name="{getDefaultString('lineStyleDashDotDot')}" style="{SimpleLineSymbol.STYLE_DASHDOTDOT}"/>
+								</s:ArrayList>
+							</s:DropDownList>
+						</s:HGroup>
+						<s:HGroup width="100%" height="100%" verticalAlign="middle" paddingLeft="18">
+							<s:Label text="{lineWidthLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="fsizeLine" minimum="0" maximum="50" value="2"/>
+							<s:Label text="{lineAlphaLabel}" fontWeight="bold"/>
+							<s:NumericStepper id="falphaLine" minimum="0" maximum="100" value="100"
+											  valueFormatFunction="numStepper_formatFunc"
+											  valueParseFunction="numStepper_parseFunc"/>
+						</s:HGroup>
+					</s:VGroup>
+				</s:HGroup>
+			</s:Scroller>
+		</s:Group>
+	</viewer:WidgetTemplate>
+</viewer:BaseWidget>

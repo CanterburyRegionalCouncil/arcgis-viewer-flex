@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+			   width=				"400" 
+			   height=				"150"
+			   creationComplete=	"creationCompleteHandler(event)" 
+			   title=				"{Title}"
+			   defaultButton=		"{butSubmit}" >
+
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Enter Text"  */
+			[Bindable]
+			public static var Title:String = "Enter Text";
+			
+			/** Label text for the dialog instructions. Defaults to "Enter the text and press SUBMIT."  */
+			[Bindable]
+			public static var InstructionLabel:String = "Enter the text and press SUBMIT.";
+			
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel the buffer action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel the buffer action and close dialog";
+			
+			/** Label text for the submit button.  Defaults to "Submit" */
+			[Bindable]
+			public static var SubmitButtonLabel:String = "Submit";
+			
+			/** Tooltip text for the submit button.  Defaults to "Click to submit the query and close dialog" */
+			[Bindable]
+			public static var SubmitButtonTooltip:String = "Click to submit the query and close dialog";
+			
+			
+			/* COMPONENT PROPERTIES
+			---------------------------------------------------------------------------- */
+			
+			/**
+			 * Text in input box.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Text to be edited by the user.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get text():String
+			{
+				return this.inputText.text;	
+			}
+			
+			public function set text(value:String):void
+			{
+				this.inputText.text = value;	
+			}			
+			
+			/**
+			 * Prompt text for the input box.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Prompt instructions on the input box.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get prompt():String
+			{
+				return this.inputText.prompt;	
+			}
+			
+			public function set prompt(value:String):void
+			{
+				this.inputText.prompt = value;	
+			}			
+			
+			
+			/* COMPONENT FUNCTIONALITY
+			---------------------------------------------------------------------------- */
+
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			
+			
+			
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<s:VGroup width="100%" height="100%" gap="5" paddingTop="3" paddingLeft="3" paddingRight="3" paddingBottom="3">
+		<!--- Instructions Area -->	
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10" paddingTop="10">
+			<s:Label id="labInstructions" width="100%" 
+					 text="{InstructionLabel}" />
+		</s:HGroup>
+
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10">
+			<s:TextInput id="inputText" width="100%" />
+		</s:HGroup>
+		
+		<s:HGroup width="100%" gap="5" horizontalAlign="right">			
+			<s:Button id="butCancel" 
+					  label="{CancelButtonLabel}" 
+					  toolTip="{CancelButtonTooltip}"
+					  buttonMode="true"
+					  useHandCursor="true" />
+			<s:Button id="butSubmit" 
+					  label="{SubmitButtonLabel}" 
+					  toolTip="{SubmitButtonTooltip}" 
+					  enabled="{inputText.text.length &gt; 0}"
+					  buttonMode="true"
+					  useHandCursor="true" />		
+		</s:HGroup>		
+	</s:VGroup>	
+	
+</s:TitleWindow>

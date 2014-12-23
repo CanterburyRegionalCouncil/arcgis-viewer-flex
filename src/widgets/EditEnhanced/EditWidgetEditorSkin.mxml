@@ -1,0 +1,800 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright (c) 2010-2011 ESRI
+
+All rights reserved under the copyright laws of the United States
+and applicable international laws, treaties, and conventions.
+
+You may freely redistribute and use this sample code, with or
+without modification, provided you include the original copyright
+notice and use restrictions.
+
+See use restrictions in use_restrictions.txt.
+-->
+<!---
+The default skin class for the Editor component.
+<p><b>Since:</b> ArcGIS API for Flex 2.0</p>
+-->
+<s:SparkSkin xmlns:fx=				"http://ns.adobe.com/mxml/2009"
+			 xmlns:mx=				"library://ns.adobe.com/flex/mx"
+			 xmlns:s=				"library://ns.adobe.com/flex/spark"
+			 xmlns:components=		"com.esri.ags.components.*"
+			 xmlns:supportClasses=	"com.esri.ags.skins.supportClasses.*"
+			 initialize=			"initializeHandler(event)"
+			 stateChangeComplete=	"stateChangeCompleteHandler(event)" >
+	
+	<!--- host component -->
+	<fx:Metadata>
+		/**
+		* A strongly typed property that references the component to which this skin is applied.
+		*/
+		[HostComponent("com.esri.ags.components.Editor")]
+	</fx:Metadata>
+	
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="disabled"/>
+		<s:State name="applyingEdits"/>
+		<s:State name="toolbarNotVisible"/>
+		<s:State name="templateSelected"/>
+		<s:State name="featuresSelected"/>
+	</s:states>
+	
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.components.supportClasses.CreateOptions;
+			import com.esri.ags.events.TemplatePickerEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.viewer.AppEvent;
+			
+			import mx.binding.utils.ChangeWatcher;
+			import mx.events.EffectEvent;
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			private var _changeWatcher:ChangeWatcher;
+			private var _createGeometryTypeChanged:Boolean;
+			private var _arrayList:ArrayList;
+			
+			[Bindable]
+			[Embed(source="assets/images/loader.swf")]
+			private var loader:Class;
+			
+			private function initializeHandler(event:FlexEvent):void
+			{
+				_changeWatcher = ChangeWatcher.watch(hostComponent, "createGeometryType", createGeometryType_changeHandler);
+			}
+			
+			private function createGeometryType_changeHandler(event:Event = null):void
+			{
+				invalidateProperties();
+				_createGeometryTypeChanged = true;
+			}
+			
+			
+			/* CUSTOM TOOL SETTINGS
+			----------------------------------------------------------------------------------------- */
+			
+			/** Configures the tool to allow display of the Copy Feature button in the toolbar */
+			[Bindable]
+			public static var copyFeaturesVisible:Boolean =  true; 
+			
+			/** Configures the tool to allow display of the Create Point by XY button in the toolbar */
+			[Bindable]
+			public static var createPointXYVisible:Boolean =  true; 
+			
+			/** Configures the tool to allow display of the Create Circle by XY & Radius button in the toolbar */
+			[Bindable]
+			public static var createCircleXYRadiusVisible:Boolean =  true; 
+
+			/** Configures the tool to allow display of the Move Features by XY button in the toolbar */
+			[Bindable]
+			public static var moveFeatureXYToolVisible:Boolean =  true; 
+
+			/** Configures the tool to allow display of the Explode Feature button in the toolbar */
+			[Bindable]
+			public static var explodeFeatureToolVisible:Boolean =  true; 
+
+			/** Configures the tool to allow display of the Show Attributes button in the toolbar */
+			[Bindable]
+			public static var showAttributesVisible:Boolean =  true; 
+			
+			
+			[Bindable]
+			private var templateGeometryType:String;
+			
+
+			
+			/* EVENT TYPE CONSTANTS
+			----------------------------------------------------------------------------------------- */
+			
+			/** Used when the copy button on the edit widget is clicked */
+			public static const COPY_BUTTON_CLICKED:String = "editwidget_copybuttonclicked";
+			
+			/** Used when the point xy button on the edit widget is clicked */
+			public static const POINTXY_BUTTON_CLICKED:String = "editwidget_pointxybuttonclicked";
+			
+			/** Used when the circle xy & radius button on the edit widget is clicked */
+			public static const CIRCLEXYRADIUS_BUTTON_CLICKED:String = "editwidget_circlexyradiusbuttonclicked";
+			
+			/** Used when the move feature button on the edit widget is clicked */
+			public static const MOVEFEATUREXY_BUTTON_CLICKED:String = "editwidget_movefeaturexybuttonclicked";
+
+			/** Used when the explode feature button on the edit widget is clicked */
+			public static const EXPLODEFEATURE_BUTTON_CLICKED:String = "editwidget_explodefeaturebuttonclicked";
+
+			/** Used when the show attributes button on the edit widget is clicked */
+			public static const SHOWATTRIBUTES_BUTTON_CLICKED:String = "editwidget_showattributesbuttonclicked";
+
+			/** Used when the show attributes button on the edit widget is clicked */
+			public static const MERGEFEATURES_BUTTON_CLICKED:String = "editwidget_mergefeaturesbuttonclicked";
+
+			
+			
+			/* LABEL PROPERTIES
+			----------------------------------------------------------------------------------------- */
+			
+			/** Instruction label displayed above the template picker */
+			[Bindable]
+			public static var TemplateSelectionLabel:String =  "Select template to create feature"; 
+			
+			/** Instruction label displayed above the modify tools */
+			[Bindable]
+			public static var ModifyToolsLabel:String =  "Select the feature to modify"; 
+			
+			/** Label displayed on the option button used to toggle the create features mode on */
+			[Bindable]
+			public static var CreateFeaturesOptionLabel:String = "Create Features";
+			
+			/** Label displayed on the option button used to toggle the modify features mode on */
+			[Bindable]
+			public static var ModifyFeaturesOptionLabel:String = "Modify Features";
+			
+			// Custom Tool Labels
+			
+			/** Label displayed on the button used to open the copy features dialog*/
+			[Bindable]
+			public static var CopyFeaturesButtonTooltip:String = "Copy Features";
+			
+			/** Label displayed on the button used to open the create point by xy features dialog*/
+			[Bindable]
+			public static var CreatePointFeatureByXYButtonTooltip:String = "Create Point Feature at XY";
+			
+			/** Label displayed on the button used to open the create circle by xy radius features dialog*/
+			[Bindable]
+			public static var CreateCircleFeatureByXYRadiusButtonTooltip:String = "Create Circle Feature at XY with Radius";
+
+			/** Label displayed on the button used to open the move features by XY dialog*/
+			[Bindable]
+			public static var MoveFeaturesByXYButtonTooltip:String = "Move Features by XY";
+			
+			/** Label displayed on the button used to explode mutipart features */
+			[Bindable]
+			public static var ExplodeFeatureButtonTooltip:String = "Exlode Multipart Feature";
+
+			/** Label displayed on the button used to explode mutipart features */
+			[Bindable]
+			public static var ShowAttributeButtonTooltip:String = "Show Record Details";
+
+			
+
+			
+			/* COMPONENT METHOODS
+			----------------------------------------------------------------------------------------- */
+			
+			/**
+			 * @private
+			 */
+			override protected function commitProperties():void
+			{
+				super.commitProperties();
+				
+				if (hostComponent.toolbarVisible)
+				{
+					if (_createGeometryTypeChanged)
+					{
+						_createGeometryTypeChanged = false;
+						
+						_arrayList = new ArrayList();
+						switch (hostComponent.createGeometryType)
+						{
+							case Geometry.MAPPOINT:
+							case Geometry.MULTIPOINT:
+							{
+								_arrayList.addItem(mapPointIcon);
+								drawDropDownList.dataProvider = _arrayList;
+								break;
+							}
+							case Geometry.POLYLINE:
+							{
+								if (hostComponent.createOptions)
+								{
+									for each (var polylineDrawTool:String in hostComponent.createOptions.polylineDrawTools)
+									{
+										if (polylineDrawTool == DrawTool.POLYLINE)
+										{
+											_arrayList.addItem(pointToPointLineIcon);
+										}
+										if (polylineDrawTool == DrawTool.FREEHAND_POLYLINE)
+										{
+											_arrayList.addItem(freehandLineIcon);
+										}
+										if (polylineDrawTool == DrawTool.LINE)
+										{
+											_arrayList.addItem(lineIcon);
+										}
+									}
+								}
+								else
+								{
+									_arrayList.addItem(pointToPointLineIcon);
+									_arrayList.addItem(freehandLineIcon);
+								}
+								drawDropDownList.dataProvider = _arrayList;
+								break;
+							}
+							case Geometry.POLYGON:
+							{
+								if (hostComponent.createOptions)
+								{
+									for each (var polygonDrawTool:String in hostComponent.createOptions.polygonDrawTools)
+									{
+										if (polygonDrawTool == DrawTool.POLYGON)
+										{
+											_arrayList.addItem(pointToPointPolygonIcon);
+										}
+										if (polygonDrawTool == DrawTool.FREEHAND_POLYGON)
+										{
+											_arrayList.addItem(freehandPolygonIcon);
+										}
+										if (polygonDrawTool == DrawTool.EXTENT)
+										{
+											_arrayList.addItem(extentIcon);
+										}
+										if (polygonDrawTool == CreateOptions.AUTO_COMPLETE)
+										{
+											_arrayList.addItem(autoCompleteIcon);
+										}
+										if (polygonDrawTool == DrawTool.CIRCLE)
+										{
+											_arrayList.addItem(circleIcon);
+										}
+										if (polygonDrawTool == DrawTool.ELLIPSE)
+										{
+											_arrayList.addItem(ellipseIcon);
+										}
+									}
+								}
+								else
+								{
+									_arrayList.addItem(pointToPointPolygonIcon);
+									_arrayList.addItem(freehandPolygonIcon);
+									_arrayList.addItem(autoCompleteIcon);
+									_arrayList.addItem(extentIcon);
+									_arrayList.addItem(circleIcon);
+									_arrayList.addItem(ellipseIcon);
+								}
+								drawDropDownList.dataProvider = _arrayList;
+								break;
+							}
+						}
+					}
+				}
+			}
+			
+			private function fade_effectEndHandler(event:EffectEvent):void
+			{
+				operationCompleteLabel.includeInLayout = false;
+			}
+			
+			private function getNumFeatureLayers(featureLayers:Array):Number
+			{
+				return featureLayers.length; // using this function as the source of data binding expression as the length property of featureLayers(Array) is not bindable
+			}
+			
+
+			/* CUSTOM DRAW BUTTON HANDLERS
+			----------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the copy selection button is clicked by the user
+			 */
+			protected function copySelectionButton_clickHandler(event:MouseEvent):void
+			{	
+				// Dispatch event for widget to pick up.
+				AppEvent.dispatch(COPY_BUTTON_CLICKED);
+			}
+			
+			/**
+			 * Called when the create point by xy button is clicked by the user
+			 */
+			protected function createPointXYButton_clickHandler(event:MouseEvent):void
+			{
+				// Dispatch event for widget to pick up.
+				AppEvent.dispatch(POINTXY_BUTTON_CLICKED);
+			}
+			
+			/**
+			 * Called when the create circle by xy & radius button is clicked by the user
+			 */
+			protected function createCircleXYRadiusButton_clickHandler(event:MouseEvent):void
+			{
+				// Dispatch event for widget to pick up.
+				AppEvent.dispatch(CIRCLEXYRADIUS_BUTTON_CLICKED);
+			}
+
+			/**
+			 * Called when the move feature by xy button is clicked by the user
+			 */
+			protected function moveFeatureByXYButton_clickHandler(event:MouseEvent):void
+			{
+				// Dispatch event for widget to pick up.
+				AppEvent.dispatch(MOVEFEATUREXY_BUTTON_CLICKED);
+			}
+
+			/**
+			 * Called when the explode feature button is clicked by the user
+			 */
+			protected function explodeButton_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch(EXPLODEFEATURE_BUTTON_CLICKED);
+			}
+			
+			/**
+			 * Called when the show attributes button is clicked by the user
+			 */
+			protected function showAttributesButton_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch(SHOWATTRIBUTES_BUTTON_CLICKED);
+			}
+
+			/**
+			 * Called when the merge button is clicked by the user
+			 */
+			protected function mergeButton_clickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch(MERGEFEATURES_BUTTON_CLICKED);
+			}
+			
+			/**
+			 * Called when the selected template in the template picker changes.
+			 */
+			protected function templatePicker_selectedTemplateChangeHandler(event:TemplatePickerEvent):void
+			{
+				if (event.selectedTemplate)
+				{
+					templateGeometryType = event.selectedTemplate.featureLayer.layerDetails.geometryType;
+				}
+				else
+				{
+					// Reset the geometry type
+					templateGeometryType = null;
+				}
+			}
+			
+			protected function stateChangeCompleteHandler(event:FlexEvent):void
+			{
+				if (this.currentState == "featuresSelected")
+				{
+					optionsTabBar.selectedIndex = (optionsTabBar.dataProvider as ArrayCollection).getItemIndex(ModifyFeaturesOptionLabel);
+				}
+			}
+						
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Fade Effect -->
+		<!--- @private -->
+		<s:Fade id="fade"
+				alphaFrom="1"
+				alphaTo="0"
+				duration="1500"
+				effectEnd="fade_effectEndHandler(event)"/>
+		<!-- Icon for point drawing -->
+		<!--- @private -->
+		<fx:Object id="mapPointIcon"
+				   drawId="mappoint"
+				   icon="@Embed('assets/skins/ElementMarker16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointLabel')}"/>
+		
+		<!-- Icons for polyline drawing -->
+		<!--- @private -->
+		<fx:Object id="pointToPointLineIcon"
+				   drawId="pointToPointLine"
+				   icon="@Embed('assets/skins/ElementPolyline16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="freehandLineIcon"
+				   drawId="freehandLine"
+				   icon="@Embed('assets/skins/ElementFreehand16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateFreehandLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="lineIcon"
+				   drawId="line"
+				   icon="@Embed('assets/skins/ElementLine16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateLineLabel')}"/>
+		
+		<!-- Icons for polygon drawing -->
+		<!--- @private -->
+		<fx:Object id="pointToPointPolygonIcon"
+				   drawId="pointToPointPolygon"
+				   icon="@Embed('assets/skins/EditingPolygonTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="freehandPolygonIcon"
+				   drawId="freehandPolygon"
+				   icon="@Embed('assets/skins/FreehandPolygon_16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateFreehandLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="extentIcon"
+				   drawId="extent"
+				   icon="@Embed('assets/skins/EditingExtent_16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateExtentLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="circleIcon"
+				   drawId="circle"
+				   icon="@Embed('assets/skins/EditingCircleTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateCircleLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="ellipseIcon"
+				   drawId="ellipse"
+				   icon="@Embed('assets/skins/EditingEllipseTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateEllipseLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="autoCompleteIcon"
+				   drawId="autoComplete"
+				   icon="@Embed('assets/skins/EditingAutoCompletePolygonTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateAutoCompleteLabel')}"/>
+	</fx:Declarations>
+	
+	<s:HGroup id="menuContainer" width="100%" paddingBottom="5"  >
+		
+		<s:TabBar id="optionsTabBar" 
+				  width="100%" 
+				  height="40" 
+				  buttonMode="true"
+				  useHandCursor="true" >
+			<s:ArrayCollection>
+				<fx:String>{CreateFeaturesOptionLabel}</fx:String>
+				<fx:String>{ModifyFeaturesOptionLabel}</fx:String>
+			</s:ArrayCollection>
+		</s:TabBar>
+		
+	</s:HGroup>
+	
+	<!--- Create Tools Group -->
+	<s:Group width="100%" height="100%" id="createToolsGroup" 
+			 visible="{optionsTabBar.selectedItem == CreateFeaturesOptionLabel }"
+			 includeInLayout="{optionsTabBar.selectedItem == CreateFeaturesOptionLabel }" >
+		<s:layout>
+			<s:VerticalLayout gap="3" />			
+		</s:layout>
+		
+		<!--- Template Selection Instruction Label -->
+		<s:Label width="100%" 
+				 text="{TemplateSelectionLabel}" 
+				 visible="{TemplateSelectionLabel.length &gt; 0}" 
+				 includeInLayout="{TemplateSelectionLabel.length &gt; 0}"
+				 paddingBottom="5" />
+		
+		<!--- Template Picker section -->
+		<s:Scroller width="100%" height="100%"
+					focusEnabled="false"
+					hasFocusableChildren="true"
+					horizontalScrollPolicy="auto"
+					verticalScrollPolicy="auto">
+			<s:HGroup>
+				<!--- TemplatePicker to display and pick feature templates. -->
+				<components:TemplatePicker id="templatePicker"
+										   width="100%"
+										   left="0" top="0"
+										   visible="true"
+										   selectedTemplateChange="templatePicker_selectedTemplateChangeHandler(event)" />
+			</s:HGroup>
+		</s:Scroller>
+		
+	</s:Group>
+	
+	<!--- Modify Tools Group -->
+	<s:Group width="100%" height="100%" id="modifyToolsGroup" 
+			 visible="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+			 includeInLayout="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}" >
+		<s:layout>
+			<s:VerticalLayout gap="3" />			
+		</s:layout>
+		
+		<!--- Modify Tools Instruction Label -->
+		<s:Label width="100%" 
+				 text="{ModifyToolsLabel}" 
+				 visible="{ModifyToolsLabel.length &gt; 0}" 
+				 includeInLayout="{ModifyToolsLabel.length &gt; 0}"
+				 paddingBottom="5" />
+		
+	</s:Group>
+	
+	<s:Group width="100%" height="55"
+			 horizontalCenter="0"
+			 includeInLayout="{hostComponent.toolbarVisible}"
+			 verticalCenter="0"
+			 visible="{hostComponent.toolbarVisible}">
+		<s:layout>
+			<supportClasses:FlowLayout/>
+		</s:layout>
+		
+		<!--- /* Create Feature Tools */ -->
+		
+		<!--- DropDownList for different feature creation options. The options are based on FeatureTemplate selected from TemplatePicker. -->
+		<s:DropDownList id="drawDropDownList"
+						width="40" height="25"
+						enabled.applyingEdits="false"
+						enabled.featuresSelected="false"
+						enabled.normal="false"
+						enabled.templateSelected="true"
+						excludeFrom="toolbarNotVisible"
+						includeInLayout="{hostComponent.toolbarVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel }"
+						itemRenderer="com.esri.ags.skins.supportClasses.EditorDropDownListItemRenderer"
+						skinClass="com.esri.ags.skins.EditorDrawDropDownListSkin"
+						toolTip="{resourceManager.getString('ESRIMessages', 'editorCreateOptionsTooltip')}"
+						visible="{hostComponent.toolbarVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel }"
+						buttonMode="true"
+						useHandCursor="true" />
+		
+		<!--- Button for creating a point at XY using the current selected template. -->
+		<s:Button id="createPointXYButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="false"
+				  enabled.normal="false"
+				  enabled.templateSelected="{templateGeometryType == Geometry.MAPPOINT}"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorCreatePointXYButtonSkin"
+				  toolTip="{CreatePointFeatureByXYButtonTooltip}"
+				  visible="{createPointXYVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}"
+				  includeInLayout="{createPointXYVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}" 
+				  click="createPointXYButton_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button for creating a circle at XY of radius using the current selected template. -->
+		<s:Button id="createCircleXYRadiusButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="false"
+				  enabled.normal="false"
+				  enabled.templateSelected="{templateGeometryType == Geometry.POLYGON}"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorCreateCircleXYRadiusButtonSkin"
+				  toolTip="{CreateCircleFeatureByXYRadiusButtonTooltip}"
+				  visible="{createCircleXYRadiusVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}"
+				  includeInLayout="{createCircleXYRadiusVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}" 
+				  click="createCircleXYRadiusButton_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button for createing a copy of an existing feature using the current selected template. -->
+		<s:Button id="copySelectionButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="false"
+				  enabled.normal="false"
+				  enabled.templateSelected="true"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorCopySelectionButtonSkin"
+				  toolTip="{CopyFeaturesButtonTooltip}"
+				  visible="{copyFeaturesVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}"
+				  includeInLayout="{copyFeaturesVisible &amp;&amp; optionsTabBar.selectedItem == CreateFeaturesOptionLabel}" 
+				  click="copySelectionButton_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- /* End of Create Feature Tools */ -->
+		
+		
+		<!--- /* Modifiy Feature Tools */ -->
+		
+		<!--- DropDownList for different selection options (new, add, subtract). -->
+		<s:DropDownList id="selectionDropDownList"
+						width="40" height="25"
+						enabled.applyingEdits="false"
+						enabled.normal="true"
+						enabled.templateSelected="false"
+						excludeFrom="toolbarNotVisible"
+						itemRenderer="com.esri.ags.skins.supportClasses.EditorDropDownListItemRenderer"
+						labelField="label"
+						skinClass="com.esri.ags.skins.EditorSelectionDropDownListSkin"
+						toolTip="{resourceManager.getString('ESRIMessages', 'editorSelectionTooltip')}"
+						visible="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						includeInLayout="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						buttonMode="true"
+						useHandCursor="true" >
+			<s:dataProvider>
+				<s:ArrayList>
+					<fx:Object icon="@Embed('assets/skins/NewSelection.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorNewSelectionLabel')}"
+							   selectionName="newSelection"/>
+					<fx:Object icon="@Embed('assets/skins/AddToSelection.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorAddSelectionLabel')}"
+							   selectionName="addToSelection"/>
+					<fx:Object icon="@Embed('assets/skins/RemoveFromSelection.png')"
+							   label="{resourceManager.getString('ESRIMessages', 'editorSubtractSelectionLabel')}"
+							   selectionName="subtractFromSelection"/>
+				</s:ArrayList>
+			</s:dataProvider>
+		</s:DropDownList>
+		
+		<!--- Button for clearing the current selected features. -->
+		<s:Button id="clearSelectionButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="true"
+				  enabled.normal="false"
+				  enabled.templateSelected="false"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="com.esri.ags.skins.EditorClearSelectionButtonSkin"
+				  toolTip="{resourceManager.getString('ESRIMessages', 'editorClearSelectionTooltip')}"
+				  visible="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  includeInLayout="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button for deleting the current selected features. -->
+		<s:Button id="deleteButton"
+				  width="40" height="25"
+				  enabled="false"
+				  excludeFrom="toolbarNotVisible"
+				  includeInLayout="{hostComponent.toolbarVisible &amp;&amp; 
+				  hostComponent.deleteEnabled &amp;&amp; 
+				  optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  skinClass="com.esri.ags.skins.EditorDeleteButtonSkin"
+				  toolTip="{resourceManager.getString('ESRIMessages', 'editorDeleteTooltip')}"
+				  visible="{hostComponent.toolbarVisible &amp;&amp; hostComponent.deleteEnabled 
+				  &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button to perform cut(split) operation on polylines or polygons. -->
+		<s:ToggleButton id="cutButton"
+						width="40" height="25"
+						enabled="{hostComponent.updateGeometryEnabled &amp;&amp; getNumFeatureLayers(hostComponent.featureLayers) &gt; 0}"
+						enabled.applyingEdits="false"
+						enabled.templateSelected="false"
+						excludeFrom="toolbarNotVisible"
+						includeInLayout="{hostComponent.toolbarVisible  &amp;&amp; hostComponent.toolbarCutVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						skinClass="com.esri.ags.skins.EditorCutButtonSkin"
+						toolTip="{resourceManager.getString('ESRIMessages', 'editorCutTooltip')}"
+						visible="{hostComponent.toolbarVisible &amp;&amp; hostComponent.toolbarCutVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						buttonMode="true"
+						useHandCursor="true" />
+		
+		<!--- Button to perform merge operation on selected polygons. -->
+		<s:Button id="mergeButton"
+				  width="40" height="25"
+				  enabled="false"
+				  excludeFrom="toolbarNotVisible"
+				  includeInLayout="{hostComponent.toolbarVisible  &amp;&amp; hostComponent.toolbarMergeVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  skinClass="com.esri.ags.skins.EditorMergeButtonSkin"
+				  toolTip="{resourceManager.getString('ESRIMessages', 'editorMergeTooltip')}"
+				  visible="{hostComponent.toolbarVisible &amp;&amp; hostComponent.toolbarMergeVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  click="mergeButton_clickHandler(event)" 
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button to perform explode operation on selected polygons. -->
+		<s:Button id="explodeButton"
+				  width="40" height="25"
+				  enabled="false"
+				  enabled.featuresSelected="true"
+				  excludeFrom="toolbarNotVisible"
+				  includeInLayout="{hostComponent.toolbarVisible  &amp;&amp; explodeFeatureToolVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorExplodeFeatureButtonSkin"
+				  toolTip="{ExplodeFeatureButtonTooltip}"
+				  visible="{hostComponent.toolbarVisible &amp;&amp; explodeFeatureToolVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  buttonMode="true"
+				  useHandCursor="true"
+				  click="explodeButton_clickHandler(event)" />
+		
+		<!--- Button to perform reshape operation on selected polyline or polygon. -->
+		<s:ToggleButton id="reshapeButton"
+						width="40" height="25"
+						enabled="false"
+						excludeFrom="toolbarNotVisible"
+						includeInLayout="{hostComponent.toolbarVisible  &amp;&amp; hostComponent.toolbarReshapeVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						skinClass="com.esri.ags.skins.EditorReshapeButtonSkin"
+						toolTip="{resourceManager.getString('ESRIMessages', 'editorReshapeTooltip')}"
+						visible="{hostComponent.toolbarVisible &amp;&amp; hostComponent.toolbarReshapeVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+						buttonMode="true"
+						useHandCursor="true" />
+		
+		<!--- Button for moving the feature by an XY offset. -->
+		<s:Button id="moveFeatureByXYButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="true"
+				  enabled.normal="false"
+				  enabled.templateSelected="false"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorMoveFeatureByXYButtonSkin"
+				  toolTip="{MoveFeaturesByXYButtonTooltip}"
+				  visible="{moveFeatureXYToolVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  includeInLayout="{moveFeatureXYToolVisible &amp;&amp; optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}" 
+				  click="moveFeatureByXYButton_clickHandler(event)"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button for showAttributes of selected features. -->
+		<s:Button id="showAttributesButton"
+				  width="40" height="25"
+				  enabled.applyingEdits="false"
+				  enabled.featuresSelected="true"
+				  enabled.normal="false"
+				  enabled.templateSelected="false"
+				  excludeFrom="toolbarNotVisible"
+				  skinClass="widgets.EditEnhanced.skins.EditWidgetEditorAttributesButtonSkin"
+				  toolTip="{ShowAttributeButtonTooltip}"
+				  visible="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  includeInLayout="{optionsTabBar.selectedItem == ModifyFeaturesOptionLabel}"
+				  click="showAttributesButton_clickHandler(event)" 
+				  buttonMode="true"
+				  useHandCursor="true" />
+
+		
+		<!--- /* End of Modify Feature Tools */ -->
+		
+		
+		<!--- /* Common Tools */ -->
+		
+		<!--- Button to undo an operation. -->
+		<s:Button id="undoButton"
+				  width="40" height="25"
+				  excludeFrom="toolbarNotVisible"
+				  includeInLayout="{hostComponent.undoAndRedoItemLimit &gt; 0}"
+				  skinClass="com.esri.ags.skins.EditorUndoButtonSkin"
+				  toolTip="{resourceManager.getString('ESRIMessages', 'editorUndoTooltip')}"
+				  visible="{hostComponent.undoAndRedoItemLimit &gt; 0}"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- Button to redo an operation. -->
+		<s:Button id="redoButton"
+				  width="40" height="25"
+				  excludeFrom="toolbarNotVisible"
+				  includeInLayout="{hostComponent.undoAndRedoItemLimit &gt; 0}"
+				  skinClass="com.esri.ags.skins.EditorRedoButtonSkin"
+				  toolTip="{resourceManager.getString('ESRIMessages', 'editorRedoTooltip')}"
+				  visible="{hostComponent.undoAndRedoItemLimit &gt; 0}"
+				  buttonMode="true"
+				  useHandCursor="true" />
+		
+		<!--- /* End of Modify Feature Tools */ -->
+		
+	</s:Group>
+	
+	<!--- @private -->
+	<s:HGroup width="100%"
+			  includeInLayout="false"
+			  includeInLayout.applyingEdits="true"
+			  verticalAlign="middle"
+			  visible="false"
+			  visible.applyingEdits="true">
+		<mx:SWFLoader source="{loader}"/>
+		<!--- Label shown when operation starts. -->
+		<s:Label id="operationStartLabel" width="100%"/>
+	</s:HGroup>
+	<!--- Label shown when operation completes. -->
+	<s:Label id="operationCompleteLabel"
+			 width="100%"
+			 hideEffect="{fade}"
+			 includeInLayout="false"
+			 visible="false"/>
+</s:SparkSkin>

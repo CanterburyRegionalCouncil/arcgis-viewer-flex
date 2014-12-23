@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>widgets/CoordinateCapture/assets/images/icon.png</icon>
+	<label>Coordinate Capture Widget</label>
+	<description>Allows user to capture the coordinates of a point in the map in one of 3 coordinate systems: NZMG, NZTM or WGS 1984 Latitude/Longitude.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/CoordinateCapture/README.md</helpurl>
+</configuration>

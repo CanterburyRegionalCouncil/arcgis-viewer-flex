@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx=					"http://ns.adobe.com/mxml/2009" 
+				xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				xmlns:mx=					"library://ns.adobe.com/flex/mx" 
+				autoDrawBackground=			"true"
+				doubleClickEnabled=			"true" 
+				mouseChildren=				"true" 
+				dataChange=					"dataChangeHandler(event)" 
+				doubleClick=				"doubleClickHandler(event)" >
+	<fx:Script>
+		<![CDATA[
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			public static const LOADWORKSPACE_BY_ID_EVENT:String 		= "Workspace_Widget_LoadWorkspaceByID";
+			public static const LOADWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_LoadWorkspaceByObject";
+			public static const DELETEWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_DeleteWorkspaceByObject";
+			public static const EDITWORKSPACE_BY_OBJECT_EVENT:String 	= "Workspace_Widget_EditWorkspaceByObject";
+
+			
+			[Bindable]
+			/** Map Services list */
+			private var _mapServices:ArrayCollection;
+
+			
+			
+			/* SHOW WORKSPACE CONTENTS PROPERTY
+			---------------------------------------------------------- */
+			
+			[Bindable]
+			public static var ShowWorkspaceContents:Boolean = true;
+			
+			
+			
+			/**
+			 * Called when the item renderer's data object changes 
+			 */
+			protected function dataChangeHandler(event:FlexEvent):void
+			{
+				if(data)
+				{
+					// Set the workspace title label text
+					titleLabel.text = data.Title;
+					
+					// Set the description for the selected state details
+					workspaceContents.text = data.Description;
+					
+					// Set the mapservice content details
+					_mapServices = new ArrayCollection(data.MapServices);
+					_mapServices.filterFunction = filterLayers;
+					_mapServices.refresh();
+					
+					// Set the extent text
+					workspaceExtentXmin.text = "Left: " + data.MapExtent[0].toString();
+					workspaceExtentXmax.text = "Right: " + data.MapExtent[2].toString();
+					workspaceExtentYmin.text = "Top: " + data.MapExtent[3].toString();
+					workspaceExtentYmax.text = "Bottom: " + data.MapExtent[1].toString();
+					
+					// Set the status text
+					workspaceCreatedDate.text = "Created Date: " + _displayDateFormatter.format(data.CreatedTime);
+					workspaceModifiedDate.text = "Last Modified: " + _displayDateFormatter.format(data.LastModified);
+					
+					// Update the graphics present image flag visibity
+					var showGraphics:Boolean = data.GraphicLayers && data.GraphicLayers.some(graphicLayerHasItems);
+					graphicsPresentImage.visible = showGraphics;
+					graphicsPresentImage.includeInLayout = showGraphics;
+				}
+				else
+				{
+					titleLabel.text = "";
+					workspaceContents.text = "";
+					_mapServices = new ArrayCollection();
+					workspaceExtentXmin.text = "";
+					workspaceExtentXmax.text = "";
+					workspaceExtentYmin.text = "";
+					workspaceExtentYmax.text = "";
+					graphicsPresentImage.visible = graphicsPresentImage.includeInLayout = false;
+				}
+			}
+			
+			/**
+			 * Called when the workspace item is doubled clicked.
+			 */
+			protected function doubleClickHandler(event:MouseEvent):void
+			{
+				AppEvent.dispatch(LOADWORKSPACE_BY_OBJECT_EVENT, data);
+			}
+			
+			/* DATA FUNCTIONS
+			--------------------------------------------------------------------------------- */
+			
+			/**
+			 * Filter function uses to hide "hidden" layers from the list of layers in the data grid.
+			 */
+			private function filterLayers(item:Object):Boolean
+			{
+				return item.name.indexOf("hidden") == -1; 
+			}
+			
+			/**
+			 * Function generates the tool tip to display on the workspace item.
+			 */
+			private function dataToolTip(data:Object, displayDateFormatter:DateTimeFormatter):String
+			{
+				var toolTip:String = "";
+				
+				// Append description info
+				if (data.Description && data.Description.length > 0)
+				{
+					toolTip = data.Description + "\n";
+				}
+				
+				// Append creation date
+				toolTip += "Created: " + displayDateFormatter.format(data.CreatedTime) + "\n";
+				
+				// Append last modified date
+				toolTip += "Last Modified: " + displayDateFormatter.format(data.LastModified);
+				
+				return toolTip;
+			}
+			
+			/**
+			 * Called when the delete workspace button is clicked.
+			 */
+			protected function deleteIcon_clickHandler(event:MouseEvent):void
+			{
+				// Stop the click from propergating to the list item
+				event.preventDefault();
+				
+				// Raise the delete event
+				AppEvent.dispatch(WorkspaceWidget.DELETEWORKSPACE_BY_OBJECT_EVENT, data);
+			}
+			
+			/**
+			 * Called when the edit workspace button is clicked.
+			 */
+			protected function editIcon_clickHandler(event:MouseEvent):void
+			{
+				// Stop the click from propergating to the list item
+				event.preventDefault();
+				
+				// Raise the delete event
+				AppEvent.dispatch(WorkspaceWidget.EDITWORKSPACE_BY_OBJECT_EVENT, data);
+			}
+			
+			/**
+			 * Determines whether the workspace contains any saved graphic elements.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>element [Object]: </i>Workspace node item that contains the workspace settings.</li>
+			 * </ul>
+			 * </p>
+			 */
+			protected function graphicLayerHasItems(element:*, index:int, arr:Array):Boolean 
+			{
+				if (element != null 
+					&& element.hasOwnProperty("graphics")
+					&& element.graphics != null
+					&& element.graphics is Array
+					&& element.graphics.length > 0)
+				{
+					return true;
+				}
+				return false;
+			}
+		]]>
+	</fx:Script>
+	
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="hovered" />
+		<s:State name="selected" />
+	</s:states>
+	
+	<fx:Declarations>
+		<s:DateTimeFormatter id="_displayDateFormatter" dateTimePattern="DD MMM YYYY" />
+	</fx:Declarations>
+	
+	<s:Group width="100%" >
+		<s:layout>
+			<s:VerticalLayout gap="2" />
+		</s:layout>
+		
+		<s:HGroup height="100%"
+				  horizontalAlign="center"
+				  paddingBottom="2"
+				  paddingTop="2"
+				  verticalAlign="middle"
+				  width="100%" 
+				  paddingRight="5" >	
+			
+			<!--- Workspace description text -->
+			<s:Label id="titleLabel" 
+					 toolTip="{dataToolTip(data,_displayDateFormatter)}"
+					 width="100%"
+					 paddingLeft="5" verticalAlign="middle" 
+					 fontWeight.selected="bold"
+					 color.selected="0xffffff" />
+			
+			<!--- Flag for presence of graphics within the workspace -->
+			<s:Image id="graphicsPresentImage" 
+					 height="20"
+					 source="@Embed(source='widgets/Workspace/assets/images/i_draw.png')"
+					 toolTip="This workspace contains drawn graphics"
+					 verticalCenter="0"
+					 width="20" />
+			
+			<!--- Edit workspace settings button -->
+			<s:Image 
+				click="editIcon_clickHandler(event)"
+				height="20"
+				source="@Embed(source='widgets/Workspace/assets/images/i_table.png')"
+				toolTip="Click to edit the name and description of this workspace"
+				verticalCenter="0"
+				width="20" 
+				buttonMode="true"
+				useHandCursor="true" />
+			
+			<!--- Delete workspace button -->
+			<s:Image id="deleteIcon" click="deleteIcon_clickHandler(event)"
+					 height="20"
+					 source="@Embed(source='widgets/Workspace/assets/images/w_close_red.png')"
+					 toolTip="Click to delete this workspace"
+					 verticalCenter="0"
+					 width="20" 
+					 buttonMode="true"
+					 useHandCursor="true" />
+			
+		</s:HGroup>
+		
+		<s:Group 
+				 width="100%" 
+				 visible="false" 
+				 visible.selected="{ShowWorkspaceContents}"
+				 includeInLayout="false"
+				 includeInLayout.selected="{ShowWorkspaceContents}" >
+			
+			<s:layout>
+				<s:VerticalLayout gap="5" paddingLeft="5" paddingRight="5" paddingBottom="5" />
+			</s:layout>
+			
+			<s:Label id="workspaceContents" width="100%" color="0xffffff" />
+			
+			<s:DataGrid id="workspaceLayers" width="100%" resizableColumns="false" dataProvider="{_mapServices}" sortableColumns="false" >
+				<s:columns>
+					<s:ArrayList>
+						<s:GridColumn dataField="name" headerText="Layer Group"  />
+						<s:GridColumn dataField="visible" headerText="Visible" width="60"  />
+						<s:GridColumn dataField="MapServiceLayerType" headerText="Layer Type" />
+						<s:GridColumn dataField="visiblelayers" headerText="Visible Sublayers">
+							<s:itemRenderer>
+								<fx:Component>
+									<s:GridItemRenderer dataChange="dataChangeHandler(event)">
+										<fx:Script>
+											<![CDATA[
+												import mx.collections.ArrayCollection;
+												import mx.events.FlexEvent;
+												
+												protected function dataChangeHandler(event:FlexEvent):void
+												{
+													if (data != null && data.visibleLayers != null && data.visibleLayers.length > 0) {
+														var str:String = (data.visibleLayers.source as Array).join(",");
+														layers.text = str;
+													}
+													else {
+														layers.text = "";
+													}
+												}
+												
+											]]>
+										</fx:Script>
+										<s:Label id="layers" width="100%" height="100%" verticalAlign="middle" paddingLeft="5" paddingRight="5" />
+									</s:GridItemRenderer>
+								</fx:Component>
+							</s:itemRenderer>
+						</s:GridColumn>
+						<s:GridColumn dataField="url" headerText="" width="30" >
+							<s:itemRenderer>
+								<fx:Component>
+									<s:GridItemRenderer verticalCenter="0" horizontalCenter="0" >
+										<s:layout>
+											<s:HorizontalLayout verticalAlign="middle" horizontalAlign="center" />
+										</s:layout>
+										<fx:Script>
+											<![CDATA[
+												protected function linkbutton1_clickHandler(event:MouseEvent):void
+												{
+													navigateToURL(new URLRequest(data.url),"_blank");
+												}
+											]]>
+										</fx:Script>
+										
+										<s:Image 
+											click="linkbutton1_clickHandler(event)"
+											height="20"
+											source="@Embed(source='widgets/Workspace/assets/images/i_table.png')"
+											toolTip="Click to view group contents"
+											verticalCenter="0"
+											width="20" 
+											buttonMode="true"
+											useHandCursor="true" />
+									</s:GridItemRenderer>
+								</fx:Component>
+							</s:itemRenderer>
+						</s:GridColumn>
+					</s:ArrayList>
+				</s:columns>
+			</s:DataGrid>
+			
+			<s:HGroup width="100%">
+				<s:VGroup width="50%" gap="5">
+					<s:Label id="workspaceExtentLabel" width="100%" color="0xffffff" fontWeight="bold" text="Visible Extent" />
+					<s:Label id="workspaceExtentXmin" width="100%" color="0xffffff" />
+					<s:Label id="workspaceExtentXmax" width="100%" color="0xffffff" />
+					<s:Label id="workspaceExtentYmin" width="100%" color="0xffffff" />
+					<s:Label id="workspaceExtentYmax" width="100%" color="0xffffff" />
+				</s:VGroup>
+
+				<s:VGroup width="50%" gap="5">
+					<s:Label id="workspaceDetailsLabel" width="100%" color="0xffffff" fontWeight="bold" text="Status Details" />
+					<s:Label id="workspaceCreatedDate" width="100%" color="0xffffff" />
+					<s:Label id="workspaceModifiedDate" width="100%" color="0xffffff" />
+				</s:VGroup>
+			</s:HGroup>
+
+		</s:Group>
+	</s:Group>
+	
+</s:ItemRenderer>

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				xmlns:s=				"library://ns.adobe.com/flex/spark" 
+				xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				xmlns:HeaderController=	"widgets.HeaderControllerEnhanced.components.*"
+				width=					"100%"
+				autoDrawBackground=		"true"
+				buttonMode=				"true"
+				click=					"itemrenderer_clickHandler(event)"
+				dataChange=				"itemrenderer_dataChangeHandler(event)"
+				focusEnabled=			"true"
+				implements=				"mx.managers.IFocusManagerComponent"				
+				minHeight=				"30"
+				useHandCursor=			"true" >
+	
+	<fx:Script>
+		<![CDATA[
+			import widgets.HeaderControllerEnhanced.components.*;
+			import widgets.HeaderControllerEnhanced.components.supportClasses.*;	
+			
+			import flashx.textLayout.formats.TextAlign;
+			import flash.text.engine.FontWeight;
+			
+			import mx.events.EffectEvent;
+			import mx.events.FlexEvent;
+			
+			
+			private const LINK_ITEM_CLICK:String = "linkItemClick";
+			private const LINK_ITEM_MOUSE_OVER:String = "linkItemMouseOver";
+			private const LINK_ITEM_MOUSE_OUT:String = "linkItemMouseOut";
+			
+			[Bindable]
+			private var linkItem:LinkItem;
+
+			// Path to icons used in widget menu.
+			[Bindable]
+			private var ICON_URL:String = "assets/images/"; 
+			
+			private function itemrenderer_dataChangeHandler(event:FlexEvent):void
+			{
+				linkItem = data as LinkItem;
+				
+				// Set the icon image
+				icon.source = ICON_URL + linkItem.icon;
+					
+				// set style on the label
+				linkLabel.setStyle("textAlign", TextAlign.CENTER);
+				linkLabel.text = linkItem.label;
+				
+				if (linkItem.bold)
+					linkLabel.setStyle("fontWeight",FontWeight.BOLD);
+				
+				// Set the tooltip on the label
+				linkLabel.toolTip = linkItem.tooltip;
+			}
+			
+			private function mouseOutHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new Event(LINK_ITEM_MOUSE_OUT, true)); // bubbles
+			}
+			
+			private function mouseOverHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new Event(LINK_ITEM_MOUSE_OVER, true)); // bubbles
+			}
+			
+			private function itemrenderer_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new Event(LINK_ITEM_CLICK, true)); // bubbles
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:states>
+		<s:State name="normal"/>
+		<s:State name="hovered"/>
+	</s:states>
+	
+	<!-- border/background rectangle -->
+	<s:Rect left="0" right="0" top="0" bottom="0"
+			radiusX="4"
+			radiusY="4">
+		<s:fill>
+			<s:SolidColor alpha="0.3"
+						  alpha.hovered="0.8"
+						  color.hovered="{getStyle('rollOverColor')}"
+						  color.normal="{getStyle('contentBackgroundColor')}"/>
+		</s:fill>
+	</s:Rect>
+	
+	<s:VGroup width="100%" height="100%">
+		<s:HGroup width="100%" height="30"
+				  buttonMode="true"
+				  paddingLeft="10"
+				  paddingTop="10"
+				  useHandCursor="true"
+				  verticalAlign="middle" >
+			<s:VGroup width="25" height="30"
+					  horizontalAlign="center" >
+				<s:Image id="icon"
+						 width="25" height="25"
+						 smooth="true" />
+				<HeaderController:WidgetUnderline id="underline"/>
+			</s:VGroup>
+			<s:Label id="linkLabel"
+					 width="100%"
+					 color="{getStyle('color')}"
+					 maxDisplayedLines="3"
+					 showTruncationTip="true"  />
+		</s:HGroup>
+		<s:Line width="100%">
+			<s:stroke>
+				<s:SolidColorStroke alpha="0.3"
+									caps="square"
+									color="#C4CCCC"
+									weight="2"/>
+			</s:stroke>
+		</s:Line>
+	</s:VGroup>
+	
+</s:ItemRenderer>

@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				xmlns:s=				"library://ns.adobe.com/flex/spark" 
+				xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				xmlns:sc=				"widgets.SearchEnhanced.supportClasses.*"
+				autoDrawBackground=		"false"
+				autoLayout=				"true"
+				blendMode=				"normal"
+				minHeight=				"0"
+				dataChange=				"itemrenderer_dataChangeHandler(event)"
+				visible=				"{_showItem}"
+				includeInLayout=		"{_showItem}" >
+	<fx:Script>
+		<![CDATA[
+			import com.esri.viewer.AppEvent;
+			
+			import mx.binding.utils.*;
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import widgets.SearchEnhanced.supportClasses.ResultItem;
+			
+			[Bindable]
+			private var _showItem:Boolean = false;
+
+			[Bindable]
+			private var _showResults:Boolean = true;
+			
+			// UI variables
+			[Bindable]
+			private var _panelTitle:String = "";
+			
+			[Bindable]
+			private var _searchResults:ArrayCollection = new ArrayCollection();
+			private var _searchLayer:SearchLayer;
+			
+			
+			protected function itemrenderer_dataChangeHandler(event:FlexEvent):void
+			{
+				// Clear the event handlers
+				if (_searchLayer)
+				{
+					AppEvent.removeListener(SearchLayer.RESULT_LAYER_UPDATED, searchLayer_UpdateHandler);
+					AppEvent.removeListener(SearchLayer.QUERY_NORESULT, searchLayer_UpdateHandler);
+					AppEvent.removeListener(SearchLayer.RESULT_LAYER_CLEARED, searchLayer_ClearHandler);
+					AppEvent.removeListener(SearchLayer.QUERY_FAULT, searchLayer_ClearHandler);
+				}
+				
+				_searchLayer = data as SearchLayer;
+
+				// Apply the event handlers
+				if (_searchLayer)
+				{
+					AppEvent.addListener(SearchLayer.RESULT_LAYER_UPDATED, searchLayer_UpdateHandler);
+					AppEvent.addListener(SearchLayer.QUERY_NORESULT, searchLayer_UpdateHandler);
+					AppEvent.addListener(SearchLayer.RESULT_LAYER_CLEARED, searchLayer_ClearHandler);
+					AppEvent.addListener(SearchLayer.QUERY_FAULT, searchLayer_ClearHandler);
+				}
+
+				// Update the results
+				updateResults(null);
+			}
+			
+			private function updateResults(event:Event):void
+			{
+				_searchResults = _searchLayer.searchResults;
+			
+				// Update the panel title
+				setPanelTitle();
+
+				// Update the visibility status
+				setVisibilityState();
+			}
+			
+			private function setVisibilityState():void
+			{
+				if (_searchResults.length > 0)
+				{
+					_showItem = true;
+				}
+				else
+				{
+					_showItem = false;
+				}
+			}
+			
+			/** 
+			 * Function that updates the title as displayed in the heading bar
+			 */ 
+			private function setPanelTitle():void
+			{
+				// Confirm there are search layer settings
+				if (_searchLayer)
+				{	
+					_panelTitle = _searchLayer.label;
+					if (_searchLayer.layer && _searchResults)
+					{
+						_panelTitle += " (" + _searchResults.length.toString() + " features selected)";
+					}
+				}
+				else 
+				{
+					_panelTitle = "";
+				}
+			}
+			
+			private function searchLayer_UpdateHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				if (searchLayer == _searchLayer)
+				{
+					updateResults(null);
+				}
+			}
+
+			private function searchLayer_ClearHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				if (searchLayer == _searchLayer)
+				{
+					_searchResults = new ArrayCollection();
+					setVisibilityState();
+				}
+			}
+
+			/**
+			 * Called when the remove record icon on the result item renderer is clicked.
+			 */ 
+			protected function searchResultRemoveHandler(event:Event):void
+			{
+				// Get the searchResult where the remove icon was clicked
+				var searchResult:ResultItem = ItemRenderer(event.target).data as ResultItem;
+								
+				// Remove this record
+				_searchLayer.clearSelectedRecord(searchResult.graphic);
+			}
+			
+			protected function searchResultClickHandler(event:Event):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			
+			protected function searchResultDoubleClickHandler(event:Event):void
+			{
+				// Get the searchResult where the remove icon was clicked
+				var searchResult:ResultItem = ItemRenderer(event.target).data as ResultItem;
+				
+				// Dispatch call to highlight the record.
+				AppEvent.dispatch(SearchLayer.RECORD_DOUBLECLICK, { searchLayer: _searchLayer, resultItem: searchResult });
+			}
+			
+			protected function searchResultMouseOverHandler(event:Event):void
+			{
+				// Get the searchResult where the remove icon was clicked
+				var searchResult:ResultItem = ItemRenderer(event.target).data as ResultItem;
+
+				// Dispatch call to highlight the record.
+				AppEvent.dispatch(SearchLayer.RECORD_APPLY_HIGHLIGHT, { searchLayer: _searchLayer, resultItem: searchResult });
+			}
+			
+			protected function searchResultMouseOutHandler(event:Event):void
+			{
+				// Get the searchResult where the remove icon was clicked
+				var searchResult:ResultItem = ItemRenderer(event.target).data as ResultItem;
+				
+				// Dispatch call to highlight the record.
+				AppEvent.dispatch(SearchLayer.RECORD_REMOVE_HIGHLIGHT, { searchLayer: _searchLayer, resultItem: searchResult });
+			}
+			
+			/**
+			 * Used to toggle the display state of the results so that they can be hidden away
+			 */
+			protected function toggleView_clickHandler(event:MouseEvent):void
+			{
+				_showResults = !_showResults;
+				if (_showResults)
+				{
+					toggleView.source = "assets/images/w_up.png";
+				}
+				else
+				{
+					toggleView.source = "assets/images/w_down.png";
+				}
+			}
+			
+			/**
+			 * Called when the user clicks the clear results button in the Header
+			 */ 
+			protected function clearResultsButton_clickHandler(event:MouseEvent):void
+			{
+				// Call the layer clear selection action
+				_searchLayer.clearSelection();
+			}
+			
+			/**
+			 * Called when the user clicks the zoom results button in the Header
+			 */ 
+			protected function zoomResultsButton_clickHandler(event:MouseEvent):void
+			{
+				// Call to the zoom to results action
+				AppEvent.dispatch(SearchLayer.ZOOM_TO_RESULTS, { searchLayer: this.data });
+			}
+
+			/**
+			 * Called when the user clicks the convert to graphics button in the Header
+			 */ 
+			protected function convertGraphicsButton_clickHandler(event:MouseEvent):void
+			{
+				// Call to the convert results to graphics action
+				AppEvent.dispatch(SearchLayer.CONVERT_RESULTS_TO_GRAPHICS, { searchLayer: this.data });
+			}
+			
+		]]>
+	</fx:Script>
+
+	<s:layout >
+		<s:VerticalLayout gap="3" variableRowHeight="true" />
+	</s:layout>
+	
+	<s:VGroup id="layerContent" width="100%" visible="{_showItem}" 
+			  includeInLayout="{_showItem}" paddingLeft="5" paddingRight="5" >
+		
+		<s:HGroup id="Header" width="100%" gap="5" paddingTop="5" paddingLeft="5" paddingRight="5" 
+				  horizontalAlign="right" verticalAlign="middle" height="25"  >
+
+			<s:Image id="toggleView" buttonMode="true" useHandCursor="true" height="20" width="20" 
+					 verticalCenter="0" verticalAlign="middle" x="5"
+					 click="toggleView_clickHandler(event)" toolTip="Show/Hide Results"
+					 source="@Embed(source='assets/images/arrow_up.png')"/>
+			
+			<s:Label text="{_panelTitle}" width="100%" styleName="WidgetTitle" x="30"/>
+
+			<s:Image id="convertGraphics" buttonMode="true" useHandCursor="true" height="20" width="20" 
+					 click="convertGraphicsButton_clickHandler(event)" toolTip="Convert selection to drawn graphics"
+					 source="@Embed(source='assets/images/i_draw2.png')" />
+			
+			<s:Image id="clearResultsButton" buttonMode="true" useHandCursor="true" height="20" width="20" 
+					 click="clearResultsButton_clickHandler(event)" toolTip="{'Clear results for ' + _panelTitle}"
+					 source="@Embed(source='assets/images/i_clear.png')"/>
+
+			<s:Image id="zoomResultsButton" buttonMode="true" useHandCursor="true" height="20" width="20" 
+					 click="zoomResultsButton_clickHandler(event)" toolTip="{'Zoom to results of ' + _panelTitle}"
+					 source="@Embed(source='assets/images/i_zoomfull.png')"/>
+
+		</s:HGroup>
+		
+		<sc:SearchResultDataGroup id="dataGrp" width="100%" dataProvider="{_searchResults}"
+								  visible=					"{_showResults}" 
+								  includeInLayout=			"{_showResults}"
+								  searchResultClick=		"searchResultClickHandler(event)"
+								  searchResultDoubleClick=	"searchResultDoubleClickHandler(event)" 
+								  searchResultRemove=		"searchResultRemoveHandler(event)"
+								  searchResultMouseOut=		"searchResultMouseOutHandler(event)" 
+								  searchResultMouseOver=	"searchResultMouseOverHandler(event)" >
+			<sc:layout>
+				<s:VerticalLayout gap="2"
+								  horizontalAlign="justify"
+								  useVirtualLayout="false"
+								  clipAndEnableScrolling="true" />
+			</sc:layout>
+		</sc:SearchResultDataGroup>
+		<mx:HRule width="100%" />
+	</s:VGroup>
+</s:ItemRenderer>

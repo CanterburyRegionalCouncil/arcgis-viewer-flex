@@ -1,0 +1,3401 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+SUMMARY			: 	This widget allows users to interactively select features 
+					within configured searches by either eneering parameters into predefined 
+					SQL strings or by using a tool to define a search geometry on the map.  
+					A summary of the results of the search are displayed in a panel in the widget. 
+					Users can click on a record in the summary details to highlight and zoom to 
+					the record on the map.  If the returned results include URLs in their contents, 
+					these will be rendered as buttons that a user can click to open in another 
+					browser window.  Links that point to content such as images can be rendered 
+					in the results.
+					
+					Users can choose to export the complete results to a csv file format.
+
+SOURCE			: 	Based on ESRI Search widget.
+
+DEVELOPED BY 	: 	Ryan Elley, ECan.
+
+CREATED			: 	14/01/2012
+DEPENDENCIES	: 	widgets.SearchEnhanced.components.supportClasses.SearchLayer
+					widgets.supportClasses.SearchSuggestion
+					widgets.supportClasses.utils.LayerUtil
+					widgets.supportClasses.utils.MapUtil
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan) 	| 14/01/2012 	| Initial development.  
+Ryan Elley (ECan) 	| 03/02/2013 	| Flex Viewer Port 3.1 API and 3.1 viewer.  
+Ryan Elley (ECan) 	| 15/06/2013 	| Flex Viewer Port 3.3 API and 3.3 viewer.  
+Ryan Elley (ECan) 	| 02/11/2013 	| Target layer list change to fill widget.  
+Ryan Elley (ECan) 	| 28/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer.  
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright © 2008 - 2009 ESRI
+//
+// All rights reserved under the copyright laws of the United States.
+// You may freely redistribute and use this software, with or
+// without modification, provided you include the original copyright
+// and use restrictions.  See use restrictions in the file:
+// <install location>/FlexViewer/License.txt
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=			"com.esri.viewer.*" 
+				   xmlns:components=		"widgets.SearchEnhanced.components.*"
+				   widgetConfigLoaded=		"widgetConfigLoadedHandler(event)"
+				   initialize=				"basewidget_initializeHandler(event)" >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.events.IdentifyEvent;
+			import com.esri.ags.events.ZoomEvent;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.*;
+			import com.esri.ags.symbols.SimpleFillSymbol;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			import com.esri.ags.symbols.Symbol;
+			import com.esri.ags.tasks.GeometryService;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.IdentifyTask;
+			import com.esri.ags.tasks.supportClasses.BufferParameters;
+			import com.esri.ags.tasks.supportClasses.IdentifyParameters;
+			import com.esri.ags.tasks.supportClasses.IdentifyResult;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			
+			import flash.events.Event;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ItemClickEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.components.gridClasses.GridColumn;
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			
+			import widgets.supportClasses.SearchSuggestion;
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.LayerUtil;
+			import widgets.supportClasses.utils.MapUtil;
+
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Widget constants
+			--------------------------------------------------------------------------------------------------- */
+			
+			// Path to icons used in widget menu.
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/SearchEnhanced/assets/images/";
+			
+			// Select feature tool constant value
+			private const SELECT_FEATURE_TOOL:String = "SelectFeatureTool";
+			
+			// Draw mode constants
+			private const DRAW_FEATURE:String = "draw";
+			private const SELECT_FEATURE:String = "select";
+			private const NO_TOOL:String = "";
+			
+			private const DRAW_MODE:String = "drawmode";
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Widget variables
+			--------------------------------------------------------------------------------------------------- */
+			
+			// Results display variables
+			[Bindable]
+			private var _graphicsLayer:GraphicsLayer;
+			[Bindable]
+			private var _highlightGraphicsLayer:GraphicsLayer;
+			[Bindable]
+			private var _identifyGraphicsLayer:GraphicsLayer;
+			
+			
+			// Search parameters
+			[Bindable]
+			private var _layerInScale:Boolean = true;
+			[Bindable]
+			private var _layerInScaleMessage:String;
+			
+			private var _pointSearchTolerance:Number = 3;
+			private var _searchGeometry:Geometry;
+			private var _featureGeometry:Geometry;
+			
+			
+			// ID parameters for feature select
+			[Bindable]
+			private var _features:ArrayCollection = new ArrayCollection();
+			private var _selectedFeatures:ArrayCollection = new ArrayCollection;
+			private var _taskCount:int = 0; 
+			private var _defaultIDSetting:String;
+			
+			// Current id used for feature selection
+			private var _ftid:Number = 0;
+			
+			// Graphical selection variables
+			private var _toolMode:String = "";
+			private var _drawMode:String = "";
+			
+			private var _finishDrawing:Boolean;
+			private var _selectedDrawingIcon:Image;
+			private var _selectedDrawingStatus:String;
+			private var _drawSymbol:Symbol;
+			[Bindable]
+			private var _maxSearchScale:Number = 50000;
+			
+			// Buffer variables			
+			[Bindable]
+			private var _defaultBufferFeatures:Boolean = false;
+			[Bindable]
+			private var _defaultBufferIndex:int;
+			[Bindable]
+			private var _configBuffer:Array;
+			private var _buffertypes:Array;
+			private var _mergeShapes:Array;
+			
+			// Spatial operator variables
+			[Bindable]
+			private var _defaultSpatialOperatorIndex:int;
+			[Bindable]
+			private var _configOperator:Array;
+			
+			// Configured searches/target layers array	
+			[Bindable]
+			private var _configTargetLayer:Array;
+			[Bindable]
+			private var _defaultTargetLayerIndex:int;
+			
+			// Wizard process step id 
+			private var _currentStep:int = 0;
+			
+			// Search widget name
+			private var _searchWidgetName:String;
+			private var _searchWidgetID:int;
+			
+			// Buffer display symbol settings
+			[Bindable]
+			private var _buffersymbolalpha:Number =  0.5; 
+			[Bindable]
+			private var _buffersymbolcolour:uint = 0x000000;
+			[Bindable]
+			private var _buffersymbolfillstyle:String = "solid";
+			[Bindable]
+			private var _buffersymboloutlinecolour:uint = 0x000000;
+			[Bindable]
+			private var _buffersymboloutlinealpha:Number = 0.5; 
+			[Bindable]
+			private var _buffersymboloutlinestyle:String = "solid";
+			[Bindable]
+			private var _buffersymboloutlinewidth:Number = 1;
+			
+			// Feature symbol settings
+			[Bindable]
+			private var _featuresymbolalpha:Number = 0.5; 
+			[Bindable]
+			private var _featuresymbolcolour:uint = 0x000000;
+			[Bindable]
+			private var _featuresymbolfillstyle:String = "solid";
+			[Bindable]
+			private var _featuresymbollinestyle:String = "solid";
+			[Bindable]
+			private var _featuresymbollinewidth:Number = 1;
+			[Bindable]
+			private var _featuresymboloutlinecolour:uint = 0x000000;
+			[Bindable]
+			private var _featuresymboloutlinealpha:Number = 0.5; 
+			[Bindable]
+			private var _featuresymboloutlinestyle:String = "solid";
+			[Bindable]
+			private var _featuresymboloutlinewidth:Number = 1;
+			[Bindable]
+			private var _featuresymbolpointstyle:String = "square";
+			[Bindable]
+			private var _featuresymbolpointsize:Number = 12;
+			
+			// Identify symbol settings
+			[Bindable]
+			private var _identifysymbolalpha:Number = 0.5; 
+			[Bindable]
+			private var _identifysymbolcolour:uint = 0x000000;
+			[Bindable]
+			private var _identifysymbolfillstyle:String = "solid";
+			[Bindable]
+			private var _identifysymbollinestyle:String = "solid";
+			[Bindable]
+			private var _identifysymbollinewidth:Number = 1;
+			[Bindable]
+			private var _identifysymboloutlinecolour:uint = 0x000000;
+			[Bindable]
+			private var _identifysymboloutlinealpha:Number = 0.5; 
+			[Bindable]
+			private var _identifysymboloutlinestyle:String = "solid";
+			[Bindable]
+			private var _identifysymboloutlinewidth:Number = 1;
+			[Bindable]
+			private var _identifysymbolpointstyle:String = "square";
+			[Bindable]
+			private var _identifysymbolpointsize:Number = 12;
+
+			// Highlight symbol settings
+			[Bindable]
+			private var _highlightsymbolalpha:Number = 0.5; 
+			[Bindable]
+			private var _highlightsymbolcolour:uint = 0x000000;
+			[Bindable]
+			private var _highlightsymbolfillstyle:String = "solid";
+			[Bindable]
+			private var _highlightsymbollinestyle:String = "solid";
+			[Bindable]
+			private var _highlightsymbollinewidth:Number = 1;
+			[Bindable]
+			private var _highlightsymboloutlinecolour:uint = 0x000000;
+			[Bindable]
+			private var _highlightsymboloutlinealpha:Number = 0.5; 
+			[Bindable]
+			private var _highlightsymboloutlinestyle:String = "solid";
+			[Bindable]
+			private var _highlightsymboloutlinewidth:Number = 1;
+			[Bindable]
+			private var _highlightsymbolpointstyle:String = "square";
+			[Bindable]
+			private var _highlightsymbolpointsize:Number = 12;
+			
+			// Label variables
+			[Bindable]
+			private var _searchToolsInstructionLabel:String;
+			[Bindable]
+			private var _featureSelectInstructionLabel:String;
+			[Bindable]
+			private var _bufferSelectInstructionLabel:String;
+			[Bindable]
+			private var _targetSelectInstructionLabel:String;
+			
+			private var _graphicalsearchLabel:String;
+			
+			// General labels
+			[Bindable]
+			private var _cancelLabel:String
+			[Bindable]
+			private var _cancelTooltip:String
+			[Bindable]
+			private var _nextLabel:String
+			[Bindable]
+			private var _nextTooltip:String
+			[Bindable]
+			private var _backLabel:String
+			[Bindable]
+			private var _backTooltip:String
+			[Bindable]
+			private var _loadingLabel:String;
+			[Bindable]
+			private var _clearLabel:String;
+			[Bindable]
+			private var _clearTooltip:String
+			
+			// Buffer tool labels
+			[Bindable]
+			private var _bufferunitLabel:String;
+			[Bindable]
+			private var _bufferunitTooltip:String;
+			[Bindable]
+			private var _bufferdistanceLabel:String;
+			[Bindable]
+			private var _bufferdistanceTooltip:String;
+			[Bindable]
+			private var _bufferDisplayGraphicLabel:String;
+			[Bindable]
+			private var _bufferDisplayGraphicTooltip:String;
+			
+			// Target layer labels
+			[Bindable]
+			private var _targetLayerLabel:String;
+			[Bindable]
+			private var _targetLayerTooltip:String;
+			[Bindable]
+			private var _spatialOperatorLabel:String;
+			[Bindable]
+			private var _spatialOperatorTooltip:String;
+			[Bindable]
+			private var _executeSearchLabel:String;
+			[Bindable]
+			private var _executeSearchTooltip:String;
+			[Bindable]
+			private var _nolayerLabel:String;
+			[Bindable]
+			private var _filterInstructionLabel:String;
+			
+			// Other labels
+			private var _helpLabel:String;
+			
+			// Scale Message
+			private var _overMaxScaleMsg:String;
+			
+			// Message variables			
+			[Bindable]
+			private var _msgVisible:Boolean = false;
+			
+			// Help file URL 
+			private var _helpLocation:String;
+			
+			
+			// Graphical selection tool labels
+			[Bindable]
+			private var _featureToolLabel:String;
+			[Bindable]
+			private var _pointLabel:String;
+			[Bindable]
+			private var _lineLabel:String;
+			[Bindable]
+			private var _freehandLineLabel:String;
+			[Bindable]
+			private var _polygonLabel:String;
+			[Bindable]
+			private var _freehandPolygonLabel:String;
+			[Bindable]
+			private var _rectangleLabel:String;
+			[Bindable]
+			private var _circleLabel:String;
+			
+			// Draw tool instructions
+			private var _featureToolInstructionLabel:String
+			private var _pointToolInstructionLabel:String
+			private var _lineToolInstructionLabel:String
+			private var _freehandLineToolInstructionLabel:String
+			private var _polygonToolInstructionLabel:String
+			private var _freehandPolygonToolInstructionLabel:String
+			private var _rectangleToolInstructionLabel:String;
+			private var _circleToolInstructionLabel:String;
+			
+			
+			// Exclamation image on alert messages.			
+			[Embed(source="assets/images/i_about.png")] 
+			private var _expClass:Class;
+			
+			// Draw cursor class			
+			[Embed(source="widgets/SearchEnhanced/assets/cursors/select_cursor.png")]
+			private var _drawCursor:Class;
+			 
+			// Select cursor class			
+			[Embed(source="widgets/SearchEnhanced/assets/cursors/featureselect_cursor.png")]
+			private var _selectCursor:Class;
+			
+			/** Delay to use in the timeout when calling the search widget.  Used to make sure that viewer widgets have all loaded correctly */
+			protected var _URLHandlerPreloadDelay:Number = 1000;
+
+			
+			/*----------------------------------------------------------------------------------------------------
+			Widget general functions
+			--------------------------------------------------------------------------------------------------- */
+			
+			protected function basewidget_initializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}
+			
+			/**
+			 * Called when the wighet configuration file loads.
+			 */				
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				// Confirm the widget config XML has loaded	
+				if (configXML)
+				{
+					// Set up the geometry service for simplifying and buffering search geometry
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Configure spatial operator settings
+					var operatorList:XMLList = configXML..operator;
+					_configOperator = [];
+					for (var ii:int = 0; ii < operatorList.length(); ii++)
+					{
+						var oLabel:String = operatorList[ii].@label;
+						var oDescription:String = operatorList[ii].@description;
+						var oOperator:String = operatorList[ii].@data;
+						
+						var oUnit:Object = 
+							{
+								label: oLabel,
+								description: oDescription,
+								operator: oOperator
+							}
+						_configOperator.push(oUnit);
+					}
+					cboSpatialOperator.dataProvider = new ArrayCollection(_configOperator);
+					
+					// Set default spatial operator
+					_defaultSpatialOperatorIndex = int(configXML.defaultspatialoperatorindex) || 0;
+					cboSpatialOperator.selectedIndex = _defaultSpatialOperatorIndex;
+					txtSpatialOperatorDefinition.text = cboSpatialOperator.selectedItem.description;
+					
+					// Configure buffer settings
+					_defaultBufferFeatures = Boolean(configXML.defaultBufferFeatures == "true"); 
+					if (_defaultBufferFeatures)
+					{
+						radUseBuffer.selected = true;
+					} 
+					else 
+					{
+						radDontBuffer.selected = true;
+					}
+					
+					// Buffer range settings
+					var bufferList:XMLList = configXML..bufferrange;
+					_configBuffer = [];
+					for (var i:int = 0; i < bufferList.length(); i++)
+					{
+						var bLabel:String = bufferList[i];
+						var bDistance:Number = Number(bufferList[i].@distance);
+						var bUnit:Object = 
+							{
+								label: bLabel,
+								distance: bDistance
+							}
+						_configBuffer.push(bUnit);
+					}
+					
+					// Add custom buffer range object
+					var cLabel:String = "Custom Distance";
+					var cDistance:Number = 1000;
+					var cUnit:Object = 
+						{
+							label: cLabel,
+							distance: cDistance
+						}
+					_configBuffer.push(cUnit);
+					cboBuffer.dataProvider = new ArrayCollection(_configBuffer);	
+					
+					// Set default buffer range
+					_defaultBufferIndex = int(configXML.defaultbufferindex) || 0;
+					cboBuffer.selectedIndex = _defaultBufferIndex;
+					
+					// Set starting visiblility on buffer tools.
+					setBufferToolDisplayState();
+					
+					// Graphics layer settings
+					var graphicsLayerName:String = configXML.graphicsLayerName || "SelectBufferFindDrawingGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "Select Buffer Find Drawn Features";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName, map, graphicsLayerAlias);
+
+					var identifyLayerName:String = configXML.identifygraphicsLayerName || "SelectBufferFindIdentifytGraphicsLayer";
+					var identifyLayerAlias:String = configXML.identifygraphicsLayerName.@alias || "Select Buffer Find Identified Features";
+					_identifyGraphicsLayer = MapUtil.checkGraphicLayer(identifyLayerName, map, identifyLayerAlias);
+					
+					var highlightLayerName:String = configXML.highlightgraphicsLayerName || "SelectBufferFindHighlightGraphicsLayer";
+					var highlightLayerAlias:String = configXML.highlightgraphicsLayerName.@alias || "Select Buffer Find Highlighted Features";
+					_highlightGraphicsLayer = MapUtil.checkGraphicLayer(highlightLayerName, map, highlightLayerAlias);
+					
+					// Identify Layers
+					_defaultIDSetting = configXML.identifylayers.defaultSetting || "include";
+					
+					// Search widget name
+					_searchWidgetName = configXML.searchWidgetName;
+					if (_searchWidgetName != null && _searchWidgetName != "")
+					{
+						var searchXML:XML;
+						
+						// Get the config xml for this widget to generate the search expressions list
+						_searchWidgetID = ViewerContainer.getInstance().widgetManager.getWidgetId(_searchWidgetName);
+						if (!isNaN(_searchWidgetID) && configData.widgets.length > _searchWidgetID)
+						{
+							var xmlLoader:URLLoader = new URLLoader();
+							var xmlRequest:URLRequest = new URLRequest(configData.widgets[_searchWidgetID].config);
+							
+							// Add listeners for the loading complete 
+							xmlLoader.addEventListener(Event.COMPLETE, searchConfigXMLLoaded, false, 0, true);
+							xmlLoader.addEventListener(IOErrorEvent.IO_ERROR, searchConfigXMLIOError, false, 0, true);
+							
+							// Load the xml
+							xmlLoader.load(xmlRequest);
+						}
+					}
+					
+					// Buffer symbol settings
+					_buffersymbolcolour = uint(configXML.buffersymbol.@colour) || 0x000000;
+					_buffersymbolalpha = Number(configXML.buffersymbol.@alpha) || 0.5;
+					_buffersymbolfillstyle = configXML.buffersymbol.@fillstyle || "solid";
+					_buffersymboloutlinecolour = uint(configXML.buffersymbol.@outlinecolour) || 0x000000;
+					_buffersymboloutlinealpha = Number(configXML.buffersymbol.@outlinealpha) || 0.7;
+					_buffersymboloutlinestyle = configXML.buffersymbol.@outlinestyle || "solid"; 				
+					_buffersymboloutlinewidth = Number(configXML.buffersymbol.@outlinewidth) || 2;
+					
+					// Feature symbol settings
+					_featuresymbolcolour = uint(configXML.featuresymbol.@colour) || 0xFFFFFF;
+					_featuresymbolalpha = Number(configXML.featuresymbol.@alpha) || 0.7;
+					_featuresymbolfillstyle = configXML.featuresymbol.@fillstyle || "solid";
+					_featuresymbollinestyle = configXML.featuresymbol.@linestyle || "solid"; 				
+					_featuresymbollinewidth = Number(configXML.featuresymbol.@linewidth) || 2;
+					_featuresymboloutlinecolour = uint(configXML.featuresymbol.@outlinecolour) || 0xFFFFFF;
+					_featuresymboloutlinealpha = Number(configXML.featuresymbol.@outlinealpha) || 0.7;
+					_featuresymboloutlinestyle = configXML.featuresymbol.@outlinestyle || "solid"; 				
+					_featuresymboloutlinewidth = Number(configXML.featuresymbol.@outlinewidth) || 2;
+					_featuresymbolpointstyle = configXML.featuresymbol.@pointstyle || "square"; 		
+					_featuresymbolpointsize = configXML.featuresymbol.@pointsize || 12;
+					
+					// Identify symbol settings
+					_identifysymbolcolour = uint(configXML.identifysymbol.@colour) || 0xFFFFFF;
+					_identifysymbolalpha = Number(configXML.identifysymbol.@alpha) || 0.7;
+					_identifysymbolfillstyle = configXML.identifysymbol.@fillstyle || "solid";
+					_identifysymbollinestyle = configXML.identifysymbol.@linestyle || "solid"; 				
+					_identifysymbollinewidth = Number(configXML.identifysymbol.@linewidth) || 2;
+					_identifysymboloutlinecolour = uint(configXML.identifysymbol.@outlinecolour) || 0xFFFFFF;
+					_identifysymboloutlinealpha = Number(configXML.identifysymbol.@outlinealpha) || 0.7;
+					_identifysymboloutlinestyle = configXML.identifysymbol.@outlinestyle || "solid"; 				
+					_identifysymboloutlinewidth = Number(configXML.identifysymbol.@outlinewidth) || 2;
+					_identifysymbolpointstyle = configXML.identifysymbol.@pointstyle || "square"; 		
+					_identifysymbolpointsize = configXML.identifysymbol.@pointsize || 12;
+
+					// Highlight symbol settings
+					_highlightsymbolcolour = uint(configXML.highlightsymbol.@colour) || 0x00FF00;
+					_highlightsymbolalpha = Number(configXML.highlightsymbol.@alpha) || 0.5;
+					_highlightsymbolfillstyle = configXML.highlightsymbol.@fillstyle || "solid";
+					_highlightsymbollinestyle = configXML.highlightsymbol.@linestyle || "solid"; 				
+					_highlightsymbollinewidth = Number(configXML.highlightsymbol.@linewidth) || 2;
+					_highlightsymboloutlinecolour = uint(configXML.highlightsymbol.@outlinecolour) || 0x00FF00;
+					_highlightsymboloutlinealpha = Number(configXML.highlightsymbol.@outlinealpha) || 0.7;
+					_highlightsymboloutlinestyle = configXML.highlightsymbol.@outlinestyle || "solid"; 				
+					_highlightsymboloutlinewidth = Number(configXML.highlightsymbol.@outlinewidth) || 2;
+					_highlightsymbolpointstyle = configXML.highlightsymbol.@pointstyle || "square"; 		
+					_highlightsymbolpointsize = configXML.highlightsymbol.@pointsize || 16;
+					
+					// Maximum scale for location searches
+					if (Number(configXML.maxSearchScale) > 0)
+						_maxSearchScale = Number(configXML.maxSearchScale)
+					
+					// Buffer labels				
+					_bufferdistanceLabel = configXML.labels.bufferdistancelabel || "Distance (m):";
+					_bufferdistanceTooltip = configXML.labels.bufferdistancetooltip || "Specify the exact distance you wish to use when generating buffer rings";
+					_bufferunitLabel = configXML.labels.bufferunitlabel || "Buffer:";
+					_bufferunitTooltip = configXML.labels.bufferunittooltip || "Select distance to buffer graphics by<";
+					_bufferDisplayGraphicLabel = configXML.labels.bufferdisplaygraphiclabel || "Display buffered shape on map";
+					_bufferDisplayGraphicTooltip = configXML.labels.bufferdisplaygraphictooltip || "Tick to display the buffered shape on the map";
+					
+					// Target layer labels
+					_targetLayerLabel = configXML.labels.targetLayerLabel || "Layer to search:";
+					_targetLayerTooltip = configXML.labels.targetLayerTooltip || "Select the layer to search using the selected shape";
+					_spatialOperatorLabel = configXML.labels.spatialOperatorLabel || "Spatial operator";
+					_spatialOperatorTooltip = configXML.labels.spatialOperatorTooltip || "Select the method of overlap used with the selected shape";
+					_executeSearchLabel = configXML.labels.executeSearchLabel || "Start search";
+					_executeSearchTooltip = configXML.labels.executeSearchTooltip || "Start the search process using the current settings";
+					_nolayerLabel = configXML.labels.nolayerLabel || "No search layer defined";
+					_filterInstructionLabel = configXML.labels.filterInstructionLabel || "The box below can be used to filter the returned search results based on the text you enter.";
+					
+					// Screen button and general labels
+					_nextLabel = configXML.labels.nextlabel || "Next";
+					_nextTooltip = configXML.labels.nexttooltip || "Next";
+					_backLabel = configXML.labels.backlabel || "Back";
+					_backTooltip = configXML.labels.backtooltip || "Back";
+					_cancelLabel = configXML.labels.cancellabel || "Cancel";
+					_cancelTooltip = configXML.labels.canceltooltip || "Cancel";
+					_loadingLabel = configXML.labels.loadinglabel || "Working...";
+					_clearTooltip = configXML.labels.cleartooltip || "Click to clear and reset the search tool";
+					
+					// Instruction labels
+					_searchToolsInstructionLabel = configXML.labels.searchToolsInstructionLabel || "Select one of the tools below to either select a feature in the map you wish to use to define the extent of the search, or draw a shape to define the extent. You must be zoomed in to 1:[value] scale to perform a search.";
+					_featureSelectInstructionLabel = configXML.labels.featureSelectInstructionLabel || "Select the feature that will be used to select features from the target layer.  Clicking on the feature in the list will highlight it in the map.";
+					_bufferSelectInstructionLabel = configXML.labels.bufferSelectInstructionLabel || "";
+					_targetSelectInstructionLabel = configXML.labels.targetSelectInstructionLabel || "Choose the search layer from the drop box, then press [value] to continue.";
+					_targetSelectInstructionLabel = _targetSelectInstructionLabel.replace("[value]", _executeSearchLabel);
+					
+					_graphicalsearchLabel = configXML.labels.graphicalsearchlabel || getDefaultString("graphicalTitleBarTooltip");
+					
+					// Graphical selection tool labels
+					_featureToolLabel = configXML.labels.featuretoollabel || "Select features tool";
+					_pointLabel = configXML.labels.pointtoollabel || getDefaultString("drawPointLabel");
+					_lineLabel = configXML.labels.linetoollabel || getDefaultString("drawLineLabel");
+					_freehandLineLabel = configXML.labels.freehandlinetoollabel || getDefaultString("drawFreehandLineLabel");
+					_polygonLabel = configXML.labels.polygonlabel || getDefaultString("drawPolygonLabel");
+					_freehandPolygonLabel = configXML.labels.freehandpolygonlabel || getDefaultString("drawFreehandPolygonLabel");
+					_rectangleLabel = configXML.labels.rectanglelabel || getDefaultString("drawRectangleLabel");
+					_circleLabel = configXML.labels.circlelabel || getDefaultString("drawCircleLabel");
+					
+					// Draw tool instructions labels
+					_featureToolInstructionLabel = configXML.labels.featureToolInstructionLabel || "Select a feature to use in search";
+					_pointToolInstructionLabel = configXML.labels.pointToolInstructionLabel || "Draw Point";
+					_lineToolInstructionLabel = configXML.labels.lineToolInstructionLabel || "Draw Line";
+					_freehandLineToolInstructionLabel = configXML.labels.freehandLineToolInstructionLabel || "Trace a Freehand Line";
+					_polygonToolInstructionLabel = configXML.labels.polygonToolInstructionLabel || "Draw Polygon";
+					_freehandPolygonToolInstructionLabel = configXML.labels.freehandPolygonToolInstructionLabel || "Trace a Freehand Polygon";
+					_rectangleToolInstructionLabel = configXML.labels.rectangleToolInstructionLabel || "Draw Rectangle";
+					_circleToolInstructionLabel = configXML.labels.circleToolInstructionLabel || "Draw Circle";
+					
+					// Other labels
+					_helpLabel = configXML.labels.helplabel || "Help";
+					
+					// Layer scale message
+					_overMaxScaleMsg = configXML.labels.overMaxScaleMsg || "You must zoom to 1:[value] before you can select features in this layer.";
+					updateLayerInScaleMessage();
+					
+					// Add show help item
+					_helpLocation = configXML.helplocationurl;
+					if (_helpLocation != "")
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+					}					
+				}
+				
+				/* 
+				Add a listener for map scale changes to disable/enable the select by location tools if 
+				the current map scale is outside valid minScale of the current selection layer.
+				*/
+				map.addEventListener(ZoomEvent.ZOOM_END, mapZoomChangeHandler);
+				
+				function searchConfigXMLLoaded(event:Event):void
+				{
+					// Clear the listeners
+					//var xmlLoader:URLLoader = event.target
+					
+					// Load the XML
+					var searchConfigXML:XML = new XML(event.target.data);
+					
+					// Populate the search layers list
+					var searchLayers:XMLList = searchConfigXML.layers.layer;
+					var ilen:int = searchLayers.length();
+					
+					if (ilen > 0)
+					{
+						_configTargetLayer = [];
+						
+						for (var i:int = 0; i < ilen; i++)
+						{
+							var layerXML:XML = searchLayers[i];
+							var layerName:String = layerXML..name[0].valueOf();
+							var layerURL:String= layerXML..url[0].valueOf();
+							
+							var layer:Object = { label:layerName, url:layerURL };
+							_configTargetLayer.push(layer);
+						}
+						
+						// Setup Target Layers combo
+						if (_configTargetLayer.length)
+						{
+							// Sort the target layers list
+							_configTargetLayer = _configTargetLayer.sortOn("label");
+							
+							// Set default target layer
+							_defaultTargetLayerIndex = int(configXML.defaulttargetlayerindex) || 0;
+							
+							// Set data provider
+							lstTargetLayers.dataProvider = new ArrayCollection(_configTargetLayer);
+							lstTargetLayers.labelField = "label";
+							
+							// Set default target layer
+							lstTargetLayers.selectedIndex = _defaultTargetLayerIndex;
+							
+							// Hide target box if only one configured search
+							if (_configTargetLayer.length == 1)
+							{
+								hboxTargetLayer.visible = false;
+								hboxTargetLayer.includeInLayout = false;
+							}
+						}
+						else
+						{
+							hboxTargetLayer.visible = false;
+							hboxTargetLayer.includeInLayout = false;
+						}
+					}
+				}
+				
+				function searchConfigXMLIOError(event:IOErrorEvent):void
+				{
+					trace("Select Buffer Find Search: Search Config IO Error\n" + event.toString());
+				}
+			}
+			
+			/**
+			 * Called when the widget is closed
+			 */
+			protected function widgetClosedHandler(event:Event):void
+			{
+				// Hide the info Window
+				hideInfoWindow();
+				
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Hide the drawing layers
+				hideGraphicsLayers();
+			}
+			
+			/**
+			 * Called when the widget opens or is maximised
+			 */
+			protected function widgetOpenedHandler(event:Event):void
+			{
+				/*
+				if (_graphicsLayer)
+				{
+					_graphicsLayer.visible = true;
+				}		
+				*/
+				switch(currentState)
+				{
+					case "searchTools":
+						showStateTools();
+						break;
+					
+					case "featureSelect":
+						showStateFeatures();
+						break;
+					
+					case "bufferSelect":
+						showStateBuffer();						
+						break;
+					
+					case "targetSelect":
+						showStateTarget();
+						break;
+					
+					case "results":				
+						showStateResults();
+						break;
+				}
+			}
+			
+			/** 
+			 * Called when the widget is minimised
+			 */
+			protected function widgetMinimizedHandler(event:Event):void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Hide the drawing layers
+				hideGraphicsLayers();
+			}
+			
+			/**
+			 * Hides any of the graphics layers that are part of this widget 
+			 */
+			private function hideGraphicsLayers():void
+			{
+				if (_graphicsLayer)
+				{
+					_graphicsLayer.visible = false;
+				}
+				
+				if (_highlightGraphicsLayer)
+				{
+					_highlightGraphicsLayer.visible = false;					
+				}
+				
+				if (_identifyGraphicsLayer)
+				{
+					_identifyGraphicsLayer.visible = false;
+				}
+			}
+			
+			
+			
+			/**
+			 * Opens the help file assoicated with this widget.
+			 */
+			private function showHelp():void
+			{
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_helpLocation),"_blank");
+			}
+			
+			// State change functions
+			
+			/** 
+			 * Change the widget view to show the tools selection screen
+			 */ 
+			private function showStateTools():void
+			{
+				// Hide any identify feature graphics
+				showIdentifyGraphics(false);
+				
+				// Change to tools state
+				this.currentState = "searchTools"
+				
+				// Set the index
+				wTemplate.selectedTitlebarButtonIndex = 0;
+				
+				// Activate the draw tools
+				activateDrawTool();
+				
+				// Set step index
+				_currentStep = 0;
+			}
+			
+			/** 
+			 * Change the widget view to show the feature selection screen
+			 */ 
+			private function showStateFeatures():void
+			{
+				// Set identify graphics to visible state
+				showIdentifyGraphics(true);
+				
+				// Change to select Features state
+				this.currentState = "featureSelect";
+				
+				// Set step index
+				_currentStep = 1;
+			}
+			
+			/** 
+			 * Change the widget view to show the buffer screen
+			 */ 
+			private function showStateBuffer():void
+			{
+				// Hide any identify feature graphics
+				showIdentifyGraphics(false);
+				
+				// Hide the buffers and selected features graphic layers if not visible
+				if (_graphicsLayer)
+				{
+					_graphicsLayer.visible = false;
+				}	
+				
+				// Show the selected features graphic layers if not visible
+				if (_highlightGraphicsLayer)
+				{
+					_highlightGraphicsLayer.visible = true;
+				}
+				
+				// Change to buffer state
+				this.currentState = "bufferSelect";
+				
+				// Set step index
+				_currentStep = 2;
+			}
+			
+			/** 
+			 * Change the widget view to show the target search selection screen
+			 */ 
+			private function showStateTarget():void
+			{
+				// Change to select target state 
+				this.currentState = "targetSelect";
+				
+				// Set step index
+				_currentStep = 3;
+				
+				// Show the buffers and selected features graphic layers if not visible
+				_graphicsLayer.visible = true;
+				_highlightGraphicsLayer.visible = true;
+			}
+			
+			/**
+			 * Chnage the vwidget view to the results/working screen.
+			 */
+			private function showStateResults():void
+			{
+				this.currentState = "results";
+				_currentStep = 4;
+
+				// Hide the buffers and selected features graphic layers if visible
+				_graphicsLayer.visible = false;
+				_highlightGraphicsLayer.visible = false;
+			}
+			
+			/** 
+			 * Change the widget view to show the last step the user viewed
+			 */ 
+			private function showStateLast():void
+			{
+				// Determine action based on 
+				switch(_currentStep) 
+				{
+					case 0: 
+					{
+						showStateTools();
+						break;
+					}	
+						
+					case 1: 
+					{
+						showStateFeatures();
+						break;
+					}
+						
+					case 2:
+					{
+						showStateBuffer();
+						break;
+					}
+						
+					case 3:
+					{
+						showStateTarget();
+						break;
+					}
+						
+					case 4:
+					{
+						showStateResults();
+						break;
+					}
+						
+					default:
+					{
+						showStateTools();
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Called when the map scale changes 
+			 */
+			private function mapZoomChangeHandler(event:ZoomEvent):void
+			{
+				updateSelectByLocationStatus();
+			}
+			
+			/**
+			 * Updates the layerInScale flag used to enable/disable the
+			 */
+			private function updateSelectByLocationStatus():void
+			{
+				// Update the layer in scale flag
+				_layerInScale = ( map.scale <= _maxSearchScale );
+				
+				// Update the messgae
+				updateLayerInScaleMessage();
+			}
+			
+			/**
+			 * Updates the message that is displayed when the map is outside the searchable scale.
+			 */
+			private function updateLayerInScaleMessage():void
+			{
+				// Update the layerInScaleMessage
+				if (_layerInScale)
+				{
+					_layerInScaleMessage = "";
+				}
+				else
+				{
+					_layerInScaleMessage = _overMaxScaleMsg.replace("[value]", _maxSearchScale.toString());
+				}
+			}	
+			
+			/** 
+			 * Show/hide identify feature graphics
+			 */ 
+			private function showIdentifyGraphics(show:Boolean = true):void
+			{
+				if (_identifyGraphicsLayer)
+				{
+					_identifyGraphicsLayer.visible = show;
+				}
+			}
+			
+			/** 
+			 * Clear identify feature graphics
+			 */ 
+			private function clearIdentifyGraphics():void
+			{
+				if (_identifyGraphicsLayer)
+				{
+				_identifyGraphicsLayer.clear();
+				}
+			}
+			
+			/**
+			 * Called to hide the info window if it is being displayed and if the content is linked to the display
+			 * graphics layer.
+			 */
+			private function hideInfoWindow():void
+			{
+				if (map.infoWindow.contentOwner &&
+					(map.infoWindow.contentOwner is Graphic && 
+						Graphic(map.infoWindow.contentOwner).graphicsLayer === _graphicsLayer))
+				{
+					map.infoWindow.hide();
+				}
+			}
+			
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Cursor actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Modify Cursors when over the map
+			 */ 
+			private function map_rollover(event:MouseEvent):void 
+			{
+				// Check if drawing
+				if (_drawMode != "") 
+				{
+					// Check the type of tool being used	
+					switch(_toolMode) 
+					{
+						case SELECT_FEATURE:  
+						{
+							// Set the select cursor
+							map.cursorManager.setCursor(_selectCursor, 2);
+							break;
+						}
+							
+						case DRAW_FEATURE:  
+						{
+							// Set the drawing cursor
+							map.cursorManager.setCursor(_drawCursor, 2, -8, -8);
+							break;
+						}
+							
+						default:  
+						{
+							// Clear the cursor
+							map.cursorManager.removeAllCursors();
+						}
+					}			
+				} 
+				else 
+				{
+					// Clear the cursors
+					map.cursorManager.removeAllCursors();
+				}
+			}
+			
+			/** 
+			 * Modify mouse cursorwhen NOT over the map
+			 */ 
+			private function map_rollout(event:MouseEvent):void 
+			{
+				// Clear the cursor
+				map.cursorManager.removeAllCursors();
+			}
+			
+			/** 
+			 * Clears out the map listeners
+			 */ 
+			private function removeMapListeners():void 
+			{
+				map.removeEventListener(MouseEvent.ROLL_OUT, map_rollout);
+				map.removeEventListener(MouseEvent.ROLL_OVER, map_rollover);
+			}
+			
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Geometry service actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called if the geometry service returns a fault.
+			 */
+			private function geometryService_faultHandler(event:FaultEvent):void
+			{
+				Alert.show(event.fault.toString(), wTemplate.widgetTitle);
+			}
+			
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Draw tool actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Configures the drawing actions and activates the DrawTool component 
+			 * to begin the shape capture for a select by location action.  
+			 */
+			private function toggleDrawTool(event:MouseEvent):void
+			{
+				addSharedData("Deactivate_DrawTool", null); // to be able to deactivate drawTool on other widgets
+				
+				// Check if tool clicked is already active
+				if (_selectedDrawingIcon != Image(event.currentTarget))
+				{
+					// Deactivate the map navigation
+					//map.mapNavigationEnabled = false;
+					//map.keyboardNavigationEnabled = false;
+					
+					// Clear map listeners and cursors
+					removeMapListeners();  
+					map.cursorManager.removeAllCursors();
+					
+					// Add listeners for map rollover 
+					map.addEventListener(MouseEvent.ROLL_OUT, map_rollout);
+					map.addEventListener(MouseEvent.ROLL_OVER, map_rollover);
+					
+					// apply glow
+					_selectedDrawingIcon = Image(event.currentTarget);
+					clearSelectionFilter();
+					_selectedDrawingIcon.filters = [ glowFilter ];
+					
+					_drawMode = DRAW_MODE;
+					_toolMode = DRAW_FEATURE;
+					
+					var value:String = _selectedDrawingIcon.name;
+					switch (value)
+					{
+						case SELECT_FEATURE_TOOL:
+						{
+							// Override draw and tool modes
+							_drawMode = "";
+							_toolMode = SELECT_FEATURE;
+							
+							_selectedDrawingStatus = _pointLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+							
+						case DrawTool.MAPPOINT:
+						{
+							_selectedDrawingStatus = _pointLabel;
+							_drawSymbol = new SimpleMarkerSymbol(SimpleMarkerSymbol.STYLE_CIRCLE, 15, 0x3FAFDC, 1);
+							break;
+						}
+							
+						case DrawTool.FREEHAND_POLYLINE:	
+						{
+							_selectedDrawingStatus = _freehandLineLabel;
+							_drawSymbol = new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1);
+							break;
+						}
+							
+						case DrawTool.POLYLINE:
+						{
+							_selectedDrawingStatus = _lineLabel;
+							_drawSymbol = new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1);
+							break;
+						}
+							
+						case DrawTool.EXTENT:
+						{
+							_selectedDrawingStatus = _rectangleLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+							
+						case DrawTool.FREEHAND_POLYGON:	
+						{
+							_selectedDrawingStatus = _freehandPolygonLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+							
+						case DrawTool.POLYGON:
+						{
+							_selectedDrawingStatus = _polygonLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+							
+						case DrawTool.CIRCLE:
+						{
+							_selectedDrawingStatus = _circleLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+					}
+					
+					// Activate the draw tool
+					activateDrawTool();
+				}
+				else
+				{
+					// Clear the draw tool
+					deactivateDrawTool();
+				}
+			}
+			
+			
+			/** 
+			 * Called when the user selects one of the drawing tools which sets how 
+			 * to define the shape that will be used to select the features 
+			 */
+			private function activateDrawTool():void
+			{
+				if (_selectedDrawingIcon)
+				{
+					if (_selectedDrawingIcon.name == SELECT_FEATURE_TOOL)
+					{
+						setMapAction(DrawTool.EXTENT, _selectedDrawingStatus, _drawSymbol, searchDrawEnd);
+					}
+					else
+					{
+						setMapAction(_selectedDrawingIcon.name, _selectedDrawingStatus, _drawSymbol, drawGeometryEnd);
+					}
+				}
+				else
+				{
+					// Clear the draw tool settings
+					deactivateDrawTool();
+				}
+			}
+			
+			/**
+			 * Function deactivates the drawing tool stops any active select by grahic location actions
+			 */
+			private function deactivateDrawTool():void
+			{
+				_toolMode = "";
+				_selectedDrawingIcon = null;
+				_selectedDrawingStatus = null;
+				clearSelectionFilter();
+				
+				// Clear map listeners and cursors
+				removeMapListeners();  
+				map.cursorManager.removeAllCursors();
+				
+				// Reset map action
+				
+				setMapAction(null, null, null, null);
+			}
+			
+			/**
+			 * Called when the user rolls over one of the icons for the drawing tools
+			 * on the select by location screen.
+			 */
+			private function iconRollOverHandler(event:MouseEvent):void
+			{
+				// Clear the current selection filter
+				clearSelectionFilter();
+				
+				// Update the instruction text
+				updateToolInstructionText(event.currentTarget);
+				
+				// Check to make sure current layer is currently in scale
+				if (_layerInScale)
+				{
+					event.target.filters = [ glowFilter ];
+				}
+			}
+			
+			/**
+			 * Called when the user rolls off one of the icons for the drawing tools
+			 * on the select by location screen.
+			 */
+			private function iconRollOutHandler(event:MouseEvent):void
+			{
+				// Clear the current selection filter
+				clearSelectionFilter();
+				
+				// Update the instruction text
+				if (_selectedDrawingIcon)
+				{
+					updateToolInstructionText(_selectedDrawingIcon);
+				}
+				else
+				{
+					toolInstructionLabel.text = "";
+				}
+			}
+			
+			/**
+			 * Used to clear any filters on the draw tool icons.
+			 */
+			private function clearSelectionFilter():void
+			{
+				for (var i:int = 0; i < graphicalTools.numChildren; i++)
+				{
+					if (graphicalTools.getChildAt(i).filters && graphicalTools.getChildAt(i).filters.length > 0)
+					{
+						if (!(_selectedDrawingIcon && graphicalTools.getChildAt(i) === _selectedDrawingIcon))
+						{
+							graphicalTools.getChildAt(i).filters = [];
+						}
+					}
+				}
+			}
+			
+			/** 
+			 * Called after the user completes drawing a shape for the search
+			 */  
+			private function drawGeometryEnd(event:DrawEvent):void
+			{
+				// Check if current map scale exceeds configured max scale
+				if(map.scale <= _maxSearchScale)
+				{
+					// Clear the current selection
+					clearSelection();
+					
+					// Process the graphic as a draw feature
+					processDrawnFeature(event);
+				}
+				else 
+				{
+					Alert.show(_overMaxScaleMsg.replace("[value]",
+						_maxSearchScale.toString()), "Warning", Alert.OK, null, null, _expClass);
+				}
+			}
+			
+			/**
+			 * Called when the user completes a draw action and the map is set to select mode.
+			 */
+			private function searchDrawEnd(event:DrawEvent):void
+			{
+				// Call the execute identifyaction
+				processSelectFeature(event);
+				
+				// Reactivate the drawing tool if still on the select by graphic location screen
+				if (this.currentState == "searchTools")
+				{
+					activateDrawTool();
+				}
+			}
+			
+			/**
+			 * Update the instruction text on the graphic tool selection screen.  Called when the user mouses over one of the tool icons.
+			 */
+			private function updateToolInstructionText(icon:Object):void
+			{
+				// Determine instruction text
+				var instruct:String;
+				
+				switch(icon.name)
+				{
+					case DrawTool.MAPPOINT:
+					{
+						instruct = _pointToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.POLYLINE:
+					{
+						instruct = _lineToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.FREEHAND_POLYLINE:
+					{
+						instruct = _freehandLineToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.POLYGON:
+					{
+						instruct = _polygonToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.FREEHAND_POLYGON:
+					{
+						instruct = _freehandPolygonToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.EXTENT:
+					{
+						instruct = _rectangleToolInstructionLabel;
+						break;
+					}
+						
+					case DrawTool.CIRCLE:
+					{
+						instruct = _circleToolInstructionLabel;
+						break;
+					}
+						
+					case SELECT_FEATURE_TOOL:
+					{
+						instruct = _featureToolInstructionLabel;
+						break;
+					}
+				}
+				
+				// Set the instruction text
+				toolInstructionLabel.text = instruct;
+			}
+			
+			
+			
+			/* --------------------------------------------------------------------- 
+			Widget loading/working message functions 
+			---------------------------------------------------------------------- */
+			
+			/** 
+			 * Displays the widget's message/waiting section
+			 */ 
+			private function showMessage(msg:String, swfVisible:Boolean):void
+			{
+				// Set message text
+				txtMessage.text = msg;
+				
+				// Set loading image state
+				swfMessage.visible = swfVisible;
+				swfMessage.includeInLayout = swfVisible;
+				
+				// Show message box
+				_msgVisible = true;
+				
+				// Force a screen refresh
+				validateNow();
+			}			
+			
+			/** 
+			 * Hides the widget's message/waiting section
+			 */ 
+			private function clearMessage():void
+			{
+				// Hide message box
+				_msgVisible = false;
+			}		
+			
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Draw tool actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the 'next' button on the graphical tool selection screen. 
+			 */ 
+			protected function toolSelectNextButton_clickHandler(event:MouseEvent):void
+			{
+				// Check if shape exists (should do as this button wont be enabled if there isn't)
+				if (_featureGeometry != null)
+				{
+					// Check whether there are any select features from feature tool
+					if ( _features.length > 0) 
+					{
+						// Go to feature selection screen
+						showStateFeatures();
+					} 
+					else 
+					{
+						// Go straight to buffer screen
+						showStateBuffer();
+					}
+				}
+			}
+			
+			/** 
+			 * Takes the draw event and starts the search process using the drawn geometry 
+			 */ 
+			private function processDrawnFeature(event:DrawEvent):void
+			{
+				// Deactivate select tool and reactivate navigation tools
+				_drawMode = "";
+				
+				map.cursorManager.removeAllCursors();
+				setMapAction(null, null, null, null);
+				
+				// Set search geometry
+				var geom:Geometry = event.graphic.geometry;
+				
+				// Check geometry is simple
+				_featureGeometry = geom;
+				
+				var graphic:Graphic = event.graphic;
+				
+				// Add the feature to the map
+				switch(_featureGeometry.type) 
+				{
+					case Geometry.MAPPOINT:
+					{
+						graphic.symbol = smsFeature;
+						break;
+					}
+						
+					case Geometry.POLYLINE:
+					{
+						graphic.symbol = slsFeature;
+						break;
+					}
+						
+					case Geometry.POLYGON:
+					case Geometry.EXTENT:
+					{
+						graphic.symbol = sfsFeature;
+						break;
+					}
+				}
+				
+				// Clear any existing feature or buffer graphics
+				_highlightGraphicsLayer.clear();
+				
+				_selectedFeatures = new ArrayCollection();
+				_selectedFeatures.addItem(graphic);
+				
+				// Add to the map
+				_highlightGraphicsLayer.add(graphic);
+				
+				// Change to buffer state
+				showStateBuffer();
+				
+				// Enable next button on Tools screen 
+				toolSelectNextButton.enabled = true;				
+			}
+			
+			/** 
+			 * Clear the current selection and rest the widget to the default settings
+			 */ 
+			private function clearSelection():void 
+			{
+				try
+				{
+					_ftid = 0;
+					_graphicsLayer.clear();
+					_highlightGraphicsLayer.clear();
+					_identifyGraphicsLayer.clear();
+					
+					// Clear and hide the working message 
+					clearMessage();
+					
+					// Reset the search parameters
+					_searchGeometry = null;
+					
+					// Clear Selected Features 
+					_selectedFeatures = new ArrayCollection();
+					
+					// Hide the info window
+					hideInfoWindow();
+					
+				}
+				catch(error:Error)
+				{
+					// Do nothing
+				}
+			}
+			
+		
+			
+			/*----------------------------------------------------------------------------------------------------
+			Buffer actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Starts the buffer task
+			 */ 
+			private function bufferFeature(useDistance:Boolean = true):void
+			{
+				var graphic:Graphic;
+				var geometry:Geometry;
+				
+				// Reset the merge arrays
+				_buffertypes = [];
+				_mergeShapes = [];
+				
+				// Check for multiple selected geometry types
+				for each (graphic in _selectedFeatures)
+				{
+					// Get graphic geometry type
+					if (_buffertypes.indexOf(graphic.geometry.type) == -1)
+					{
+						_buffertypes.push(graphic.geometry.type);
+					}
+				}
+				
+				// Check if more than one type of geometry is present in the selected features.
+				if (_buffertypes.length > 1)
+				{
+					for each (var geometryType:String in _buffertypes)
+					{
+						// Buffer all of the selected features of the selected geometry type. 
+						callBuffer(geometryType, useDistance, true);
+					}
+				}
+				else
+				{
+					// Buffer all of the selected features 
+					callBuffer("all", useDistance);
+				}
+			}
+			
+			private function callBuffer(geometryType:String = "all", useDistance:Boolean = true, mergeShapes:Boolean = false):void
+			{
+				var graphic:Graphic;
+				var geometry:Geometry;
+
+				// Craete a new buffer parameters object
+				var bufferParameters:BufferParameters = new BufferParameters();
+
+				// Create list of geometries
+				var geoms:Array = [];
+				
+				// Set the buffer feature geometry
+				for each (graphic in _selectedFeatures)
+				{
+					// Get graphic geometry
+					geometry = graphic.geometry;					
+					
+					// Check for extent type - buffers don't work with extents
+					switch(geometry.type) 
+					{
+						case Geometry.EXTENT: 
+						{
+							if (geometry.type == geometryType || geometryType == "all")
+							{
+								// Add geometry to list
+								geoms.push(Extent(geometry).toPolygon());
+							}
+							break;
+						}
+		
+						default:
+						{
+							if (geometry.type == geometryType || geometryType == "all")
+							{
+								// Add geometry to list
+								geoms.push(geometry);
+							}
+						}
+					}
+				}
+				
+				// Formated for 2.0 API 
+				bufferParameters.geometries = geoms;
+				
+				// Set the buffer distance and units
+				if (useDistance)
+				{
+					// Use the specified user distance or class
+					bufferParameters.distances = [int(txtBufferDistance.text)]; 
+				} 
+				else 
+				{
+					// Default to a minor buffer
+					bufferParameters.distances = [0.1]; 
+				}
+				bufferParameters.unit = GeometryService.UNIT_METER;
+				
+				// Set union results
+				bufferParameters.unionResults = true;
+				
+				// Set the spatial reference	
+				var ref:SpatialReference = map.spatialReference;
+				bufferParameters.bufferSpatialReference = ref;
+				
+				// Show the working message
+				if (useDistance) 
+				{
+					showMessage("Generating buffer",true);
+				} 
+				else 
+				{
+					showMessage("Creating search feature",true);
+				}
+				
+				// Disable back and next buttons while running 
+				bufferSelectBackButton.enabled = false;
+				bufferSelectNextButton.enabled = false;				
+				
+				// Execute the buffer task
+				if (mergeShapes)
+				{
+					geometryService.buffer(bufferParameters,
+						new AsyncResponder(bufferFeatureWithMerge, bufferFeatureFaultHandler, null));
+				}
+				else
+				{
+					geometryService.buffer(bufferParameters,
+						new AsyncResponder(bufferFeatureCompleteHandler, bufferFeatureFaultHandler, null));
+				}
+			}
+
+			/** 
+			 * Handles the results returned by a buffer task
+			 */  
+			private function bufferFeatureWithMerge(result:Object, token:Object = null):void
+			{
+				var geom:Geometry;
+				if (result is Array)
+				{
+					// Get number of graphics returned - Formatted for the 2.0 API
+					var graphicsCount:Number = result.length; // This should be 1.
+					
+					if (graphicsCount > 0) 
+					{
+						// Add the geometry to the merge array
+						geom = result[0] as Geometry;
+						_mergeShapes.push(geom);
+						
+						// Check if all of the buffers have been returned
+						if (_mergeShapes.length == _buffertypes.length)
+						{
+							// Call the merge task on the polygon array
+							geometryService.union(_mergeShapes);
+						}
+					}
+					else
+					{
+						// Use the graceful fault message 
+						showGracefulBufferFault();
+					}
+				} 
+				else if(result is Geometry)
+				{
+					// Add the geometry to the merge array
+					geom = result as Geometry;
+					_mergeShapes.push(geom);
+					
+					// Check if all of the buffers have been returned
+					if (_mergeShapes.length == _buffertypes.length)
+					{
+						// Call the merge task on the polygon array
+						geometryService.union(_mergeShapes);
+					}
+				}
+			}
+			
+			/** 
+			 * Handles the results returned by a buffer task
+			 */  
+			private function bufferFeatureCompleteHandler(result:Array, token:Object = null):void
+			{
+				// Get number of graphics returned - Formatted for the 2.0 API
+				var graphicsCount:Number = result.length; // This should be 1.
+				
+				if (graphicsCount > 0) 
+				{
+					// Add to map as display object
+					if (chkBufferDisplayGraphic.selected) 
+					{
+						// Remove any existing graphics from previous buffers
+						var gra:Graphic;
+						var featgra:Graphic;
+						for (var i:Number = 0 ; i < _graphicsLayer.numChildren ; i++)               
+						{                    
+							gra = _graphicsLayer.getChildAt(i) as Graphic;
+							
+							// Check graphic using the sfsBuffer symbol
+							if (gra.symbol == sfsBuffer)
+							{
+								_graphicsLayer.remove(gra);
+							}
+							
+							// Get the feature graphic by checking if it is using one of the feature symbols
+							if ((gra.symbol == sfsFeature) || (gra.symbol == smsFeature) || (gra.symbol == slsFeature))
+							{
+								featgra = gra;
+							}
+						}
+						
+						// Formated for 2.0 API
+						var graphic:Graphic = new Graphic();
+						graphic.geometry = result[0] as Polygon;
+						
+						// Update the graphics settings
+						graphic.toolTip = "Search Extent";
+						graphic.symbol = sfsBuffer;
+						
+						// Add the new buffer graphic to the map 
+						_graphicsLayer.add(graphic);					
+					}
+					
+					// Set the search geometry
+					_searchGeometry = graphic.geometry;
+					
+					// Zoom map to show extent of the buffer shape
+					var zmExtent:Extent = _searchGeometry.extent;
+					zmExtent = zmExtent.expand(1.25);
+					map.extent = zmExtent;
+					
+					// Clear the working message
+					clearMessage();
+					
+					// Re-enable back and next buttons 
+					bufferSelectBackButton.enabled = true;
+					bufferSelectNextButton.enabled = true;				
+					
+					// Show the target screen
+					showStateTarget();					
+				} 
+				else 
+				{
+					// Use the graceful fault message 
+					showGracefulBufferFault()
+				}
+			}
+			
+			/** 
+			 * Handles the results returned by a buffer task
+			 */  
+			private function bufferFeatureFaultHandler(event:FaultEvent, token:Object = null):void
+			{
+				// Use the graceful fault message 
+				showGracefulBufferFault();
+			}
+			
+			/** 
+			 * Handles the results returned by the union task.
+			 */  
+			private function mergeFeatureCompleteHandler(event:GeometryServiceEvent, token:Object = null):void
+			{
+				if (event.result) 
+				{
+					// Add to map as display object
+					if (chkBufferDisplayGraphic.selected) 
+					{
+						// Remove any existing graphics from previous buffers
+						var gra:Graphic;
+						var featgra:Graphic;
+						for (var i:Number = 0 ; i < _graphicsLayer.numChildren ; i++)               
+						{                    
+							gra = _graphicsLayer.getChildAt(i) as Graphic;
+							
+							// Check graphic using the sfsBuffer symbol
+							if (gra.symbol == sfsBuffer)
+							{
+								_graphicsLayer.remove(gra);
+							}
+							
+							// Get the feature graphic by checking if it is using one of the feature symbols
+							if ((gra.symbol == sfsFeature) || (gra.symbol == smsFeature) || (gra.symbol == slsFeature))
+							{
+								featgra = gra;
+							}
+						}
+						
+						// Formated for 2.0 API
+						var graphic:Graphic = new Graphic();
+						graphic.geometry = event.result as Geometry;
+						
+						// Update the graphics settings
+						graphic.toolTip = "Search Extent";
+						graphic.symbol = sfsBuffer;
+						
+						// Add the new buffer graphic to the map 
+						_graphicsLayer.add(graphic);					
+					}
+					
+					// Set the search geometry
+					_searchGeometry = graphic.geometry;
+					
+					// Zoom map to show extent of the buffer shape
+					var zmExtent:Extent = _searchGeometry.extent;
+					zmExtent = zmExtent.expand(1.25);
+					map.extent = zmExtent;
+					
+					// Clear the working message
+					clearMessage();
+					
+					// Re-enable back and next buttons 
+					bufferSelectBackButton.enabled = true;
+					bufferSelectNextButton.enabled = true;				
+					
+					// Show the target screen
+					showStateTarget();					
+				} 
+				else 
+				{
+					// Use the graceful fault message 
+					showGracefulBufferFault()
+				}
+			}
+			
+			/** 
+			 * Displays a message to user stating there was a problem with the buffer task
+			 */ 
+			private function showGracefulBufferFault():void
+			{
+				// Clear the working message
+				clearMessage();
+				
+				// Re-enable back and next buttons 
+				bufferSelectBackButton.enabled = true;
+				bufferSelectNextButton.enabled = true;				
+				
+				// Alert user that a problem occured
+				Alert.show("The buffer action either returned no geometry, or errored while processing the task.  Please check your settings and try again.",
+					"Warning", Alert.OK, null, null, _expClass);
+			}
+
+			
+			
+			/**
+			 * Called when the Back button on the buffer screen is clicked
+			 */ 
+			protected function bufferSelectBackButton_clickHandler(event:MouseEvent):void
+			{
+				// Check whether mode is for drawing features or for selecting features				
+				if (_toolMode == SELECT_FEATURE)
+				{
+					// Go back to feature selection
+					showStateFeatures();
+				} 
+				else 
+				{
+					// Go back to tool selection
+					showStateTools();
+				}
+			}
+			
+			/**
+			 * Called when the Next button on the buffer screen is clicked
+			 */ 
+			protected function bufferSelectNextButton_clickHandler(event:MouseEvent):void
+			{
+				// Check if buffer of feature is required 
+				if (radUseBuffer.selected) 
+				{
+					// Execute the buffer action with user specified distance
+					bufferFeature(true);
+				} 
+				else 
+				{
+					// Execute the buffer action, but not to use distance
+					bufferFeature(false);
+				}
+			}
+			
+			/** 
+			 * Updates the display when one of the buffer radio buttons is clicked
+			 */ 
+			protected function radCreateBuffers_itemClickHandler(event:ItemClickEvent):void
+			{
+				// Call the set buffer state function
+				setBufferToolDisplayState();
+			}
+			
+			/** 
+			 * Handles the change of the buffer units and checks for custom distance being selected
+			 */ 
+			protected function cboBuffer_changeHandler(event:IndexChangeEvent):void
+			{
+				// Call the set buffer state function
+				setBufferToolDisplayState();
+			}
+			
+			/** 
+			 * Changes the display state of the buffer tools based on the user's selected
+			 */  
+			private function setBufferToolDisplayState():void 
+			{
+				// Check if tool enabled
+				if (radUseBuffer.selected)
+				{
+					hboxBufferUnits.visible = true;
+					hboxBufferUnits.includeInLayout = true;
+					hboxBufferDisplayGraphic.visible = true;
+					hboxBufferDisplayGraphic.includeInLayout = true;
+					
+					// Check if distance units set to 'Custom Distance'
+					if (cboBuffer.selectedItem.label == "Custom Distance") 
+					{
+						hboxBufferDistance.visible = true;
+						hboxBufferDistance.includeInLayout = true;
+						
+						if (txtBufferDistance.text == "") 
+						{
+							txtBufferDistance.text = "1000";
+						}
+					} 
+					else 
+					{
+						hboxBufferDistance.visible = false;
+						hboxBufferDistance.includeInLayout = false;
+						txtBufferDistance.text = cboBuffer.selectedItem.distance;
+					}
+				} 
+				else 
+				{
+					// Hide all controls
+					hboxBufferUnits.visible = false;
+					hboxBufferUnits.includeInLayout = false;
+					hboxBufferDisplayGraphic.visible = false;
+					hboxBufferDisplayGraphic.includeInLayout = false;
+					hboxBufferDistance.visible = false;
+					hboxBufferDistance.includeInLayout = false;
+				}
+			}
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Target selection actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Handles changing the definition of the spatial operator when the combo closes
+			 */ 
+			protected function cboSpatialOperator_closeHandler(event:DropDownEvent):void
+			{
+				// Get the selected item
+				var oper:Object = event.currentTarget.selectedItem;
+				
+				// Set the defintion text based on this item
+				txtSpatialOperatorDefinition.text = oper.description;
+			}
+			
+			/**
+			 * Called when the executeSearchButton is clicked.
+			 */
+			protected function executeSearchButton_clickHandler(event:MouseEvent):void
+			{
+				// Show the working state
+				showStateResults();
+				
+				var loaded:Boolean = false;
+				
+				// Check if the widget is loaded				
+				for each (var widgetId:Number in ViewerContainer.getInstance().widgetManager.getAllLoadedWidgetIds())
+				{
+					if (ViewerContainer.getInstance().widgetManager.getWidget(widgetId).widgetTitle == _searchWidgetName)
+					{
+						loaded = true;
+						break;
+					}
+				}
+				
+				if (!loaded)
+				{
+					// Dispatch a shared data containing the info about the search to run
+					AppEvent.dispatch(AppEvent.DATA_PUBLISH, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: prepareSearchSuggestions() } );
+					
+					// Call a request to run after a short time delay - only because the app is quite swamped at startup and otherwise the event never heard 
+					setTimeout(
+						function ():void 
+						{
+							// Open the id widget
+							AppEvent.dispatch(AppEvent.WIDGET_RUN, _searchWidgetID);
+						}, 
+						_URLHandlerPreloadDelay );
+				}
+				else
+				{
+					// Make a call to the search widget
+					callSearchWidget();
+				}
+			}
+			
+			/**
+			 * Initiates a call to the search widget to perfrom a search based on the current 
+			 * selected item in the predictive search dropdown.
+			 */
+			private function callSearchWidget():void
+			{
+				var suggestions:ArrayCollection = prepareSearchSuggestions();
+				if (_searchWidgetID >= 0 && suggestions.length > 0)
+				{
+					// Dispatch event to call the widget
+					AppEvent.dispatch(AppEvent.DATA_SENT, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: suggestions } );
+				}
+			}
+			
+			/**
+			 * Creates a list of criteria to send to the search widget.
+			 */
+			private function prepareSearchSuggestions():ArrayCollection
+			{
+				var result:ArrayCollection = new ArrayCollection();
+
+				// Check geometry type - if point we need to build a tolerance poly around it
+				var queryGeometry:Geometry;
+				if (_searchGeometry.type == Geometry.MAPPOINT)
+				{
+					// Construct polygon based upon mappoint identify tolerance in relation in map size
+					var pt:MapPoint = _searchGeometry as MapPoint;
+					var buff:Number = _pointSearchTolerance / map.width * map.extent.width;
+					var ring:Array = new Array(new MapPoint(pt.x - buff, pt.y - buff), new MapPoint(pt.x - buff, pt.y + buff), 
+						new MapPoint(pt.x + buff, pt.y + buff), new MapPoint(pt.x + buff, pt.y - buff), new MapPoint(pt.x - buff, pt.y - buff));
+					var pol:Polygon = new Polygon([ring],map.spatialReference);
+					queryGeometry = pol;
+				} 
+				else 
+				{
+					// Set the query geometry to the search geometry
+					queryGeometry = _searchGeometry;
+				}
+
+				
+				// Iterate through each layer in the selection set
+				for each (var searchConfig:Object in lstTargetLayers.selectedItems)
+				{
+					// Check whether a search method has been set to anything other than Intersect
+					var searchMethod:String;
+					if (cboSpatialOperator.selectedItem.operator != "esriSpatialRelIntersects")
+					{
+						searchMethod = cboSpatialOperator.selectedItem.operator;				
+					}
+
+					var suggestion:Object = {
+						searchurl: searchConfig.url,
+						geometry: queryGeometry,
+						searchmethod: searchMethod
+					};
+					
+					result.addItem(new SearchSuggestion(suggestion));
+				}
+				
+				return result;
+			}
+
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Reset actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Clears the current search and resets the widget
+			 */  
+			protected function resetSearch():void
+			{
+				// Clear selection
+				clearSelection();
+				
+				// Enable buffer back and next buttons
+				bufferSelectBackButton.enabled = true;
+				bufferSelectNextButton.enabled = true;				
+				
+				// Disable next button on Tools screen
+				toolSelectNextButton.enabled = false;
+				
+				// Clear messages
+				clearMessage();
+				
+				// Go back to tools 				
+				showStateTools();
+			}
+			
+			
+			
+			/*----------------------------------------------------------------------------------------------------
+			Identify task actions
+			--------------------------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Takes the draw event and starts the search process using the geometry to ID features to get geometry 
+			 */ 
+			private function processSelectFeature(event:DrawEvent):void
+			{
+				// Clear existing highlight features
+				_highlightGraphicsLayer.clear();
+				
+				// Reset features array
+				_features = new ArrayCollection();
+				
+				// Reset selected features array
+				_selectedFeatures = new ArrayCollection();
+				
+				// Reset ftid
+				_ftid = 0;
+				
+				// Prepare task
+				var identify:IdentifyParameters = new IdentifyParameters();
+				
+				// Set the ID geometry
+				var idGeometry:Geometry = event.graphic.geometry;
+				
+				if (idGeometry is Extent)
+				{
+					var ext:Extent = idGeometry as Extent;
+					if (int(ext.height*1000)/1000 == int(ext.width*1000)/1000)
+					{
+						idGeometry = ext.center;
+					}
+				}
+				
+				identify.geometry = idGeometry;
+				
+				// Set additional Identify parameters
+				identify.width = map.width;
+				identify.height = map.height;
+				identify.mapExtent = map.extent;
+				identify.returnGeometry = true;
+				identify.spatialReference = map.spatialReference;
+				identify.tolerance = _pointSearchTolerance;
+				
+				// Clear the existing selected feature graphics
+				_identifyGraphicsLayer.clear();
+				
+				// Get list of excluded and included layers 
+				var excludeXML:XMLList = configXML..excludelayer;
+				var includeXML:XMLList = configXML..includelayer;
+				
+				// Cycle though each map service currently loaded in the map and launch identify if in included layers
+				map.layers.source.forEach( 
+					function(element:*,index:int,arr:Array):void 
+					{
+						// Clear out any previous identify layers
+						identify.layerIds = null;
+						
+						// Check if the current service name is in the excluded list - break if found
+						if(excludeXML.attribute('name').contains(Layer(element).id))
+							return;
+						
+						// Check if the current service name is in the included list
+						if(includeXML.attribute('name').contains(Layer(element).id) || _defaultIDSetting == "include") 
+						{
+							// Service exists in the included list - check for layer ids
+							var s:String = includeXML.(@name == Layer(element).id).includeids;
+							
+							if(s.length > 0)
+							{
+								// Get list of IDs by splitting string
+								identify.layerIds = s.split(',');
+								
+								// Parse ids to numbers
+								identify.layerIds.forEach(
+									function(element2:String,index2:int,arr2:Array):void 
+									{
+										identify.layerIds[index2] = parseInt(element2);
+									}
+								);
+							}
+							
+							// Get the service settings for the identify task - check for current service type
+							switch(Layer(element).className.toString()) 
+							{
+								case "FeatureLayer":
+								{
+									// Layer is a tiled map service
+									var featUrl:String = FeatureLayer(element).url.replace("FeatureServer","MapServer");
+									identifyTask.url = featUrl.substr(0, featUrl.lastIndexOf("/"));
+									identify.layerOption = IdentifyParameters.LAYER_OPTION_VISIBLE;
+
+									var fID:Number = Number(featUrl.replace(identifyTask.url + "/",""));
+									identify.layerIds = [fID];
+									break;
+								}
+
+								case "ArcGISTiledMapServiceLayer":
+								{
+									// Layer is a tiled map service
+									identifyTask.url = ArcGISTiledMapServiceLayer(element).url;
+									identify.layerOption = IdentifyParameters.LAYER_OPTION_VISIBLE;
+									break;
+								}
+									
+								case "ArcGISDynamicMapServiceLayer":
+								{	
+									// Layer is a dynamic map service
+									identifyTask.url = ArcGISDynamicMapServiceLayer(element).url;
+									identify.layerOption = IdentifyParameters.LAYER_OPTION_ALL;
+									
+									// Check if any specific layers have been specified - use visible if none are set
+									if (identify.layerIds == null) 
+									{
+										// Check if number of specific layers is greater than 0
+										if (ArcGISDynamicMapServiceLayer(element).visibleLayers.length > 0) 
+										{
+											identify.layerIds = ArcGISDynamicMapServiceLayer(element).visibleLayers.toArray();
+										} 
+										else 
+										{
+											// Nothing visible - Ignore this layer
+											return;
+										}
+									}
+									break;
+								}
+									
+								default:
+								{
+									return;
+								}
+							}
+							
+							// Update counter
+							_taskCount += 1;
+							
+							// Execute the identify task
+							identifyTask.execute(identify);
+						}
+					}
+				);
+				
+				if (_taskCount > 0) 
+				{
+					// An identify task has been executed - update UI				
+					
+					// Change to feature selection state
+					showStateFeatures();
+					
+					// Show working message
+					showMessage(_loadingLabel, true);
+					
+					// Enable next button on Tools screen 
+					toolSelectNextButton.enabled = true;	
+				}
+			}
+			
+			/**
+			 * Called if the identify task returns a fault.
+			 */
+			protected function identifyTask_faultHandler(event:FaultEvent):void
+			{
+				// Display the error message
+				showMessage(event.fault.faultDetail, false);         
+			}
+			
+			/**
+			 * Called when the identify task returns a result.
+			 */
+			protected function identifyTask_executeCompleteHandler(event:IdentifyEvent):void
+			{
+				// Put task counter back to one
+				_taskCount -= 1;
+				
+				// If counter reached zero, clear loading message
+				if(_taskCount == 0)
+				{
+					clearMessage();
+				}
+				
+				// Check for any results				
+				var resultCount:uint = event.identifyResults.length
+				
+				if(resultCount > 0) 
+				{
+					// Prepare collection to store attributes and shapes 
+					var anAtrArrayCol:ArrayCollection = new ArrayCollection();
+					var anFeatArrayCol:ArrayCollection = new ArrayCollection();
+					
+					var anArray:Array = new Array();
+					var featArray:Array = new Array();
+					var lastResult:String = "";
+					var i:Number;
+					
+					// Iterate through results
+					for (i = 0; i < resultCount; i++) 
+					{
+						// Set the result
+						var result:IdentifyResult = event.identifyResults[i] as IdentifyResult;
+						
+						// Add ftid to graphic attributes
+						result.feature.attributes["ftid"] = _ftid;
+						
+						// Add layername to the graphic attributes
+						result.feature.attributes["flayer"] = result.layerName;
+						
+						// Add graphic to feature array
+						featArray.push(result.feature);
+						
+						// Check if this is a new result or from the same layer as the last one
+						if(lastResult == result.displayFieldName) 
+						{
+							// From same layer as last result - append additional details
+							anAtrArrayCol.addItem(result.feature.attributes);
+							anFeatArrayCol.addItem(result);
+						} 
+						else 
+						{
+							// From a new layer - add the last layers results to the data provider collections and reset collections 
+							
+							// Check for added entry
+							if (anFeatArrayCol.length > 0) 
+							{
+								// Create a result object
+								var aResultObject:Object = {
+									title: IdentifyResult(anFeatArrayCol.getItemAt(0)).layerName,
+										dataprovider: anAtrArrayCol.source,
+										columnarray: [IdentifyResult(anFeatArrayCol.getItemAt(0)).displayFieldName],
+										allresults: anFeatArrayCol.source
+								}
+								
+								// Append the result object to the features collection  
+								_features.addItem(aResultObject);
+								
+								// Reset the attribute a feature collections 
+								anAtrArrayCol = new ArrayCollection();
+								anFeatArrayCol = new ArrayCollection();
+							}
+							
+							// Add the current results
+							anAtrArrayCol.addItem(result.feature.attributes);
+							anFeatArrayCol.addItem(result);
+						}
+						
+						// Set last result name (flag for change in layer)
+						lastResult = result.displayFieldName
+						
+						// Increment ftid value
+						_ftid ++;
+					}
+					
+					// Create last result object
+					var lastResultObject:Object = {
+						title: IdentifyResult(anFeatArrayCol.getItemAt(0)).layerName,
+							dataprovider: anAtrArrayCol.source,
+							columnarray: [IdentifyResult(anFeatArrayCol.getItemAt(0)).displayFieldName],
+							allresults: anFeatArrayCol.source
+					};
+					
+					// Append the last result object to the features collection  
+					_features.addItem(lastResultObject);
+					
+					// Check if this feature is currently in the existing
+					var graphic:Graphic;
+					
+					// Add graphics to map
+					for (i = 0; i < featArray.length; i++)
+					{
+						// Get the graphic
+						graphic = featArray[i] as Graphic;					
+						
+						// Set graphic symbology
+						switch(graphic.geometry.type) 
+						{
+							case Geometry.MAPPOINT:
+							{
+								graphic.symbol = smsIdentify;
+								break;
+							}
+								
+							case Geometry.POLYGON:
+							{
+								graphic.symbol = sfsIdentify;
+								break;
+							}
+								
+							case Geometry.POLYLINE:
+							{
+								graphic.symbol = slsIdentify;
+								break;
+							}
+						}
+						
+						// Add graphic to map
+						_identifyGraphicsLayer.add(graphic);
+					}
+				}				
+			}
+			
+			/**
+			 * Called when the next button on the feature selection screen is clicked.
+			 */
+			protected function featureSelectNextButton_clickHandler(event:MouseEvent):void
+			{
+				// Check if shape exists (should do as this button wont be enabled if there isn't)
+				if (_selectedFeatures != null && _selectedFeatures.length > 0)
+				{
+					showStateBuffer();
+				}
+			}
+			
+			/**
+			 * Called when the back button on the feature selection screen is clicked.
+			 */
+			protected function featureSelectBackButton_clickHandler(event:MouseEvent):void
+			{
+				// Go back to tool selection
+				showStateTools();
+			}
+			
+			/**
+			 * Called when the feature sleection data group has been created.  Adds the listeners for 
+			 * dealing for selection events from the item renderers.
+			 */
+			protected function featureSelection_creationCompleteHandler(event:FlexEvent):void
+			{
+				// Add event listen for selection change
+				featureSelection.addEventListener("FeatureSelect", featureSelected);
+				featureSelection.addEventListener("FeatureHighlight", featureHighlight);
+				featureSelection.addEventListener("FeatureClearHighlight", featureClearHighlight);
+			}
+			
+			/**
+			 * Called when the use selects a feature on one of the datagrids.
+			 */
+			private function featureSelected(event:AppEvent):void
+			{
+				// Get the list of features to select
+				var array:Array = event.data.ftid as Array;
+				
+				// Get the name of the layer that these results cam from. 
+				var layername:String = event.data.layername;
+				
+				// Iterate through each of the graphics in the identify layer
+				for each (var graphic:Graphic in _identifyGraphicsLayer.graphicProvider)
+				{
+					if (graphic.attributes.flayer == layername)
+					{
+						if (array.indexOf(graphic.attributes.ftid) > -1)
+						{
+							// Set the selected flag
+							graphic.attributes.ftSelected = true;
+						}
+						else
+						{
+							// Clear the selected flag
+							graphic.attributes.ftSelected = false;
+						}
+						
+						// Apply the selected symbol
+						selectIDGraphic(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Updates the select status of the specified feature in the identified set.
+			 */
+			private function selectIDGraphic(graphic:Graphic, append:Boolean = true):void
+			{
+				// Set the geometry type
+				var geom:Geometry = graphic.geometry;
+				
+				// Check graphic to see if it is selected
+				var selected:Boolean = graphic.attributes["ftSelected"] == true || graphic.attributes["ftSelected"] == null;
+				
+				// Check for collection to hold selected features 
+				if (_selectedFeatures == null || !append) 
+				{
+					_selectedFeatures = new ArrayCollection();
+				}
+				
+				// Check if the selected features already contains this feature
+				var selectedGraphic:Graphic;
+				var idGraphic:Graphic;
+				var found:Boolean = false;
+				for each(idGraphic in _selectedFeatures)
+				{
+					if (idGraphic.attributes["ftid"] == graphic.attributes["ftid"])
+					{
+						found = true;
+						break;
+					}
+				}
+				
+				// If the graphic isn't already in the selected features, add to the display
+				if (!found && selected)
+				{
+					// Create a new graphic to display the shape in
+					var newGraphic:Graphic; 
+					
+					// Set the graphics features
+					switch(geom.type) 
+					{
+						case Geometry.MAPPOINT:
+						{
+							// Create a new graphic					
+							newGraphic = new Graphic(geom, smsFeature, graphic.attributes);
+							
+							// Reset graphic back to identify symbology
+							graphic.symbol = smsIdentify;
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							// Create a new graphic					
+							newGraphic = new Graphic(geom, slsFeature, graphic.attributes);
+							
+							// Reset graphic back to identify symbology
+							graphic.symbol = slsIdentify;
+							break;
+						}
+							
+						case Geometry.POLYGON:
+						case Geometry.EXTENT:
+						{
+							// Create a new graphic					
+							newGraphic = new Graphic(geom, sfsFeature, graphic.attributes);
+							
+							// Reset graphic back to identify symbology
+							graphic.symbol = sfsIdentify;
+							break;
+						}
+					}
+
+					// Add new graphic to the selected features collection
+					_selectedFeatures.addItem(newGraphic);
+					_highlightGraphicsLayer.clear();
+					
+					// Add the selected features collection graphics to the map
+					for each (selectedGraphic in _selectedFeatures)
+					{
+						_highlightGraphicsLayer.add(selectedGraphic);
+					}
+					
+					// Enable the next button
+					featureSelectNextButton.enabled = true;
+				} 
+				
+				// If the graphic is already in the selected features, and its is now unselected, remove from display
+				if (found && !selected) 
+				{
+					// Remove the graphic from the selected features
+					for (var i:Number = 0; i < _selectedFeatures.length; i++)
+					{
+						selectedGraphic = _selectedFeatures[i];
+						if (selectedGraphic.attributes["ftid"] == graphic.attributes["ftid"])
+						{
+							_selectedFeatures.removeItemAt(i);
+							break;
+						}
+					} 
+					
+					// Reset the highlighted features
+					_highlightGraphicsLayer.clear();
+					
+					// Add the selected features collection graphics to the map
+					for each (selectedGraphic in _selectedFeatures)
+					{
+						_highlightGraphicsLayer.add(selectedGraphic);
+					}
+					
+					// Check to enable next button
+					if (_selectedFeatures.length > 0)
+					{	
+						// Enable the next button
+						featureSelectNextButton.enabled = true;
+					}
+				}
+			}
+
+			/**
+			 * Called when the featureHighlight event is called from the data group.  This normally 
+			 * occurs when the mouse rolls over the data grid in the feature item renderer.
+			 */
+			private function featureHighlight(event:AppEvent):void
+			{
+				try
+				{
+					// Get the graphic reference and geometry type of the selected item
+					var graphic:Graphic = getIdentifyGraphic(event.data.ftid);
+					
+					for each(var idGraphic:Graphic in _identifyGraphicsLayer.graphicProvider)
+					{ 
+						if (idGraphic === graphic)
+						{
+							applyHighlight(idGraphic);
+						}
+						else
+						{
+							clearHighlight(idGraphic);
+						}
+					}
+				}
+				catch (error:Error)
+				{
+					// Catcher for strange error					
+					trace("Highlight error: " + error.message);
+				}
+			}
+			
+			/**
+			 * Called when the clearFeatureHighlight event is called from the data group. This normally 
+			 * occurs when the mouse rolls off the data grid in the feature item renderer.
+			 */
+			private function featureClearHighlight(event:AppEvent):void
+			{
+				// Get the graphic reference and geometry type of the selected item
+				var graphic:Graphic = getIdentifyGraphic(event.data.ftid);
+				
+				if (graphic)
+				{
+					clearHighlight(graphic);
+				}
+			}
+
+			/**
+			 * Applies the highlight symbol to the specified graphic in the identify graphics layer.
+			 */
+			private function applyHighlight(graphic:Graphic):void
+			{
+				var geom:Geometry = graphic.geometry;
+				
+				// Alter the display symbology of the graphic to highlight it
+				switch(geom.type) 
+				{
+					case Geometry.MAPPOINT:
+					{
+						graphic.symbol = smsHighlight;
+						break;
+					}
+						
+					case Geometry.POLYGON:
+					{
+						graphic.symbol = sfsHighlight;
+						break;
+					}
+						
+					case Geometry.POLYLINE:
+					{
+						graphic.symbol = slsHighlight;
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Clears the highlight symbol from the specified graphic in the identify graphics layer 
+			 * and resets it back to the identify symbol.
+			 */
+			private function clearHighlight(graphic:Graphic):void
+			{
+				var geom:Geometry = graphic.geometry;
+				
+				// Reset the display symbology of the graphic to remove the highlight	
+				switch(geom.type) 
+				{
+					case Geometry.MAPPOINT:
+					{
+						graphic.symbol = smsIdentify;
+						break;
+					}
+						
+					case Geometry.POLYGON:
+					{
+						graphic.symbol = sfsIdentify;
+						break;
+					}
+						
+					case Geometry.POLYLINE:
+					{
+						graphic.symbol = slsIdentify;
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Finds the graphic in the identify graphics layer with the given ID number.
+			 */
+			private function getIdentifyGraphic(ftid:Number):Graphic
+			{
+				var result:Graphic;
+				for each(var graphic:Graphic in _identifyGraphicsLayer.graphicProvider)
+				{
+					if (graphic.attributes["ftid"] == ftid)
+					{
+						result = graphic;
+						break;
+					}
+				}
+				return result;
+			}
+		]]>
+	</fx:Script>
+	
+	
+	<fx:Declarations>
+		
+		<!--- Geometry service for simplifying graphics and generating buffers -->
+		<esri:GeometryService id="geometryService"
+							  unionComplete="mergeFeatureCompleteHandler(event)"
+							  fault="geometryService_faultHandler(event)"
+							  url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"/>
+		
+		<!--- Identify task -->
+		<esri:IdentifyTask id="identifyTask" fault="identifyTask_faultHandler(event)" concurrency="multiple"
+						   executeComplete="identifyTask_executeCompleteHandler(event)"/>
+		
+		<!--- Glow effect -->
+		<s:GlowFilter id="glowFilter"
+					  alpha="1"
+					  color="{getStyle('focusColor')}"
+					  inner="true"
+					  strength="2"/>
+		
+		<!--- Symbol for buffers -->
+		<esri:SimpleFillSymbol id="sfsBuffer" alpha="{_buffersymbolalpha}" color="{_buffersymbolcolour}" style="{_buffersymbolfillstyle}" >
+			<esri:outline>
+				<esri:SimpleLineSymbol color="{_buffersymboloutlinecolour}" alpha="{_buffersymboloutlinealpha}" 
+									   style="{_buffersymboloutlinestyle}" width="{_buffersymboloutlinewidth}"/>
+			</esri:outline>
+		</esri:SimpleFillSymbol>
+		
+		<!--- Symbol for feature points -->
+		<esri:SimpleMarkerSymbol id="smsFeature" color="{_featuresymbolcolour}" alpha="{_featuresymbolalpha}" 
+								 size="{_featuresymbolpointsize}" style="{_featuresymbolpointstyle}">
+			<esri:SimpleLineSymbol color="{_featuresymboloutlinecolour}" width="{_featuresymboloutlinewidth}" alpha="{_featuresymboloutlinealpha}"
+								   style="{_featuresymboloutlinestyle}" />
+		</esri:SimpleMarkerSymbol>
+		
+		<!--- Symbol for feature polygons -->
+		<esri:SimpleFillSymbol id="sfsFeature" alpha="{_featuresymbolalpha}" color="{_featuresymbolcolour}" style="{_featuresymbolfillstyle}" >
+			<esri:outline>
+				<esri:SimpleLineSymbol color="{_featuresymboloutlinecolour}" alpha="{_featuresymboloutlinealpha}" 
+									   style="{_featuresymboloutlinestyle}" width="{_featuresymboloutlinewidth}"/>
+			</esri:outline>
+		</esri:SimpleFillSymbol>
+		
+		<!--- Symbol for feature lines -->
+		<esri:SimpleLineSymbol id="slsFeature" style="{_featuresymbollinestyle}" color="{_featuresymbolcolour}"
+							   width="{_featuresymbollinewidth}" alpha="{_featuresymbolalpha}"/>
+		
+		<!--- Symbol for Identify points -->
+		<esri:SimpleMarkerSymbol id="smsIdentify" color="{_identifysymbolcolour}" alpha="{_identifysymbolalpha}" 
+								 size="{_identifysymbolpointsize}" style="{_identifysymbolpointstyle}">
+			<esri:SimpleLineSymbol color="{_identifysymboloutlinecolour}" width="{_identifysymboloutlinewidth}" alpha="{_identifysymboloutlinealpha}"
+								   style="{_identifysymboloutlinestyle}" />
+		</esri:SimpleMarkerSymbol>
+		
+		<!--- Symbol for Identify polygons -->
+		<esri:SimpleFillSymbol id="sfsIdentify" alpha="{_identifysymbolalpha}" color="{_identifysymbolcolour}" style="{_identifysymbolfillstyle}" >
+			<esri:outline>
+				<esri:SimpleLineSymbol color="{_identifysymboloutlinecolour}" alpha="{_identifysymboloutlinealpha}" 
+									   style="{_identifysymboloutlinestyle}" width="{_identifysymboloutlinewidth}"/>
+			</esri:outline>
+		</esri:SimpleFillSymbol>
+		
+		<!--- Symbol for Identify lines -->
+		<esri:SimpleLineSymbol id="slsIdentify" style="{_identifysymbollinestyle}" color="{_identifysymbolcolour}"
+							   width="{_identifysymbollinewidth}" alpha="{_identifysymbolalpha}"/>
+
+		<!--- Symbol for highlight lines -->
+		<esri:SimpleLineSymbol id="slsHighlight" style="{_highlightsymbollinestyle}" color="{_highlightsymbolcolour}"
+							   width="{_highlightsymbollinewidth}" alpha="{_highlightsymbolalpha}"/>
+
+		<!--- Symbol for highlight points -->
+		<esri:SimpleMarkerSymbol id="smsHighlight" color="{_highlightsymbolcolour}" alpha="{_highlightsymbolalpha}" 
+								 size="{_highlightsymbolpointsize}" style="{_highlightsymbolpointstyle}">
+			<esri:SimpleLineSymbol color="{_highlightsymboloutlinecolour}" width="{_highlightsymboloutlinewidth}" alpha="{_highlightsymboloutlinealpha}"
+								   style="{_highlightsymboloutlinestyle}" />
+		</esri:SimpleMarkerSymbol>
+		
+		<!--- Symbol for highlight polygons -->
+		<esri:SimpleFillSymbol id="sfsHighlight" alpha="{_highlightsymbolalpha}" color="{_highlightsymbolcolour}" style="{_highlightsymbolfillstyle}" >
+			<esri:outline>
+				<esri:SimpleLineSymbol color="{_highlightsymboloutlinecolour}" alpha="{_highlightsymboloutlinealpha}" 
+									   style="{_highlightsymboloutlinestyle}" width="{_highlightsymboloutlinewidth}"/>
+			</esri:outline>
+		</esri:SimpleFillSymbol>
+		
+		<!--- Radio Button Groups -->
+		<s:RadioButtonGroup id="radCreateBuffers" itemClick="radCreateBuffers_itemClickHandler(event)" />
+	</fx:Declarations>
+	
+	<!--- Viewer states -->
+	<viewer:states>
+		<s:State name="searchTools" />
+		<s:State name="featureSelect" />
+		<s:State name="bufferSelect" />
+		<s:State name="targetSelect" />
+		<s:State name="results" />
+	</viewer:states>
+	
+	<viewer:transitions>
+		<s:Transition toState="*" autoReverse="true">
+			<s:Fade targets="{[searchTools,featureSelect,bufferSelect,targetSelect]}" />
+		</s:Transition>
+	</viewer:transitions>
+	
+	<!--- Widget Layout -->
+	<viewer:WidgetTemplate id="wTemplate" 
+						   closed="widgetClosedHandler(event)" 
+						   open="widgetOpenedHandler(event)"  
+						   minimized="widgetMinimizedHandler(event)" 
+						   height="350"
+						   width="420"
+						   enableDraging="true" >
+		
+		<!--- Set vertical layout -->
+		<viewer:layout>
+			<s:VerticalLayout gap="5" />
+		</viewer:layout>
+		
+		<!--- Start groups containing the various widget windows -->
+		
+		<!--- Start of search tools page : index == 0 -->
+		<s:Group id="searchTools" width="100%" height="100%" visible.searchTools="true" visible="false" 
+				 includeInLayout="false" includeInLayout.searchTools="true" >
+			<s:layout>
+				<s:VerticalLayout gap="4" horizontalAlign="center" />
+			</s:layout>
+			
+			<!--- Instruction text -->
+			<s:HGroup id="searchToolsInstructions" width="100%" 
+					  paddingTop="2" paddingBottom="2" 
+					  paddingLeft="2" paddingRight="2">
+				<s:Label id="searchToolsInstructionLabel" 
+						 text="{_searchToolsInstructionLabel.replace('[value]', _maxSearchScale.toString())}" 
+						 styleName="WidgetText" width="100%" textAlign="left" />
+			</s:HGroup>
+			
+			<!--- Graphical selection -->
+			<s:HGroup id="graphicalTools" width="100%" gap="5" horizontalAlign="center">
+				<s:Image name="{SELECT_FEATURE_TOOL}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="@Embed(source='widgets/SearchEnhanced/assets/images/i_featureselect.png')"
+						 toolTip="{_featureToolLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.MAPPOINT}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_point.png"
+						 toolTip="{_pointLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.POLYLINE}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_line.png"
+						 toolTip="{_lineLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.FREEHAND_POLYLINE}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_freeline.png"
+						 toolTip="{_freehandLineLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.EXTENT}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_rect.png"
+						 toolTip="{_rectangleLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.CIRCLE}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_circle.png"
+						 toolTip="{_circleLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.POLYGON}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_poly.png"
+						 toolTip="{_polygonLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+				<s:Image name="{DrawTool.FREEHAND_POLYGON}"
+						 width="40" height="40"
+						 buttonMode="true"
+						 click="toggleDrawTool(event)"
+						 rollOut="iconRollOutHandler(event)"
+						 rollOver="iconRollOverHandler(event)"
+						 source="assets/images/i_draw_freepoly.png"
+						 toolTip="{_freehandPolygonLabel}"
+						 useHandCursor="true"
+						 enabled="{_layerInScale}"/>
+			</s:HGroup>
+			
+			<!--- Selected tool instruction area -->
+			<s:HGroup id="toolInstructions" width="100%" paddingTop="2" paddingBottom="2" paddingLeft="2" paddingRight="2">
+				<s:Label id="toolInstructionLabel" text="" styleName="WidgetText" width="100%" textAlign="left"/>
+			</s:HGroup>
+			
+			<!--- Message for layer not being in scale -->
+			<s:HGroup width="100%" horizontalAlign="center" visible="{!_layerInScale}" 
+					  includeInLayout="{!_layerInScale}">
+				<s:Label id="labLayerNotInscale" maxDisplayedLines="3" width="100%"
+						 text="{_layerInScaleMessage}" />				
+			</s:HGroup>
+			
+			<!--- HBox contains the buttons used for cancel and next (if a shape exists) -->	
+			<s:HGroup id="toolActions" width="100%" paddingTop="4" paddingBottom="4" paddingLeft="4" paddingRight="4" 
+					  horizontalAlign="center" gap="5">
+				<s:Button id="toolSelectNextButton" label="{_nextLabel}" toolTip="{_nextTooltip}" click="toolSelectNextButton_clickHandler(event)" 
+						  enabled="false" buttonMode="true" useHandCursor="true" />
+			</s:HGroup>
+			
+		</s:Group>
+		
+		
+		<!--- Start of feature select page : index == 1 -->
+		<s:Group id="featureSelect" width="100%" height="100%" visible.featureSelect="true" visible="false" 
+				 includeInLayout="false" includeInLayout.featureSelect="true">
+			<s:layout>
+				<s:VerticalLayout gap="4" horizontalAlign="center" />
+			</s:layout>
+			
+			<s:HGroup id="featureSelectInstructions" width="100%" paddingTop="2" paddingBottom="2" paddingLeft="2" paddingRight="2">
+				<s:Label id="txtFeatureSelectInstructionLabel" text="{_featureSelectInstructionLabel}" 
+						 styleName="WidgetText" width="100%" textAlign="left"/>
+			</s:HGroup>
+			
+			<!--- VBox contains the features returned by the identify tasks -->	
+			<s:VGroup width="100%" height="100%" horizontalAlign="center" paddingLeft="0" paddingRight="0">
+				
+				<s:Scroller width="100%" height="100%" horizontalScrollPolicy="off" verticalScrollPolicy="auto" >
+					
+					<s:DataGroup id="featureSelection" width="100%" height="100%" dataProvider="{_features}" 
+								 creationComplete="featureSelection_creationCompleteHandler(event)" >
+						<s:layout>
+							<s:VerticalLayout gap="3" />
+						</s:layout>
+						
+						<s:itemRenderer>
+							<fx:Component>
+								
+								<s:ItemRenderer dataChange="itemrenderer1_dataChangeHandler(event)" width="100%" 
+												mouseChildren="true" autoDrawBackground="true" >
+									<fx:Script>
+										<![CDATA[
+											import com.esri.viewer.AppEvent;
+											
+											import mx.collections.ArrayCollection;
+											import mx.events.FlexEvent;
+											import mx.utils.OnDemandEventDispatcher;
+											
+											import spark.components.gridClasses.GridColumn;
+											import spark.events.GridEvent;
+											import spark.events.GridSelectionEvent;
+											import spark.events.GridSelectionEventKind;
+											
+											private var _mouseRowID:int = -1;
+											
+											/**
+											 * Called when the data changes in the item renderer. 
+											 */
+											protected function itemrenderer1_dataChangeHandler(event:FlexEvent):void
+											{
+												// Hide the data grid while updating the contents
+												featuresGrid.visible = false;
+												
+												// Reset the _mouseRowID flag;
+												_mouseRowID = -1;
+												
+												if (data)
+												{
+													// Update the layer name label
+													layerLabel.text = data.title;
+													
+													featuresGrid.columns.removeAll();
+													
+													// Set the description field
+													var idColumn:GridColumn = new GridColumn();		
+													idColumn.dataField = "ftid";
+													idColumn.headerText = "ID";
+													featuresGrid.columns.addItem(idColumn);
+													
+													// Set the description field
+													var featureColumn:GridColumn = new GridColumn();		
+													featureColumn.dataField = data.columnarray[0];
+													featureColumn.headerText = String(data.columnarray[0]).replace("_"," ");
+													featuresGrid.columns.addItem(featureColumn);
+													
+													// Add the remaining fields in the dataprovider
+													var features:ArrayCollection = new ArrayCollection(data.dataprovider);
+													if (features.length > 0)
+													{
+														for (var fieldname:String in data.dataprovider[0])
+														{
+															if (fieldname != "ftid" && fieldname != data.columnarray[0] && 
+																fieldname.toUpperCase() != "SHAPE")
+															{
+																var col:GridColumn = new GridColumn(fieldname);
+																featuresGrid.columns.addItem(col);
+															}
+														}
+													}
+													
+													// Set the data provider											
+													featuresGrid.dataProvider = new ArrayCollection(data.dataprovider); 
+													featuresGrid.requestedRowCount = featuresGrid.dataProvider.length;
+													
+													// Show the data grid while updating the contents
+													featuresGrid.visible = true;
+												}
+												else
+												{
+													// Update the layer name label
+													layerLabel.text = "";
+													featuresGrid.dataProvider = null;
+													for (var i:Number = featuresGrid.columns.length - 1; i > 1 ; i--)
+													{
+														featuresGrid.columns.removeItemAt(i);
+													}
+												}
+											}
+											
+											/**
+											 * Called when the selected items in the grid change.
+											 */
+											protected function featuresGrid_selectionChangeHandler(event:GridSelectionEvent):void
+											{
+												// Dispatch the select Event
+												var array:Array = [];
+												
+												for each (var rec:Object in featuresGrid.selectedItems)
+												{
+													array.push(rec.ftid);
+												}
+												
+												var features:Object = { ftid:array, layername:data.title };
+												this.parent.dispatchEvent(new AppEvent("FeatureSelect", features));
+												
+												// Update the clear icon status
+												clearIcon.enabled = (featuresGrid.selectedItems.length > 0);
+											}
+											
+											/**
+											 * Called when the yser clicks a row in the data grid.
+											 */
+											protected function featuresGrid_gridClickHandler(event:GridEvent):void
+											{
+											}
+											
+											/**
+											 * Called when the mouse rolls over a row in the data grid.
+											 */
+											protected function featuresGrid_gridRollOverHandler(event:GridEvent):void
+											{
+												// Dispatch the rollOver Event
+												var obj:Object = event.item;
+												
+												if (obj && _mouseRowID != obj.ftid)
+												{
+													_mouseRowID = obj.ftid;
+
+													var feature:Object = { ftid:_mouseRowID };
+													this.parent.dispatchEvent(new AppEvent("FeatureHighlight", feature));
+												}
+											}
+											
+											/**
+											 * Called when the mouse rolls out of the data grid.
+											 */
+											protected function featuresGrid_rollOutHandler(event:MouseEvent):void
+											{
+												// Dispatch the rollOver Event
+												if (_mouseRowID != -1)
+												{
+													var feature:Object = { ftid:_mouseRowID};
+													this.parent.dispatchEvent(new AppEvent("FeatureClearHighlight", feature));
+
+													// Reset the _mouseRowID flag
+													_mouseRowID = -1;
+												}
+											}
+
+											/**
+											 * Called when the user clicks the clear icon.
+											 */
+											protected function clearIcon_clickHandler(event:MouseEvent):void
+											{
+												featuresGrid.clearSelection();
+
+												// Dispatch the select Event
+												var array:Array = [];
+
+												var features:Object = { ftid:array, layername:data.title };
+												this.parent.dispatchEvent(new AppEvent("FeatureSelect", features));
+												
+												// Update the clear icon status
+												clearIcon.enabled = false;
+											}
+											
+										]]>
+									</fx:Script>
+									
+									<s:layout>
+										<s:VerticalLayout gap="5" paddingBottom="5" paddingLeft="5" paddingRight="5" paddingTop="5" />
+									</s:layout>
+									
+
+									<s:HGroup width="100%" verticalAlign="middle" gap="3" >
+										<s:Image id="clearIcon" buttonMode="true" useHandCursor="true" toolTip="Click to clear selection" 
+												 source="@Embed(source='widgets/SearchEnhanced/assets/images/i_clearselected.png')" 
+												 enabled="false" height="20" width="20" click="clearIcon_clickHandler(event)" />
+										<s:Label id="layerLabel" width="100%" styleName="WidgetTitle" />
+									</s:HGroup>
+									
+									<s:DataGrid id="featuresGrid" width="100%" editable="false" 
+												selectionColor="{getStyle('focusColor')}"
+												selectionMode="multipleRows" 
+												alternatingRowColors="[#CCCCCC, #999999]" 
+												rollOverColor="{getStyle('rollOverColor')}" 
+												selectionChange="featuresGrid_selectionChangeHandler(event)" 
+												gridClick="featuresGrid_gridClickHandler(event)"
+												gridRollOver="featuresGrid_gridRollOverHandler(event)"
+												rollOut="featuresGrid_rollOutHandler(event)" >
+										
+										<s:columns>
+											<s:ArrayList>
+											</s:ArrayList>
+										</s:columns>
+										
+									</s:DataGrid>
+									
+								</s:ItemRenderer>
+								
+							</fx:Component>
+						</s:itemRenderer>
+					</s:DataGroup>
+					
+				</s:Scroller>
+				
+			</s:VGroup>
+			
+			<!--- HBox contains the buttons used for back, cancel, and next (if all tasks completed and a shape has been selected) -->	
+			<s:HGroup id="featureSelectActions" width="100%" paddingTop="4" paddingBottom="4" paddingLeft="4" paddingRight="4" 
+					  horizontalAlign="center" gap="5">
+				
+				<s:Button id="featureSelectBackButton" label="{_backLabel}" toolTip="{_backTooltip}" 
+						  click="featureSelectBackButton_clickHandler(event)" buttonMode="true" useHandCursor="true" />
+				<s:Button id="featureSelectCancelButton" label="{_cancelLabel}" toolTip="{_cancelTooltip}" 
+						  click="resetSearch()" buttonMode="true" useHandCursor="true" />
+				<s:Button id="featureSelectNextButton" label="{_nextLabel}" toolTip="{_nextTooltip}" 
+						  click="featureSelectNextButton_clickHandler(event)" enabled="false" buttonMode="true" useHandCursor="true" />
+				
+			</s:HGroup>
+			
+		</s:Group>
+		
+		
+		<!--- Start of buffer selection page : index == 2 -->
+		<s:Group id="bufferSelect" width="100%" height="100%" visible.bufferSelect="true" visible="false"
+				 includeInLayout.bufferSelect="true" includeInLayout="false">
+			<s:layout>
+				<s:VerticalLayout gap="4" horizontalAlign="center" />
+			</s:layout>
+
+				<!--- Instruction text -->
+				<s:HGroup id="bufferSelectInstructions" width="100%" paddingTop="2" paddingBottom="2" paddingLeft="2" paddingRight="2">
+					<s:Label id="txtBufferSelectInstructionLabel" text="{_bufferSelectInstructionLabel}" 
+							 styleName="WidgetText" width="100%" textAlign="left"/>
+				</s:HGroup>
+				
+				<!--- Show buffers radio group -->
+				<s:HGroup horizontalAlign="center" width="100%" gap="5" paddingTop="4" paddingBottom="4">
+					<s:RadioButton id="radUseBuffer" label="Buffer Feature" value="true" groupName="radCreateBuffers" />
+					<s:RadioButton id="radDontBuffer" label="No Buffer" value="false" groupName="radCreateBuffers" />
+				</s:HGroup>	
+				
+				<!--- Preconfigured Buffer units box -->
+				<s:HGroup id="hboxBufferUnits" verticalAlign="middle" width="100%" horizontalAlign="left" gap="4" paddingLeft="4" 
+						  paddingRight="4" visible="false" includeInLayout="false">
+					<s:Label text="{_bufferunitLabel}" width="100" textAlign="right" styleName="WidgetText"/>
+					<s:DropDownList id="cboBuffer" selectedIndex="0" width="175" fontWeight="normal" styleName="WidgetText" 
+									change="cboBuffer_changeHandler(event)" toolTip="{_bufferunitTooltip}" />
+				</s:HGroup>
+				
+				<!--- Show buffer graphic on map box -->
+				<s:HGroup id="hboxBufferDisplayGraphic" verticalAlign="middle" width="100%" horizontalAlign="left" gap="4" paddingLeft="4" 
+						  paddingRight="4" visible="false" includeInLayout="false" >
+					<s:CheckBox id="chkBufferDisplayGraphic" label="{_bufferDisplayGraphicLabel}" selected="true"
+								toolTip="{_bufferDisplayGraphicTooltip}" />					
+				</s:HGroup>
+				
+				<!--- Custom Buffer distance box -->
+				<s:HGroup id="hboxBufferDistance" verticalAlign="middle" width="100%" horizontalAlign="left" gap="4" paddingLeft="4" 
+						  paddingRight="4" paddingTop="4" visible="false" includeInLayout="false">
+					<mx:Label text="{_bufferdistanceLabel}" width="100" textAlign="right" styleName="WidgetText"/>
+					<s:TextInput id="txtBufferDistance" text="" width="175" fontWeight="normal" styleName="WidgetText"
+								 toolTip="{_bufferdistanceTooltip}"  restrict="0-9"/>
+				</s:HGroup>
+				
+				<!--- Group contains the buttons used for back, cancel, and to execute the search -->	
+				<s:HGroup id="bufferSelectActions" width="100%" paddingTop="4" paddingBottom="4" paddingLeft="4" paddingRight="4" 
+						  horizontalAlign="center" gap="5">
+					
+					<s:Button id="bufferSelectBackButton" label="{_backLabel}" toolTip="{_backTooltip}" 
+							  click="bufferSelectBackButton_clickHandler(event)" buttonMode="true" useHandCursor="true" />
+					<s:Button id="bufferSelectCancelButton" label="{_cancelLabel}" toolTip="{_cancelTooltip}" 
+							  click="resetSearch()" buttonMode="true" useHandCursor="true" />
+					<s:Button id="bufferSelectNextButton" label="{_nextLabel}" toolTip="{_nextTooltip}" 
+							  click="bufferSelectNextButton_clickHandler(event)" buttonMode="true" useHandCursor="true" />
+					
+				</s:HGroup>
+				
+		</s:Group>
+		
+		
+		<!--- Start of target selection page : index == 3 -->
+		<s:Group id="targetSelect" width="100%" height="100%" visible.targetSelect="true" visible="false"
+				 includeInLayout.targetSelect="true" includeInLayout="false">
+			<s:layout>
+				<s:VerticalLayout gap="4" horizontalAlign="center" />
+			</s:layout>
+			 	
+				<!--- Instruction text -->
+				<s:HGroup id="targetSelectInstructions" width="100%" paddingTop="2" paddingBottom="2" 
+						  paddingLeft="2" paddingRight="2">
+					<s:Label id="txtTargetSelectInstructionLabel" text="{_targetSelectInstructionLabel}" 
+							 styleName="WidgetText" width="100%" textAlign="left"/>
+				</s:HGroup>
+				
+				<!--- Target layer combo -->
+				<s:HGroup id="hboxTargetLayer" verticalAlign="middle" horizontalAlign="center" width="100%" height="100%" 
+						  gap="15" paddingLeft="4" paddingRight="4" paddingBottom="1" paddingTop="4" >
+					<s:Label id="lblTargetLayer" text="{_targetLayerLabel}" styleName="WidgetText" />
+					<s:List id="lstTargetLayers" toolTip="{_targetLayerTooltip}" allowMultipleSelection="true" 
+							styleName="altList" minWidth="175" width="100%" height="100%" />
+				</s:HGroup>
+				
+				<!--- Spatial operations combo -->
+				<s:HGroup id="hboxSpatialOperation" verticalAlign="middle" width="100%" horizontalAlign="center" gap="4"
+						  paddingLeft="4" paddingRight="4" paddingBottom="1" paddingTop="4">
+					<s:Label id="lblSpatialOperator" text="{_spatialOperatorLabel}" styleName="WidgetText" />
+					<s:DropDownList id="cboSpatialOperator" width="175" toolTip="{_spatialOperatorTooltip" 
+									close="cboSpatialOperator_closeHandler(event)" />
+				</s:HGroup>
+				<s:Label id="txtSpatialOperatorDefinition" width="100%" paddingLeft="10" paddingRight="10" paddingBottom="4" paddingTop="0" 
+						 styleName="WidgetText" />				
+				
+				<!--- HBox contains the buttons used for back, cancel, and to execute the search -->	
+				<s:HGroup id="targetSelectActions" width="100%" paddingTop="4" paddingBottom="2" paddingLeft="4" paddingRight="4" 
+						  horizontalAlign="center" gap="10" >
+					
+					<s:Button id="targetSelectBackButton" label="{_backLabel}" toolTip="{_backTooltip}" 
+							  click="showStateBuffer()" />
+					<s:Button id="targetSelectCancelButton" label="{_cancelLabel}" toolTip="{_cancelTooltip}" 
+							  click="resetSearch()" />
+					<s:Button id="executeSearchButton" label="{_executeSearchLabel}" toolTip="{_executeSearchTooltip}"
+							  click="executeSearchButton_clickHandler(event)" />
+				</s:HGroup>
+
+		</s:Group>
+		
+		<s:Group id="results" width="100%" height="100%" visible.results="true" visible="false"
+				 includeInLayout.results="true" includeInLayout="false">
+			<s:layout>
+				<s:VerticalLayout gap="4" horizontalAlign="center" />
+			</s:layout>
+
+			<s:VGroup width="100%" height="100%" paddingTop="2" paddingBottom="2" 
+					  paddingLeft="2" paddingRight="2">
+				<s:Label text="The search is now running.  Results will be displayed in the Search Widget when it has been completed." width="100%"/>
+			</s:VGroup>
+			
+			<!--- HBox contains the buttons used for back, cancel, and to execute the search -->	
+			<s:HGroup id="resultsActions" width="100%" paddingTop="4" paddingBottom="2" paddingLeft="4" paddingRight="4" 
+					  horizontalAlign="center" gap="10" >
+				<s:Button id="resultsBackButton" label="{_backLabel}" toolTip="{_backTooltip}" 
+						  click="showStateTarget()" />
+				<s:Button id="resultsCancelButton" label="{_cancelLabel}" toolTip="{_cancelTooltip}" 
+						  click="resetSearch()" />
+			</s:HGroup>
+		
+		</s:Group>
+		
+		<!--- Start Hbox - message/loading box -->
+		<s:HGroup id="boxMessage" visible="{_msgVisible}" includeInLayout="{_msgVisible}" 
+				  width="100%" bottom="0" verticalAlign="middle" >
+			<mx:SWFLoader id="swfMessage" source="assets/images/loader.swf" visible="false" includeInLayout="false" />
+			<s:Label id="txtMessage" text="" styleName="WidgetText" width="100%" />
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>

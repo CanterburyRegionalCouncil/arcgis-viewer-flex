@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>true</openbydefault>
+	<icon>widgets/HeaderControllerEnhanced/assets/images/icon.png</icon>
+	<label>Enhanced Header Controller Widget</label>
+	<description>Enhanced version of the standard Header Controller widget. Includes custom links and replaces the geocoder with custom search service.  This is a layout widget.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/HeaderControllerEnhanced/README.md</helpurl>
+</configuration>

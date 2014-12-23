@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>widgets/Measure/assets/images/icon.png</icon>
+	<label>Measure Widget</label>
+	<description>Interactive measuring widget.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/Measure/README.md</helpurl>
+</configuration>

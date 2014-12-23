@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>false</openbydefault>
+	<icon>assets/images/i_bookmark.png</icon>
+	<label>Enhanced Coordinate Widget</label>
+	<description>This version includes a link button to a help file location.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl></helpurl>
+</configuration>

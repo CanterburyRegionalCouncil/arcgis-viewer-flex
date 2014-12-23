@@ -1,0 +1,908 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY		: 	This component allows the user to call the predictive search service to locate
+				features and display the results on a map.  Once the user selects the feature 
+				that wish to display, the component can make a call that opens the 
+				Advanced Search widget and gets it to execute a search.
+
+SOURCE		: 	Some code based on code provided by Auckland Regional Council.
+
+DEVELOPED BY : 	Ryan Elley, ECan.
+
+CREATED		: 	20/09/2011
+DEPENDENCIES: 	
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan)	| 20/09/2011	| Initial Development based on Enhanced Search Predictive Search 
+									  Widget, reworked to function with the Advanced Search Widget.   
+Ryan Elley (ECan)	| 06/01/2012	| Version 2.5 API and viewer port.  Predictive search element
+									  separated from the widget into a standalone component for reuse
+									  in multiple widgets.
+Ryan Elley (ECan)	| 06/02/2013	| Flex Viewer Port 3.1 API and 3.1 viewer.
+Ryan Elley (ECan)	| 12/06/2013	| Flex Viewer Port 3.3 API and 3.3 viewer.
+Ryan Elley (ECan)	| 20/07/2014	| Flex Viewer Port 3.6 API and 3.6 viewer.
+									  Removal of legacy service calls to instead only use JSONTask call.
+-->
+
+<s:Group xmlns:esri			="http://www.esri.com/2008/ags"
+		 xmlns:fx			="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s			="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx			="library://ns.adobe.com/flex/mx"
+		 xmlns:a			="widgets.supportClasses.components.autocomplete.*"
+		 xmlns:services		="restServices.predictivesearch.*"
+		 minWidth			="150" 
+		 minHeight			="25">
+
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.JSONEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.symbols.CompositeSymbol;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			import com.esri.ags.symbols.TextSymbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.JSONTask;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.IBaseWidget;
+			import com.esri.viewer.ViewerContainer;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			import widgets.supportClasses.SearchSuggestion;
+
+
+			/* --------------------------------------------------------------------
+			Component constants
+			-------------------------------------------------------------------- */
+
+
+			
+			/* --------------------------------------------------------------------
+			Component variables
+			-------------------------------------------------------------------- */
+
+			/** Delay to use in the timeout when calling the search widget.  Used to make sure that viewer widgets have all loaded correctly */
+			protected var _URLHandlerPreloadDelay:Number = 1000;
+			
+			// Seach mechanism used initiate the search/the type of search service
+			private var _legacymode:Boolean = true;
+			
+			// Predictive search service settings
+			[Bindable]
+			private var _predictiveServiceURL:String;
+			[Bindable]
+			private var _predictiveServiceLimit:int = 10;
+			[Bindable]
+			private var _predictiveSearchInputMinChars:int = 3;
+			[Bindable]
+			private var _predictiveSearchFilters:String = "";
+
+			// Autocomplete settings			
+			private var _regExpressions:Array = [];
+			private var _iconList:Array = [];
+			private var _searchExpressions:Array = [];			
+			
+			// Predictive search result settings
+			private var _selectedSuggestion:Object;
+
+			// Search widget settings
+			private var _searchWidgetID:int = -1;
+			private var _searchWidgetName:String;
+
+			// Display settings
+			private var _map:Map;
+			private var _graphicsLayer:GraphicsLayer;
+			[Bindable]
+			private var _geoprocessingServiceURL:String = "http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"; 
+			
+			// Label and tooltip variables			
+			[Bindable]
+			private var _searchLabel:String = "";
+			[Bindable]
+			private var _clearSearchTooltip:String = "";
+			
+			
+			/* --------------------------------------------------------------------
+			Component properties
+			-------------------------------------------------------------------- */
+
+			// Predictive search service properties
+
+			/**
+			 * URL path of the predictive search service.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Full URL of the predictive search REST service.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchServiceURL():String
+			{
+				return _predictiveServiceURL;	
+			}
+			
+			public function set searchServiceURL(value:String):void
+			{
+				_predictiveServiceURL = value;	
+			}
+			
+			
+			/**
+			 * Maximum number of suggestions that the predictive search service should return.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [int]: </i>Maximum number of suggestions that the predictive search.  
+			 * The default value if not specified is <b>10</b>.  If a value less than <b>1</b> 
+			 * is specified, the limit is set to <b>1</b>.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchServiceResultLimit():int
+			{
+				return _predictiveServiceLimit;
+			}
+			
+			public function set searchServiceResultLimit(value:int):void
+			{
+				if (value < 1)
+				{
+					_predictiveServiceLimit = 1;	
+				}
+				else
+				{
+					_predictiveServiceLimit = value;	
+				}
+			}
+			
+			
+			/**
+			 * Minimum number of characters the user must enter before the call to the predictive 
+			 * search service is made. Added by Andre Kruger (PNCC) 12/08/2011.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [int]: </i>Minimum number of chaaracters that must be typed before 
+			 * the predictive search service fires.  The default value if not specified is <b>3</b>.  
+			 * If a value less than <b>1</b> is specified, the limit is set to <b>1</b>.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchServiceMinimumCharacters():int
+			{
+				return _predictiveSearchInputMinChars;
+			}
+			
+			public function set searchServiceMinimumCharacters(value:int):void
+			{
+				if (value < 1)
+				{
+					_predictiveSearchInputMinChars = 1;	
+				}
+				else
+				{
+					_predictiveSearchInputMinChars = value;	
+				}
+			}
+
+			
+			/**
+			 * List of filter values to be sent as a parameter to the predictive search service.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String] (optional): </i>Comma delimited list of filter values.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchFilters():String
+			{
+				return _predictiveSearchFilters;
+			}
+			
+			public function set searchFilters(value:String):void
+			{
+				_predictiveSearchFilters = value;
+			}
+			
+			/**
+			 * Array of objects containing regular expressions to compare the entered text to 
+			 * determine the minimum number of characters that need to be entered before the call
+			 * to the predictive search service is made.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Array]: </i>Array of objects with the following schema <br/> { expression: 
+			 * <i>regular expression string (actionscript format)</i>, <br/>min: <i>interger number representing 
+			 * the minimun number of characters to be typed (similar to the searchServiceMinimumCharacters 
+			 * property)</i> }</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get regularExpressions():Array
+			{
+				return _regExpressions;
+			}
+			
+			public function set regularExpressions(value:Array):void
+			{
+				if (value == null)
+				{
+					_regExpressions = [];
+				}
+				else
+				{
+					_regExpressions = value;
+				}
+			}
+
+			/**
+			 * Array of objects containing icons to display in the autocomplete dropdown list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Array]: </i>Array of objects with the following schema <br/> { predictiveID: 
+			 * <i>id string which matches the class attribute returned in the predictive search suggestions
+			 * </i>, <br/>icon: <i>URL path to the icon image to use in the dropdown list.</i> }</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get icons():Array
+			{
+				return _iconList;
+			}
+			
+			public function set icons(value:Array):void
+			{
+				if (value == null)
+				{
+					_iconList = [];
+				}
+				else
+				{
+					_iconList = value;
+				}
+			}
+
+			/**
+			 * Array of objects containing icons to display in the autocomplete dropdown list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Array]: </i>Array of string objects of valid predictive IDs of configured searches available in the Search Widget.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchExpressions():Array
+			{
+				return _searchExpressions;
+			}
+			
+			public function set searchExpressions(value:Array):void
+			{
+				if (value == null)
+				{
+					_searchExpressions = [];
+				}
+				else
+				{
+					_searchExpressions = value;
+				}
+			}
+			
+			// Display properties
+			
+			/**
+			 * Map component where results will be displayed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [Map]: </i>ESRI Map component.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get map():Map
+			{
+				return _map;
+			}
+			
+			public function set map(value:Map):void
+			{
+				_map = value;
+			}
+			
+			
+			/**
+			 * Graphics layer that will be used to display the results in.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [GraphicsLayer]: </i>Graphics layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get graphicsLayer():GraphicsLayer
+			{
+				return _graphicsLayer;
+			}
+			
+			public function set graphicsLayer(value:GraphicsLayer):void
+			{
+				_graphicsLayer = value;
+			}
+
+			
+			/**
+			 * Text displayed in the label.
+			 */
+			public function get geoprocessingServiceURL():String
+			{
+				return _geoprocessingServiceURL;
+			}
+			
+			public function set geoprocessingServiceURL(value:String):void
+			{
+				// Confirm there is a valid url to look for				
+				if (value != "" && value != null)
+				{
+					// Set the service URL
+					_geoprocessingServiceURL = value;
+				}
+			}
+
+			
+			/**
+			 * Name of the widget to send the results to.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>value [String]: </i>Name of the Id number from the flex viewer framework.  If not specified, 
+			 * results from the search service will only be displayed on the graphics layer.</li>
+			 * </ul>
+			 * </p>
+			 */
+			public function get searchWidgetName():String
+			{
+				return _searchWidgetName;
+			}
+			
+			public function set searchWidgetName(value:String):void
+			{
+				// Confirm there is a valid name to look for				
+				if (value != "" && value != null)
+				{
+					// Set the widget name
+					_searchWidgetName = value;
+
+					// Get the widget ID
+					_searchWidgetID = ViewerContainer.getInstance().widgetManager.getWidgetId(_searchWidgetName);	
+				}
+			}
+
+			
+			// Label and tooltip properties
+			
+			/**
+			 * Text displayed in the label.
+			 */
+			public function get searchLabelText():String
+			{
+				return _searchLabel;
+			}
+			
+			public function set searchLabelText(value:String):void
+			{
+				_searchLabel = value;
+			}
+			
+			/**
+			 * Text displayed as a prompt in the searchbox.
+			 */
+			public function get searchPromptText():String
+			{
+				return predSearch.prompt;
+			}
+			
+			public function set searchPromptText(value:String):void
+			{
+				predSearch.prompt = value;
+			}
+			
+			/** 
+			 * Delay applied when loading the serach widget.  Used to ensure all of the configs load correctly. 
+			 */
+			public function get URLPreloadDelay():int
+			{
+				return _URLHandlerPreloadDelay;
+			}
+
+			public function set URLPreloadDelay(value:int):void
+			{
+				_URLHandlerPreloadDelay = value;
+			}
+			
+			/**
+			 * Text displayed as a tooltip on the clear search button.
+			 */
+			public function get clearSearchTooltip():String
+			{
+				return _clearSearchTooltip;
+			}
+			
+			public function set clearSearchTooltip(value:String):void
+			{
+				_clearSearchTooltip = value;
+			}
+			
+			
+			/* --------------------------------------------------------------------
+			Autocomplete functions
+			-------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the text of the auto-complete text box changes
+			 */
+			protected function predSearch_changeHandler(event:TextOperationEvent):void
+			{
+				var searchText:String = predSearch.text;
+				startSuggestions(searchText);
+			}
+			
+			/**
+			 * Called when the user selects a suggestion from the autocomplete drop list.
+			 */
+			protected function predSearch_selectHandler(event:FlexEvent):void
+			{
+				// Call the search process
+				predSearch_Search();
+			}
+			
+			/**
+			 * Called when the enter key is pressed.
+			 */
+			protected function predSearch_enterHandler(event:FlexEvent):void
+			{
+				// Call the search process
+				predSearch_Search();
+			}
+
+			/**
+			 * Called when the clear button on the autocomplete is pressed.
+			 */
+			protected function predSearch_clearTextHandler(event:FlexEvent):void
+			{
+				predSearch.dataProvider = []; 
+				_selectedSuggestion = null; 
+				clearGraphics(); 
+				event.stopPropagation();
+			}
+			
+			/**
+			 * Starts the process to get suggestions for the predictive search.  
+			 * <p>
+			 * <b>Paramaters</b></br/>
+			 * <ul>
+			 * <li><i>searchText [String]: </i> text to use as a search parameter.  
+			 * Sent to the predictive search service to generate suggestions.  
+			 * If searchtext is null or "", the suggestion dataprovider is reset./li>
+			 * </ul>
+			 * </p>
+			 */
+			private function startSuggestions(searchText:String):void
+			{
+				// Check text length
+				if (searchText != "") 
+				{
+					getSuggestions(searchText);
+				} 
+				else 
+				{
+					predSearch.dataProvider = [];
+				}				
+			}
+
+			/**
+			 * Calls the predictive search service for suggestions.
+			 * <p>
+			 * <b>Paramaters</b></br/>
+			 * <ul>
+			 * <li><i>searchText [String]: </i> text to use as a search parameter.  
+			 * Sent to the predictive search service to generate suggestions./li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getSuggestions(searchText:String): void
+			{
+				// Check that service has a url 
+				if (_predictiveServiceURL)
+				{
+					/* New code for change to json task */
+					requesttask.url = _predictiveServiceURL;
+					
+					// Set smarts for search text
+					var textLen:int = searchText.length;
+					
+					// Get min lenght from XML file - 12/08/2011 - Andre Kruger (PNCC)
+					if (textLen > _predictiveSearchInputMinChars) 
+					{
+						var startSearch:Boolean = true;
+						var minLength:Number;
+						var expText:String;
+						
+						// Check for regular expressions
+						if (_regExpressions.length > 0)
+						{
+							// Iterate through expressions in array
+							for (var i:int = 0; i < _regExpressions.length; i++) 
+							{	
+								var exp:Object = _regExpressions[i];
+								var search:int = searchText.search(new RegExp(exp.expression));  
+								
+								// Check expression was found and if minimum length of text has been reached
+								if ((search != -1) && (textLen < exp.min))
+								{
+									startSearch = false;
+									break;
+								}
+							}
+						}
+						
+						if (startSearch)
+						{
+								var params:URLVariables = new URLVariables();
+								params.searchterm = searchText;
+								params.searchclass = _predictiveSearchFilters;
+								params.searchlimit = _predictiveServiceLimit;
+								params.f = "json";
+								requesttask.execute(params);
+						}
+					}
+				}
+			}
+			
+			/**
+			 * Formats the displayed text in the autocomplete dropdown. 
+			 */
+			private function predSearch_labelFunction(item:Object):String
+			{
+				return item.searchtext;
+			}
+
+			
+			/* -----------------------------------------------------------------
+			Search Widget call functions
+			----------------------------------------------------------------- */
+			
+			/**
+			 * Starts the search process.
+			 */
+			private function predSearch_Search():void
+			{
+				// Check for a selected item from predictive search dropdown
+				if (predSearch.selectedItem)
+				{
+					_selectedSuggestion = predSearch.selectedItem;
+				}
+				else if (predSearch.dataProvider && predSearch.dataProvider.length > 0) 
+				{
+					_selectedSuggestion = predSearch.dataProvider[0];
+				}
+				
+				if (_selectedSuggestion)
+				{
+					// Check that a valid search class is available.
+					var expressionfound:Boolean = false;
+
+					if (_searchExpressions.indexOf(_selectedSuggestion.searchclass) > -1)	
+					{
+						expressionfound = true;
+					}
+					
+					// If a valid config was found
+					if (expressionfound)
+					{
+						var loaded:Boolean = false;
+						
+						// Check if the widget is loaded				
+						for each (var widgetId:Number in ViewerContainer.getInstance().widgetManager.getAllLoadedWidgetIds())
+						{
+							if (ViewerContainer.getInstance().widgetManager.getWidget(widgetId).widgetTitle == _searchWidgetName)
+							{
+								loaded = true;
+								break;
+							}
+						}
+						
+						if (!loaded)
+						{
+							// Dispatch a shared data containing the info about the search to run
+							AppEvent.dispatch(AppEvent.DATA_PUBLISH, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: new ArrayCollection([_selectedSuggestion]) } );
+							
+							// Call a request to run after a short time delay - only because the app is quite swamped at startup and otherwise the event never heard 
+							setTimeout(
+								function ():void 
+								{
+									// Open the id widget
+									AppEvent.dispatch(AppEvent.WIDGET_RUN, _searchWidgetID);
+								}, 
+								_URLHandlerPreloadDelay );
+						}
+						else
+						{
+							// Make a call to the search widget
+							callSearchWidget();
+						}
+					}
+					else
+					{
+						// Default to showing the location based on the XY value of the suggestion
+						showLocation(_selectedSuggestion);					
+					}
+				}
+			}
+			
+			/**
+			 * Initiates a call to the search widget to perfrom a search based on the current 
+			 * selected item in the predictive serach dropdown.
+			 */
+			private function callSearchWidget():void
+			{
+				// Check that search widget ID is valid
+				if (_searchWidgetID >= 0 && _selectedSuggestion)
+				{
+					// Execute the search
+					var search:SearchSuggestion = new SearchSuggestion(_selectedSuggestion);
+
+					// Dispatch event to call the widget
+					AppEvent.dispatch(AppEvent.DATA_SENT, { key: SearchSuggestion.SEARCH_RUN_QUEUED, collection: new ArrayCollection([_selectedSuggestion]) } );
+					trace('Header Controller Enhanced: Search Widget Called');
+				}
+				else
+				{
+					// Default to showing the location based on the XY value of the suggestion
+					showLocation(_selectedSuggestion);					
+				}
+			}
+
+			
+			/* -----------------------------------------------------------------
+			Search Widget Show Location functions
+			----------------------------------------------------------------- */
+			
+			/** 
+			 * Displays the supplied location as a graphic in the main display.
+			 */
+			private function showLocation(suggestion:Object):void
+			{
+				if (suggestion && _map)
+				{
+					var txt:String = suggestion.searchtext;
+					var srid:Number = suggestion.outSR;
+					
+					var pt:MapPoint = new MapPoint(suggestion.x, suggestion.y, new SpatialReference(srid));
+					
+					// Check if map SR matches result SR
+					if (map.spatialReference.wkid == srid)
+					{
+						// Zoom to coordinates and set map to scale
+						addLabelPoint(pt,txt);
+					} 
+					else 
+					{
+						// Project the point and then add to map)
+						var gObj:Object = {
+							labeltext:txt 
+						};
+						projectGraphic(pt,gObj);						
+					}
+				}
+				else
+				{
+					Alert.show("There has been a problem with the search mechanism.  Please contact your GIS Administrator if this problem persists.",
+						"Predictive Search Failure",Alert.OK);
+				}
+			}
+			
+			/**
+			 * Adds the label point to the map
+			 */
+			private function addLabelPoint(pt:MapPoint, txt:String):void 
+			{
+				if (_map && _graphicsLayer)
+				{
+					// Create a composite symbol
+					var txtFormat:TextFormat = new TextFormat("Arial", 16, 0x0000FF ,true, null, null, null, null, null,2,2);
+					var txtSym:TextSymbol = new TextSymbol(txt, null, 1, 0x0000FF, false, 0, true, 16777215, "end" , 0, 0, 0, txtFormat);
+					var pms:SimpleMarkerSymbol = new SimpleMarkerSymbol("circle",15,0x0000FF);
+					var cmp:CompositeSymbol = new CompositeSymbol([pms,txtSym]);
+					
+					// Create a graphic for the point
+					var gra:Graphic = new Graphic(pt,cmp);
+					
+					// Set map extent and scale
+					_map.centerAt(pt);
+					_map.scale = 10000//this.zoomScale;
+					
+					// Add graphic to display
+					_graphicsLayer.add(gra);
+				}
+				else
+				{
+					Alert.show("There has been a problem with the search mechanism.  Please contact your GIS Administrator if this problem persists.",
+						"Predictive Search Failure", Alert.OK);
+				}
+			}
+			
+			/**
+			 * Clears the graphics layer of any features that have been added into it such as labels.
+			 */
+			private function clearGraphics():void
+			{
+				_graphicsLayer.clear();
+			}
+			
+			/** 
+			 * Called when the spatial reference of the loaded graphic doesn't match spatial reference of the map
+			 */
+			private function projectGraphic(pt:Geometry, gObj:Object):void 
+			{
+				// Create the project parameters
+				var p:ProjectParameters = new ProjectParameters();
+				p.geometries = [pt];
+				p.outSpatialReference = map.spatialReference;
+				
+				// Execute project task
+				geometryService.project(p, new AsyncResponder(projectComplete_Handler,null,gObj));
+			}
+			
+			/** 
+			 * Called upon completion of the project application
+			 */ 
+			private function projectComplete_Handler(result:Array, token:Object = null):void
+			{
+				for each (var geo:Geometry in result)
+				{
+					addLabelPoint(geo as MapPoint,token.labeltext);
+				}
+			}
+			
+			/**
+			 * Handles when the predictive search returns the some suggestions
+			 */
+			protected function requesttask_executeCompleteHandler(event:JSONEvent):void
+			{
+				// Get results
+				var arr:ArrayCollection = new ArrayCollection();
+				
+				try
+				{
+					// Get results
+					var jsn:Object = event.json;
+					
+					for (var j:int = 0; j < jsn.length; j++ )
+					{
+						var result:Object = jsn[j].value;
+
+						// Create a suggestion object
+						var suggestion:Object = {};
+						suggestion["outSR"] = result["outSR"];
+						suggestion["x"] = result["x"];
+						suggestion["y"] = result["y"];
+						suggestion["searchkey"] = result["searchkey"];
+						suggestion["searchclass"] = result["searchclass"];
+						suggestion["searchtext"] = jsn[j].label;
+						suggestion["keydescription"] = result["keydescription"];
+						
+						// Add to the results array
+						arr.addItem(suggestion);	
+					}
+					
+					
+					// Check if any values returned
+					if (arr.length > 0) 
+					{
+						// Check for no results record
+						if (arr.length == 1)
+						{
+							// Check for nothing or no matching results
+							var res:Object = arr[0];
+							if ((res.searchtext == "") || (res.searchtext == "No Matching Results"))
+							{
+								// Clear out the collection
+								arr.removeAll();
+							}
+						} 
+						
+						// Add icon to result
+						for (var i:Number = 0; i < arr.length; i++)
+						{
+							// Get the predictive ID value
+							var cls:String = arr[i].searchclass;							
+							
+							// Set a default icon attribute
+							arr[i].icon = "";
+							
+							// Find this value in the list of configured icons
+							for each (var icon:Object in _iconList)
+							{
+								if (icon.predictiveID == cls)
+								{
+									arr[i].icon = icon.icon;
+									break;
+								}
+							}
+						}
+						
+						// Set the suggestions list
+						predSearch.dataProvider = (arr);
+					} 
+					else 
+					{
+						predSearch.dataProvider = [];
+					}
+				}
+				catch (error:Error)
+				{
+					Alert.show(error.toString(), "Predictive Search Failure", Alert.OK);
+				}
+			}
+
+			/**
+			 * Called when the predictive search option request returns a fault.
+			 */
+			protected function requesttask_faultHandler(event:FaultEvent):void
+			{
+				// Set a trace to display any errors
+				trace("Predictive Search Error: " +  event.fault.faultString + '\n' + event.fault.faultDetail);
+				
+				// Clear out the suggestions collection
+				predSearch.dataProvider = [];
+			}
+			
+		]]>
+	</fx:Script>
+	
+	
+	<fx:Declarations>
+		<!--- Geometry Service for projecting non-map spatial reference coordinates -->
+		<esri:GeometryService id="geometryService"
+							  url="{_geoprocessingServiceURL}"/>
+		
+		<!--- Predictive search task -->
+		<esri:JSONTask id="requesttask" executeComplete="requesttask_executeCompleteHandler(event)" 
+					   fault="requesttask_faultHandler(event)" 
+					   showBusyCursor="true" concurrency="last" />
+		
+	</fx:Declarations>
+
+	<s:layout>
+		<s:HorizontalLayout gap="5" paddingLeft="5" paddingRight="5" paddingTop="2" paddingBottom="2"
+							verticalAlign="middle" horizontalAlign="left" />
+	</s:layout>
+
+	<!--- Label text -->
+	<s:Label id="searchLabel" text="{_searchLabel}" styleName="WidgetTitle" verticalAlign="middle" visible="{_searchLabel != ''}" includeInLayout="{_searchLabel != ''}" />
+	
+	<!--- Autocomplete component -->
+	<a:AutoComplete id="predSearch" width="100%" 
+					change="predSearch_changeHandler(event)" 
+					labelFunction="predSearch_labelFunction"
+					select="predSearch_selectHandler(event)"
+					enter="predSearch_enterHandler(event)"
+					clearText="predSearch_clearTextHandler(event)"  />
+</s:Group>

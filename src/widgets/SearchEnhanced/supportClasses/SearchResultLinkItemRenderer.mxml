@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				xmlns:s=				"library://ns.adobe.com/flex/spark" 
+				xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				autoDrawBackground=		"false"
+				click=					"itemrenderer_clickHandler(event)"
+				dataChange=				"itemrenderer_dataChangeHandler(event)"
+				mouseOut=				"itemrenderer_mouseOutHandler(event)"
+				mouseOver=				"itemrenderer_mouseOverHandler(event)"
+				width=					"100%" 
+				minHeight=				"20" >
+
+	<fx:Script>
+		<![CDATA[
+			
+			/*----------------------------------------------------------------------------------------------------
+			Library object imports
+			--------------------------------------------------------------------------------------------------- */
+
+			import widgets.SearchEnhanced.supportClasses.ResultLink;
+			
+			import mx.events.FlexEvent;
+			
+			import spark.effects.animation.RepeatBehavior;
+			
+			
+			/* ------------------------------------------------------------
+			Component constant values
+			------------------------------------------------------------ */
+			
+			private const SEARCH_RESULT_LINK_CLICK:String = "searchResultLinkClick";
+			
+
+			/* ------------------------------------------------------------
+			Component Variables
+			------------------------------------------------------------ */
+			
+			// Search result link reference
+			[Bindable]
+			public var _searchResultLink:ResultLink;
+
+			// Flag for displaying the link as an image
+			[Bindable]
+			private var _showImage:Boolean = false;
+		
+			/* ------------------------------------------------------------
+			Component code
+			------------------------------------------------------------ */
+			
+			// Data change functions
+			protected function itemrenderer_dataChangeHandler(event:FlexEvent):void
+			{
+				// Set the search result reference
+				_searchResultLink = data as ResultLink;
+
+				if (_searchResultLink)
+				{
+					// Set the show images tag to false;
+					_showImage = false;
+					imageGroup.removeAllElements();
+					
+					// Confirm the url exists 
+					if (_searchResultLink.url && _searchResultLink.url != "")
+					{
+						// Check for images in the url
+						var pos:Number = _searchResultLink.url.length - 4;
+						var sfx:String = _searchResultLink.url.substr(pos, 4).toLowerCase();
+						if ((sfx == ".jpg") || (sfx == "jpeg") ||(sfx == ".png") || (sfx == ".gif")) // use PopUpMediaInfo if it is an image
+						{
+							_showImage = true;
+							
+							// Add the image
+							var img:Image = new Image();
+							img.percentWidth = 100;
+							img.buttonMode = true;
+							img.useHandCursor = true;
+							img.source = _searchResultLink.url;
+							img.toolTip= _searchResultLink.label;
+							//img.
+
+							// Add image to the group
+							imageGroup.addElement(img);
+						}
+	
+						// Enable this component 	
+						this.enabled = true;
+					} 
+					else 
+					{
+						this.enabled = false;
+					}
+				}
+			}
+			
+			// Called when the user clicks on any part of the item
+			protected function itemrenderer_clickHandler(event:MouseEvent):void
+			{
+				event.stopImmediatePropagation(); // don't dispatch SEARCH_RESULT_CLICK since we don't want to zoom to feature
+				
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_searchResultLink.url),"_blank");
+
+				// Dispatch the item click event				
+				dispatchEvent(new Event(SEARCH_RESULT_LINK_CLICK, true)); // bubbles
+			}
+			
+			// Called when the moves the mouse off the item
+			protected function itemrenderer_mouseOutHandler(event:MouseEvent):void
+			{
+				if (glower.isPlaying) 
+				{
+					glower.end();
+				};
+			}
+			
+			// Called when the moves the mouse over on any part of the item
+			protected function itemrenderer_mouseOverHandler(event:MouseEvent):void
+			{
+				playGlow(event.currentTarget, true);
+			}
+			
+			// Adds a glowing effect to objects
+			private function playGlow(obj:Object, repeat:Boolean = false):void 
+			{
+				if (glower.isPlaying) 
+				{
+					glower.end();
+				};
+				glower.target = obj;
+				
+				if (repeat) 
+				{
+					glower.repeatCount = 0;
+				} 
+				else 
+				{
+					glower.repeatCount = 1;
+				}
+				glower.play();
+			}
+
+		]]>
+	</fx:Script>
+
+	<fx:Declarations>
+	
+		<s:GlowFilter id="glow" blurX="15" blurY="15" color="{getStyle('focusColor')}" strength="1.5"/>
+		<s:AnimateFilter id="glower" bitmapFilter="{glow}" 
+						 duration="300" repeatCount="0" 
+						 repeatBehavior="{RepeatBehavior.REVERSE}">
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>
+
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout gap="2" horizontalAlign="justify" />
+	</s:layout>
+	
+	<s:HGroup width="100%" gap="5" paddingTop="2" paddingRight="2" paddingLeft="2" 
+			  paddingBottom="2" verticalAlign="middle" visible="{!_showImage}" 
+			  includeInLayout="{!_showImage}" useHandCursor="true" buttonMode="true" >
+
+		<s:Image id="linkimage" useHandCursor="true" buttonMode="true" source="assets/images/w_link.png"  />
+		
+		<s:Label id="linkLabel" text="{_searchResultLink.label}" width="100%" textAlign="left" 
+				 toolTip="Click to view this link" />
+	</s:HGroup>
+	
+	<s:HGroup id="imageGroup" width="100%" paddingTop="2" paddingLeft="2" paddingRight="2" paddingBottom="2" 
+			  horizontalAlign="center" visible="{_showImage}" includeInLayout="{_showImage}">
+	</s:HGroup>
+	
+</s:ItemRenderer>

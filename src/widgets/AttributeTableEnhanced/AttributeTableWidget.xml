@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<configuration> 
+	<!-- Option to specify whether the widget should check dynamic layers to see if they include editable feature services [values: true/false] -->
+	<checkForEditableDynamicLayers>false</checkForEditableDynamicLayers>
+
+	<!-- Label Settings -->
+	<labels>
+		<!-- Attribute table labels and tool tips -->
+		<zoomallbuttonlabel>Zoom to all features</zoomallbuttonlabel>
+		<zoomallbuttontooltip>Click to show all of the features of the current tab</zoomallbuttontooltip>
+		<exporttocsvbuttonlabel>Export features to CSV</exporttocsvbuttonlabel>
+		<exporttocsvbuttontooltip>Click to export the selected features of the current tab to CSV</exporttocsvbuttontooltip>
+		
+		<!-- Warnings -->
+		<exporttocsvrecordcountwarning>You are currently only viewing a subset of the total records.  Pressing 'OK' will export only those records currently displayed in the table.  If you wish to export all of the records associated with this layer, click 'Cancel', zoom to the full extent of the records and try again.</exporttocsvrecordcountwarning>
+	</labels>
+
+	<!-- Help Location Settings -->
+	<helplocationurl>http://somewebsite.com</helplocationurl>        
+</configuration>
+
+<!--
+    See Attribute Table widget documentation at
+    http://links.esri.com/attributetablewidget
+-->

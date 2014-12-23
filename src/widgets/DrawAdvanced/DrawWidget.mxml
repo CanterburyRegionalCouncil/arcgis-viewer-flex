@@ -1,0 +1,5686 @@
+<?xml version="1.0" encoding="utf-8"?>
+<viewer:BaseWidget xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				   xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:viewer=			"com.esri.viewer.*" 
+				   xmlns:supportClasses=	"com.esri.ags.skins.supportClasses.*"
+				   xmlns:components=		"widgets.DrawAdvanced.components.*"
+				   creationComplete=		"creationCompleteHandler(event)"
+				   initialize=				"basewidget_initializeHandler(event)"
+				   widgetConfigLoaded=		"widgetConfigLoadedHandler(event)" >
+	<fx:Script>
+		<![CDATA[
+			import com.adobe.serializers.json.*;
+			import com.adobe.serializers.json.JSONDecoder;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.Units;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.EditEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.events.GraphicEvent;
+			import com.esri.ags.geometry.*;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.portal.PopUpRenderer;
+			import com.esri.ags.portal.supportClasses.PopUpInfo;
+			import com.esri.ags.portal.supportClasses.PopUpMediaInfo;
+			import com.esri.ags.symbols.*;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.BufferParameters;
+			import com.esri.ags.tasks.supportClasses.CutResult;
+			import com.esri.ags.tasks.supportClasses.DatumTransform;
+			import com.esri.ags.tasks.supportClasses.ProjectParameters;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.ags.tools.NavigationTool;
+			import com.esri.ags.utils.JSONUtil;
+			import com.esri.ags.utils.WebMercatorUtil;
+			import com.esri.viewer.AppEvent;
+			
+			import flash.events.Event;
+			import flash.events.KeyboardEvent;
+			import flash.text.engine.FontWeight;
+			
+			import flashx.textLayout.formats.ITextLayoutFormat;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.core.UIComponent;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.FlexEvent;
+			import mx.events.ResizeEvent;
+			import mx.graphics.GradientBase;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.effects.animation.RepeatBehavior;
+			import spark.events.DropDownEvent;
+			import spark.events.IndexChangeEvent;
+			
+			import widgets.DrawAdvanced.components.GraphicEditor;
+			import widgets.DrawAdvanced.components.GraphicInspector;
+			import widgets.DrawAdvanced.components.GraphicPropertiesItemRenderer;
+			import widgets.DrawAdvanced.components.supportClasses.DrawWidgetLabelFormatter;
+			import widgets.DrawAdvanced.components.supportClasses.GraphicTemplate;
+			import widgets.DrawAdvanced.components.supportClasses.LegacyGraphicLoaderUtil;
+			import widgets.DrawAdvanced.events.GraphicInspectorEvent;
+			import widgets.DrawAdvanced.events.GraphicPropertiesItemRendererEvent;
+			import widgets.DrawAdvanced.events.GraphicTemplateEvent;
+			import widgets.DrawAdvanced.events.GraphicTemplatePickerEvent;
+			import widgets.DrawAdvanced.skins.GraphicTemplatePickerSkin;
+			import widgets.supportClasses.components.MultilineTextEditor;
+			import widgets.supportClasses.components.TextEditor;
+			import widgets.supportClasses.utils.GPXUtil;
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.GraphicUtil;
+			import widgets.supportClasses.utils.MapUtil;
+			import widgets.supportClasses.utils.SymbolUtil;
+			
+			
+			
+			/* --------------------------------------------------------------------
+			Widget constants
+			-------------------------------------------------------------------- */
+			
+			// Icon locations 
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/DrawAdvanced/assets/images/";
+			
+			private const DRAWTOOLTEMPLATES:String = "drawwidgetgraphictemplates";
+			
+			// File types which we want the user to open
+			private static const FILE_TYPES:Array = [new FileFilter("Text File", "*.txt;*.text"), new FileFilter("GPX 1.1 File", "*.gpx")];
+			
+			// Coordinate WKIDs
+			private const nzmgwkid:Number = 27200;
+			private const nztmwkid:Number = 2193;
+			private const wgs84wkid:Number = 4326;
+			private const webmercatorwkid:Number = 102100;
+			
+			//Transformation WKIDs
+			private const NZGD_1949_To_WGS_1984_2:Number = 1564;
+			private const NZGD_2000_To_WGS_1984_1:Number = 1565;
+			private const New_Zealand_1949_To_NZGD_2000_3_NTv2:Number = 1568;
+			
+			// Listings of the coordinate system used by this widget
+			private const spatialDetails:Array = [
+				{ inputWKID: nzmgwkid, outputWKID: nzmgwkid, datTransform: null, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: nztmwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: wgs84wkid, datTransform: NZGD_1949_To_WGS_1984_2, transformForward: true },
+				{ inputWKID: nzmgwkid, outputWKID: webmercatorwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: true },
+				
+				{ inputWKID: nztmwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: nztmwkid, outputWKID: nztmwkid, datTransform: null , transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: wgs84wkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				{ inputWKID: nztmwkid, outputWKID: webmercatorwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: true },
+				
+				{ inputWKID: wgs84wkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: wgs84wkid, datTransform: null , transformForward: true },
+				{ inputWKID: wgs84wkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: wgs84wkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true },
+				
+				{ inputWKID: webmercatorwkid, outputWKID: nzmgwkid, datTransform: New_Zealand_1949_To_NZGD_2000_3_NTv2, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: nztmwkid, datTransform: NZGD_2000_To_WGS_1984_1, transformForward: false },
+				{ inputWKID: webmercatorwkid, outputWKID: wgs84wkid, datTransform: null, transformForward: true },
+				{ inputWKID: webmercatorwkid, outputWKID: webmercatorwkid, datTransform: null, transformForward: true }
+			];
+			
+			
+			
+			
+			
+			/* WIDGET VARIABLES
+			---------------------------------------------------------------------------------- */
+			
+			// Toolbar visibility
+			[Bindable]
+			private var _showToolbar:Boolean = true; 
+			
+			// Cut tool visibility
+			[Bindable]
+			private var _showCutTool:Boolean = false;
+			
+			// Reshape tool visibility
+			[Bindable]
+			private var _showReshapeTool:Boolean = false;
+			
+			// Merge tool visibility
+			[Bindable]
+			private var _showMergeTool:Boolean = false;
+			
+			// Drawing tool drop list data provider
+			private var _arrayList:ArrayList;
+			
+			// Graphics layer variables
+			[Bindable]
+			private var _graphicsLayer:GraphicsLayer;
+			private var _labelsLayer:GraphicsLayer;
+			
+			// UI control variables
+			private var _disablePanZoomNavigationWidget:Boolean;
+			private var _lastState:String;
+			private var _dispatchedMessage:Boolean = false;
+			
+			// Template storage objects
+			private var _templatesSO:SharedObject;
+			
+			// Save file reference
+			private var _fr:FileReference;
+			
+			// Draw mode variables
+			private var _lastDrawnGraphic:Graphic;
+			private var _editGraphic:Graphic;
+			private var _isEditing:Boolean = false;
+			private var _isFreehand:Boolean = false;
+			private var _lastActiveEditType:String = "none"; // edit tool is not active
+
+			private var _textMode:Boolean = false;
+			private var _isCutting:Boolean = false;
+			private var _isReshaping:Boolean = false;
+			private var _isAutocompleting:Boolean = false;
+			
+			// Holding array for graphics that are to be deleted, copied, etc
+			[Bindable]
+			private var _holdingGraphics:ArrayCollection = new ArrayCollection();
+			
+			// Measurement variables
+			[Bindable]
+			private var _configDistance:Array;
+			[Bindable]
+			private var _configArea:Array;
+			private var _measurementLabelShown:Boolean;
+			
+			
+			// Buffer variables			
+			[Bindable]
+			private var _configBuffer:Array;
+			[Bindable]
+			private var _defaultBufferIndex:int;
+			[Bindable]
+			private var _isCustomDistance:Boolean = false;
+			
+			// Graphic Inspector Default Edit mode
+			[Bindable]
+			private var _defaultInspectionMode:String = "normal";
+			
+			// Labels
+			[Bindable]
+			private var _drawLabel:String;
+			[Bindable]
+			private var _measurementOptionsLabel:String;
+			[Bindable]
+			private var _graphicsListLabel:String;
+			[Bindable]
+			private var _saveLabel:String;
+			[Bindable]
+			private var _openLabel:String;
+			private var _clearFeatureLabel:String;
+			[Bindable]
+			private var _zoomToExtentTooltip:String;
+			
+			// Measurement tool labels
+			[Bindable]
+			private var _measurementsLabel:String;
+			[Bindable]
+			private var _showMeasurementsLabel:String;
+			[Bindable]
+			private var _segmentLengthLabel:String;
+			[Bindable]
+			private var _totalLengthLabel:String;
+			
+			[Bindable]
+			private var _lengthLabel:String;
+			[Bindable]
+			private var _perimeterLabel:String;
+
+			private var _radiusLabel:String;
+			private var _widthLabel:String;
+			private var _heightLabel:String;
+			
+			[Bindable]
+			private var _distanceUnitsLabel:String;
+			[Bindable]
+			private var _distanceUnitsTooltip:String;
+			
+			[Bindable]
+			private var _areaLabel:String;
+			[Bindable]
+			private var _areaUnitsLabel:String;
+			[Bindable]
+			private var _areaUnitsTooltip:String;
+			
+			// Tool labels
+			[Bindable]
+			private var _selectToolTooltip:String;
+			[Bindable]
+			private var _clearSelectionTooltip:String;
+			[Bindable]
+			private var _generateBuffersLabel:String;
+			[Bindable]
+			private var _generateBuffersTooltip:String;
+			[Bindable]
+			private var _showMeasurementsOnTooltip:String;
+			[Bindable]
+			private var _showMeasurementsOffTooltip:String;
+			[Bindable]
+			private var _toggleVisibilityTooltip:String;
+			
+			// Reorder graphics tooltips
+			[Bindable]
+			private var _reorderGraphicsUpTooltip:String;
+			[Bindable]
+			private var _reorderGraphicsDownTooltip:String;
+			[Bindable]
+			private var _reorderGraphicsToTopTooltip:String;
+			[Bindable]
+			private var _reorderGraphicsToBottomTooltip:String;
+			
+			// Buffer tool labels
+			[Bindable]
+			private var _buffersLabel:String;
+			[Bindable]
+			private var _showBuffersLabel:String;
+			[Bindable]
+			private var _bufferunitLabel:String;
+			[Bindable]
+			private var _bufferunitTooltip:String;
+			[Bindable]
+			private var _bufferdistanceLabel:String;
+			[Bindable]
+			private var _bufferdistanceTooltip:String;
+			[Bindable]
+			private var _buffernumberLabel:String;
+			[Bindable]
+			private var _buffernumberTooltip:String;
+			[Bindable]
+			private var _unionBuffersLabel:String;
+			[Bindable]
+			private var _unionBuffersTooltip:String;
+
+			// Graphics inspector labels
+			[Bindable]
+			private var _graphicInspectorZoomLabel:String;
+			[Bindable]
+			private var _graphicInspectorLinkLabel:String;
+			[Bindable]
+			private var _graphicInspectorEditLabel:String;
+			[Bindable]
+			private var _graphicInspectorDeleteLabel:String;
+			[Bindable]
+			private var _graphicInspectorApplyLabel:String;
+			[Bindable]
+			private var _graphicInspectorCancelLabel:String;
+			
+			// Graphics inspector tooltips
+			[Bindable]
+			private var _graphicInspectorZoomTooltip:String;
+			[Bindable]
+			private var _graphicInspectorLinkTooltip:String;
+			[Bindable]
+			private var _graphicInspectorEditTooltip:String;
+			[Bindable]
+			private var _graphicInspectorDeleteTooltip:String;
+			[Bindable]
+			private var _graphicInspectorApplyTooltip:String;
+			[Bindable]
+			private var _graphicInspectorCancelTooltip:String;
+			[Bindable]
+			private var _graphicInspectorMeasurementTooltip:String;
+
+			
+			// Help Application URL location
+			[Bindable]
+			private var _helpLocation:String;
+			
+			private var _overGraphic:Boolean = false;
+			private var _projectTaskCount:int = 0;
+			
+			
+			/* WIDGET EVENT HANDLERS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the widget object has beem created
+			 */ 
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				// Add the event listeners
+				widgetAddEventListeners();
+			}
+			
+			protected function basewidget_initializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+			}
+			
+			/** 
+			 * Called when the widget config has complete loading
+			 */ 
+			protected function widgetConfigLoadedHandler(event:Event):void
+			{
+				// Hide map infowindow if any
+				map.infoWindow.hide();
+				
+				if (configXML)
+				{
+					// Set up the geometry service
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url = GeometryServiceSingleton.instance.url;
+						geometryService.token = GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL = GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url = configXML.geometryservice;
+					}
+					 
+					// Create graphics layer for drawn graphics (or get the reference to the existing layer if created by another widget)
+					var graphicsLayerName:String = configXML.graphicsLayerName || "RedLiningGraphicsLayer";
+					var graphicsLayerAlias:String = configXML.graphicsLayerName.@alias || "RedLining Graphics";
+					_graphicsLayer = MapUtil.checkGraphicLayer(graphicsLayerName,map,graphicsLayerAlias);
+					
+					// Create graphics layer for measurement and text label graphics
+					var labelsLayerName:String = configXML.labelsLayerName || "RedLiningLabelGraphicsLayer";
+					var labelsLayerAlias:String = configXML.labelsLayerName.@alias || "RedLining Labels";
+					_labelsLayer = MapUtil.checkGraphicLayer(labelsLayerName,map,labelsLayerAlias);
+				
+					// Check for existing graphics in the graphics layer (i.e. has this layer been prepared by another widget).
+					if (_graphicsLayer.numGraphics > 0)
+					{
+						// Iterate through each of the graphics and prepare for the for use
+						for each (var graphic:Graphic in _graphicsLayer.graphicProvider)
+						{
+							// Apply the graphic listens and format the graphics for use with this widget
+							prepareGraphic(graphic);							
+							
+							// Add the contextmenu options to the graphic
+							graphic_updateContextMenu(graphic);
+							
+							// Call the area/length calculations
+							calculateAreasAndLengths(graphic);
+							
+							// Add the handlers for altering the shape
+							addGraphicListeners(graphic);
+						}
+					}
+					
+					// Add listeners to graphics layer for addition of graphics (used if graphics layer is shared with other widgets
+					// to add symbolisation/graphic editing functionality to those widgets
+					_graphicsLayer.addEventListener(GraphicEvent.GRAPHIC_ADD, graphicsLayer_graphicAddedHandler, false, 10, false );
+					_graphicsLayer.addEventListener(GraphicEvent.GRAPHIC_REMOVE, graphicsLayer_graphicRemovedHandler, false, 10, false);
+					
+					_graphicsLayer.addEventListener(MouseEvent.ROLL_OVER, graphicsLayer_graphicRollOverHandler);
+					_graphicsLayer.addEventListener(MouseEvent.ROLL_OUT, graphicsLayer_graphicRollOutHandler);
+					
+					// Add listener to selected graphics collection to update the tool status
+					_holdingGraphics.addEventListener(CollectionEvent.COLLECTION_CHANGE,updateToolStatus);
+					
+					// Get the toolbar visiblity
+					_showToolbar = configXML.toolbarvisible == "true";
+					
+					// Get the cut tool visibility
+					_showCutTool = configXML.toolbarcutvisible == "true";
+					
+					// Get the reshape tool visibility
+					_showReshapeTool = configXML.toolbarreshapevisible == "true";
+					
+					// Get the merge tool visibility
+					_showMergeTool = configXML.toolbarmergevisible == "true";
+					
+					var i:int;					
+					if (configXML.createoptions.length() > 0)
+					{
+						createOptions.polygonDrawTools = new Array();
+						createOptions.polylineDrawTools = new Array();
+						
+						// Import polygon draw options
+						if (configXML.createoptions.polygondrawtools.length() > 0)
+						{
+							const polygonDrawToolsList:Array = configXML.createoptions.polygondrawtools.split(",");
+							for (i = 0; i < polygonDrawToolsList.length; i++)
+							{
+								createOptions.polygonDrawTools.push(polygonDrawToolsList[i]);
+							}
+						}
+						
+						// Import polyline draw options
+						if (configXML.createoptions.polylinedrawtools.length() > 0)
+						{
+							const polylineDrawToolsList:Array = configXML.createoptions.polylinedrawtools.split(",");
+							for (i = 0; i < polylineDrawToolsList.length; i++)
+							{
+								createOptions.polylineDrawTools.push(polylineDrawToolsList[i]);
+							}
+						}
+					}
+
+					// Graphic inspector default mode
+					_defaultInspectionMode = configXML.defaultGraphicsMode || "edit";
+					
+					// Load measurement settings
+					var distanceList:XMLList = configXML..distanceunit;
+					var areaList:XMLList = configXML..areaunit;
+					
+					// Distance measurement settings
+					_configDistance = new Array()
+					for (i = 0; i < distanceList.length(); i++)
+					{
+						var dLabel:String = distanceList[i];
+						var dAbbr:String = distanceList[i].@abbr;
+						var dConversion:Number = Number(distanceList[i].@conversion);
+						var dPrecision:Number = Number(distanceList[i].@precision);
+						var dUnit:Object = 
+							{
+								label: dLabel,
+								abbr: dAbbr,
+								conversion: dConversion,
+								precision: dPrecision
+							}
+						_configDistance.push(dUnit);
+					}
+					cboDistance.dataProvider = new ArrayCollection(_configDistance);
+					cboBufferUnit.dataProvider = new ArrayCollection(_configDistance);
+					
+					// Set the default distance unit
+					var distIndex:int = Number(configXML.defaultdistanceunit) || 0;
+					if (distIndex < _configDistance.length) {
+						cboDistance.selectedIndex = distIndex;
+						cboBufferUnit.selectedIndex = distIndex;
+					} 
+					else 
+					{
+						cboDistance.selectedIndex = 0;
+						cboBufferUnit.selectedIndex = 0;
+					}
+					
+					// Area measurement settings
+					_configArea = [];
+					for (i = 0; i < areaList.length(); i++)
+					{
+						var aLabel:String = areaList[i];
+						var aAbbr:String = areaList[i].@abbr;
+						var aConversion:Number = Number(areaList[i].@conversion);
+						var aPrecision:Number = Number(areaList[i].@precision);
+						var aUnit:Object = 
+							{
+								label: aLabel,
+								abbr: aAbbr,
+								conversion: aConversion,
+								precision: aPrecision
+							}
+						_configArea.push(aUnit);
+					}
+					cboArea.dataProvider = new ArrayCollection(_configArea);	
+					
+					// Set the default area unit
+					var areaIndex:int = Number(configXML.defaultareaunit) || 0;
+					if (areaIndex < _configArea.length) {
+						cboArea.selectedIndex = areaIndex;
+					} 
+					else 
+					{
+						cboArea.selectedIndex = 0;
+					}
+					
+					// Buffer range settings
+					var bufferList:XMLList = configXML..bufferrange;
+					_configBuffer = [];
+					for (i = 0; i < bufferList.length(); i++)
+					{
+						var bLabel:String = bufferList[i];
+						var bDistance:Number = Number(bufferList[i].@distance);
+						var bConversion:String = bufferList[i].@unit;
+						var bUnit:Object = 
+							{
+								label: bLabel,
+								distance: bDistance,
+								unit: bConversion
+							}
+						_configBuffer.push(bUnit);
+					}
+					
+					// Add custom buffer range object
+					var cLabel:String = "Custom Distance";
+					var cDistance:Number = 1000;
+					var cUnit:Object = 
+						{
+							label: cLabel,
+							distance: cDistance
+						}
+					_configBuffer.push(cUnit);
+					cboBuffer.dataProvider = new ArrayCollection(_configBuffer);	
+					
+					// Set default buffer range
+					var defaultBufferIndex:int = int(configXML.defaultbufferindex) || 0;
+					cboBuffer.selectedIndex = defaultBufferIndex;
+					
+					// Set starting visiblility on buffer tools.
+					setBufferToolDisplayState();
+					
+					// Load label settings
+					_drawLabel = configXML.labels.drawlabel || "Draw";
+					_measurementOptionsLabel = configXML.labels.measurementoptionslabel || "Measurement Options";
+					_graphicsListLabel = configXML.labels.graphicslistlabel || "Map Graphics List";
+					_openLabel = configXML.labels.openlabel || "Load Saved Graphics";
+					_saveLabel = configXML.labels.savelabel || "Save Current Graphics";
+					_clearFeatureLabel = configXML.labels.clearfeaturelabel || getDefaultString("clearLabel");
+					_zoomToExtentTooltip = configXML.labels.zoomtoextenttooltip || "Zoom to extent of all drawn graphics";
+					
+					// Measurement labels
+					_measurementsLabel = configXML.labels.measurementslabel || "Measurement Settings";
+					_showMeasurementsLabel = configXML.labels.showmeasurementslabel || "Show Measurements with Graphics:";
+					_distanceUnitsLabel = configXML.labels.distanceunitslabel || "Distance Units:";
+					_distanceUnitsTooltip = configXML.labels.distanceunitstooltip || "Choose measurements units to display distances in";
+					_areaUnitsLabel = configXML.labels.areaunitslabel || "Area Units:";
+					_areaUnitsTooltip = configXML.labels.areaunitstooltip || "Choose measurements units to display areas in";
+					
+					_areaLabel = configXML.labels.arealabel || getDefaultString("areaLabel");
+					_perimeterLabel = configXML.labels.perimeterlabel || getDefaultString("perimeterLabel");
+					_lengthLabel = configXML.labels.lengthlabel || getDefaultString("lengthLabel");
+					_radiusLabel = configXML.labels.radiuslabel || "Radius";
+					_widthLabel = configXML.labels.widthlabel || "Width";
+					_heightLabel = configXML.labels.heightlabel || "Height";					
+					
+					_segmentLengthLabel = configXML.labels.segmentlengthlabel || "Line segment length:";
+					_totalLengthLabel = configXML.labels.totallengthlabel || "Total line length:";
+										
+					// Buffer labels	
+					_buffersLabel = configXML.labels.bufferslabel || "Buffer Settings";
+					_showBuffersLabel = configXML.labels.showbufferslabel || "Generate buffers for drawn features";
+					_bufferdistanceLabel = configXML.labels.bufferdistancelabel || "Distance (m):";
+					_bufferdistanceTooltip = configXML.labels.bufferdistancetooltip || "Specify the exact distance you wish to use when generating buffer rings";
+					_bufferunitLabel = configXML.labels.bufferunitlabel || "Buffer:";
+					_bufferunitTooltip = configXML.labels.bufferunittooltip || "Select distance to buffer graphics by<";
+					_buffernumberLabel = configXML.labels.buffernumberlabel || "No of Rings:";
+					_buffernumberTooltip = configXML.labels.buffernumbertooltip || "Choose the number of buffer rings to generate";
+					_unionBuffersLabel = configXML.labels.unionbufferslabel || "Merge buffers together:";
+					_unionBuffersTooltip = configXML.labels.unionbufferstooltip || "Tick to merge together the boundaries of the generated buffered shapes";
+
+					// Tool labels
+					_selectToolTooltip = configXML.labels.selecttooltooltip || "Click to activate the graphic selection tool";
+					_clearSelectionTooltip = configXML.labels.clearselectiontooltip || "Click to clear the current graphic selection";
+					_generateBuffersLabel = configXML.labels.generatebufferslabel || "Generate Buffers";
+					_generateBuffersTooltip = configXML.labels.generatebufferstooltip || "Generate Buffers Around Selected Graphics";
+					_showMeasurementsOnTooltip = configXML.labels.showmeasurementsontooltip || "Click to add measurement labels to all new graphics as they are added to the map.";
+					_showMeasurementsOffTooltip = configXML.labels.showmeasurementsofftooltip || "Click to toggle off automatically adding measurement labels.";
+					_toggleVisibilityTooltip = configXML.labels.togglevisibilitytooltip || "Click to toggle the visibility of all drawn graphics.";
+					
+					// Reorder graphics tooltips
+					_reorderGraphicsUpTooltip = configXML.labels.reordergraphicsuptooltip || "Move selected graphics up one place in order";
+					_reorderGraphicsDownTooltip = configXML.labels.reordergraphicsdowntooltip || "Move selected graphics down one place in order";
+					_reorderGraphicsToTopTooltip = configXML.labels.reordergraphicstotoptooltip || "Move selected graphics to the top of the order";
+					_reorderGraphicsToBottomTooltip = configXML.labels.reordergraphicstobottomtooltip || "Move selected graphics to the bottom of the order";
+					
+					// Graphics inspector labels
+					_graphicInspectorZoomLabel = configXML.labels.graphicInspectorZoomLabel || getDefaultString('zoomLabel');
+					_graphicInspectorLinkLabel = configXML.labels.graphicInspectorLinkLabel || "Link";
+					_graphicInspectorEditLabel = configXML.labels.graphicInspectorEditLabel || "Edit";
+					_graphicInspectorDeleteLabel = configXML.labels.graphicInspectorDeleteLabel || "Delete";
+					_graphicInspectorApplyLabel = configXML.labels.graphicInspectorApplyLabel || "Apply";
+					_graphicInspectorCancelLabel = configXML.labels.graphicInspectorCancelLabel || "Cancel";
+
+					// Graphics inspector tooltips
+					_graphicInspectorZoomTooltip = configXML.labels.graphicInspectorZoomTooltip || "Click to zoom to extent of the graphic";
+					_graphicInspectorLinkTooltip = configXML.labels.graphicInspectorLinkTooltip || "Click to open the link in a new browser window";
+					_graphicInspectorEditTooltip = configXML.labels.graphicInspectorEditTooltip || "Click to edit the symbology, shape and properties of the graphic";
+					_graphicInspectorDeleteTooltip = configXML.labels.graphicInspectorDeleteTooltip || "Click to remove this graphic from the map";
+					_graphicInspectorApplyTooltip = configXML.labels.graphicInspectorApplyTooltip || "Click to apply the symbology and property changes to this graphic";
+					_graphicInspectorCancelTooltip = configXML.labels.graphicInspectorCancelTooltip || "Click to cancel the symbology and property changes to this graphic and revert to the original settings";
+					_graphicInspectorMeasurementTooltip = configXML.labels.graphicInspectorMeasurementTooltip || "Click to show the measurements associated with graphics";
+				}
+				
+				// Set help location
+				_helpLocation = configXML.helplocationurl;
+				
+				// Add widget menu buttons
+				wTemplate.addTitlebarButton(ICON_URL + "i_draw.png", _drawLabel, showStateDraw);
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_measure_options.png", _measurementOptionsLabel, showStateMeasurements);
+				wTemplate.addTitlebarButton(ICON_URL + "i_table.png", _graphicsListLabel, showStateGraphicsList);
+				
+				wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_save.png", _saveLabel, exportGraphics, false);
+				wTemplate.addTitlebarButton(ICON_URL + "i_folder.png", _openLabel, importGraphics, false);
+				
+				wTemplate.addTitlebarButton(ICON_URL + "i_clear.png", _clearFeatureLabel, deleteAllGraphics, false);
+				
+				if (_helpLocation)
+				{
+					wTemplate.addTitlebarButton(ICON_URL + "i_help.png", "Help", showHelp, false);
+				}
+				
+				// Set the fade targets for transitions
+				fade.targets = [ drawingTools, measurements, graphicsList ];
+				
+				// Make the widget visible
+				wTemplate.visible = true;
+				
+				// Add listener for other widgets calling the draw events - used in ESRI widgets to turn off these tools
+				// so they don't interfere with one another.
+				AppEvent.addListener(AppEvent.DATA_PUBLISH, sharedDataUpdated);
+				
+				// Set the template picker to loading mode
+				templatePicker.isLoading = true;
+
+				// Load template picker
+				try
+				{
+					_templatesSO = SharedObject.getLocal(DRAWTOOLTEMPLATES);
+					loadLocalTemplates();
+				}
+				catch (err:Error)
+				{
+					Alert.show("Error connecting to the local storage object.  If this persists please contact the GIS Administrator.\n" + err.toString(),
+						"Drawing Widget Configuration",Alert.OK,map); 
+					
+					// Load the default templates, but do not overwrite the existing settings.
+					loadDefaultTemplates(false);
+				} 
+
+				// Reeet the template picker out of loading mode
+				templatePicker.isLoading = false;
+			}
+			
+			/** 
+			 * Called when the widget is closed
+			 */ 
+			private function widgetClosedHandler(event:Event):void
+			{
+				// Deactivate the drawing tools
+				deactivateTools();
+				
+				// Clear the selected template
+				templatePicker.clearSelection();
+				
+				// Call the clear selection graphics method
+				clearSelectedGraphics();
+				
+				// Hide the info window
+				hideInfoWindow();
+				
+				// Re-enable the navigation tools.			
+				_disablePanZoomNavigationWidget = false;
+				addSharedData("Draw_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to enable pan/zoomin/zoomout
+				
+				_lastState = "closed";
+				
+				// Remove the event listeners
+				widgetRemoveEventListeners();
+				
+				// Clear the graphic listeners
+				removeAllGraphicListeners();
+			}
+			
+			/**
+			 * Called when the widget is opened
+			 */ 
+			private function widgetOpenedHandler(event:Event):void
+			{
+				_disablePanZoomNavigationWidget = true;
+				addSharedData("Draw_Widget", new ArrayCollection([ _disablePanZoomNavigationWidget ])); // to be able to disable pan/zoomin/zoomout
+				
+				// hide the infowindow if already there from other widget
+				if (_lastState == "closed") // reset only if the widget was opened after being closed
+				{
+					map.infoWindow.hide();
+				}
+				
+				// Add the event listeners
+				widgetAddEventListeners();
+				
+				// Add the graphic listeners
+				applyAllGraphicListeners();
+			}
+			
+			/** 
+			 * Called when the widget is minimised
+			 */ 
+			private function widgetMinimizedHandler(event:Event):void
+			{
+				// Deactivate the drawing tools
+				deactivateTools()
+				
+				// Clear the selected template
+				templatePicker.clearSelection();
+
+				// Call the clear selection graphics method
+				clearSelectedGraphics();
+
+				// Set the last state
+				_lastState = "minimized";
+				
+				// Remove the event listeners
+				widgetRemoveEventListeners();
+			}
+			
+			
+			
+			/* WIDGET STATE CHANGES
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Changes the current display state to the draw tools screen
+			 */
+			private function showStateDraw():void
+			{
+				this.currentState = "draw";
+				wTemplate.selectedTitlebarButtonIndex = 0;
+				
+				// Deactivate the drawing tools
+				deactivateTools();
+			}
+			
+			/** 
+			 * Changes the current display state to the measurement settings screen
+			 */
+			private function showStateMeasurements():void
+			{
+				this.currentState = "measurements";
+				wTemplate.selectedTitlebarButtonIndex = 1;
+				
+				// Deactivate the drawing tools
+				deactivateTools();
+			}
+			
+			/** 
+			 * Changes the current display state to the graphic list screen
+			 */
+			private function showStateGraphicsList():void
+			{
+				this.currentState = "graphicList";
+				wTemplate.selectedTitlebarButtonIndex = 2;
+				
+				// Deactivate the drawing tools
+				deactivateTools();
+			}
+			
+			
+			
+			
+			/* WIDGET LISTENER FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Activates listeners for specific events related to functionality 
+			 * while the widget is visible.
+			 */
+			private function widgetAddEventListeners():void
+			{
+				// Add Keypress Down listener
+				systemManager.addEventListener(KeyboardEvent.KEY_DOWN,widgetKeyPressDownHandler);
+				
+				// Add Keypress Up listener
+				systemManager.addEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			/**
+			 * Removes listeners for specific events related to functionality so 
+			 * that they are not called when the widget is closed or minimised.
+			 */
+			private function widgetRemoveEventListeners():void
+			{
+				// Remove Keypress Down listener
+				systemManager.removeEventListener(KeyboardEvent.KEY_DOWN,widgetKeyPressDownHandler);
+				
+				// Remove Keypress Up listener
+				systemManager.removeEventListener(KeyboardEvent.KEY_UP,widgetKeyPressUpHandler);
+			}
+			
+			
+			/**
+			 * Called when a key pressed by the user presses goes down
+			 */
+			private function widgetKeyPressDownHandler(event:KeyboardEvent):void
+			{
+				// Check the keycode of the button pressed
+				switch(event.keyCode)
+				{
+					case 17: // Control key
+					{
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Called when a key pressed by the user presses comes up
+			 */
+			private function widgetKeyPressUpHandler(event:KeyboardEvent):void
+			{
+				// Check the keycode of the button pressed
+				switch(event.keyCode)
+				{
+					case Keyboard.ESCAPE: // Escape key
+					{
+						// Check current draw mode
+						if (templatePicker.selectedTemplate)
+						{
+							// Clear any working drawing tools
+							deactivateTools();
+							
+							// Clear the selected template
+							templatePicker.clearSelection();
+							
+							// Clear the selected graphics
+							clearSelectedGraphics();
+						}
+						break;
+					}
+						
+					case 86: // V key
+					{
+						// Check for the control key being pressed
+						if (event.ctrlKey)
+						{
+							// Confirm that there are graphics in the holding collection.
+							if (_holdingGraphics.length > 0)
+							{
+								// Call the copy function.
+								CopyGraphics(_holdingGraphics.toArray());
+							}
+						}
+						else
+						{
+							// Do nothing
+						}
+						break;
+					}
+						
+					case Keyboard.DELETE:
+					{
+						// Check for selected graphics
+						if (_holdingGraphics && _holdingGraphics.length > 0)
+						{
+							// Call the remove graphics function
+							RemoveGraphics(_holdingGraphics);							
+						}
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Called when the _holdingGraphics collection content changes.
+			 */
+			private function updateToolStatus(event:CollectionEvent):void
+			{
+				// Check type of graphics in the collection
+				var containsPoints:Boolean = false;
+				var containsLines:Boolean = false;
+				var containsPolygons:Boolean = false;
+				
+				if (_holdingGraphics && _holdingGraphics.length > 0)
+				{
+					// Iterate through each graphic and get the type
+					for each (var graphic:Graphic in _holdingGraphics)
+					{
+						switch(graphic.geometry.type)
+						{
+							case Geometry.MULTIPOINT:
+							case Geometry.MAPPOINT:
+							{
+								containsPoints = true;
+								break;
+							}
+								
+							case Geometry.POLYLINE	:
+							{
+								containsLines = true;
+								break;
+							}
+								
+							case Geometry.EXTENT:
+							case Geometry.POLYGON:
+							{
+								containsPolygons = true;	
+								break;
+							}
+						}
+					}
+				}
+				
+				// Set the enable state
+				if (_showCutTool)
+				{
+					cutButton.enabled = false;
+				}
+				
+				if (_showReshapeTool)
+				{
+					reshapeButton.enabled = false;
+				}
+				
+				if (_showMergeTool)
+				{
+					mergeButton.enabled = false;
+				}
+				
+				// Update cut and reshape tool status
+				if ((containsLines && !containsPolygons && !containsPoints) ||
+					(!containsLines && containsPolygons && !containsPoints))
+				{
+					if (_showCutTool )
+					{
+						cutButton.enabled = true;
+					}
+					
+					if (_showReshapeTool && _holdingGraphics.length == 1)
+					{
+						reshapeButton.enabled = true;
+					}
+				}
+				
+				// Update merge tool status
+				if (!containsLines && containsPolygons && !containsPoints)
+				{
+					if (_showMergeTool && _holdingGraphics.length > 1)
+					{
+						mergeButton.enabled = true;
+					}
+				}
+			}
+			
+			
+			
+			/* STORED TEMPLATE FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * When called the function clears the templates currently loaded into 
+			 * the templatepicker then loads those listed in the default settings.  
+			 * These templates are also saved as the user's default templates.  
+			 */
+			private function loadDefaultTemplates(overwritelocal:Boolean = false):void
+			{
+				var templates:Array = [];
+				
+				// Get the template objects from the config 
+				var templatesXML:XMLList = configXML.defaulttemplates.template;
+				for each (var templateXML:XML in templatesXML)
+				{
+					try
+					{
+						var template:GraphicTemplate = new GraphicTemplate();
+						template.name = templateXML.@name;
+						template.description = templateXML.@description;
+						template.drawingTool = templateXML.@drawingtool;
+						template.groupname = templateXML.@groupname;
+						
+						var symbol:Symbol;
+						var style:String = templateXML.@style;
+						var colour:uint = uint(templateXML.@colour) || 0xFFFFFF;
+						var alpha:Number = Number(templateXML.@alpha) || 1;
+						
+						// Create an outline symbol (if required)
+						var outlineSymbol:SimpleLineSymbol;
+						
+						if (templateXML.@type == "marker" || templateXML.@type == "fill")
+						{
+							var outlinestyle:String = templateXML.@outlinestyle || "solid";
+							var outlinecolour:uint = uint(templateXML.@outlinecolour) || 0x000000;
+							var outlinealpha:Number = Number(templateXML.@outlinealpha) || 1;
+							var outlinewidth:Number = Number(templateXML.@outlinewidth) || 1;
+							outlineSymbol = new SimpleLineSymbol(outlinestyle,outlinecolour,outlinealpha,outlinewidth);
+						}
+						
+						// Check the symbol type 
+						switch(String(templateXML.@type))
+						{
+							case "marker":
+							{
+								var markerSize:Number = Number(templateXML.@size) || 15;
+								var angle:Number = Number(templateXML.@angle) || 0;
+								var xoffset:Number = Number(templateXML.@xoffset) || 0;
+								var yoffset:Number = Number(templateXML.@yoffset) || 0;
+								var sms:SimpleMarkerSymbol = new SimpleMarkerSymbol(style,markerSize,colour,alpha,xoffset,yoffset,angle);
+								if (outlineSymbol)
+								{
+									sms.outline = outlineSymbol;
+								}
+								symbol = sms;
+								
+								break;
+							}
+								
+							case "line":
+							{
+								var width:Number = Number(templateXML.@width) || 1;
+								var sls:SimpleLineSymbol = new SimpleLineSymbol(style,colour,alpha,width);
+								symbol = sls;
+								
+								break;
+							}								
+								
+							case "fill":
+							{
+								var sfs:SimpleFillSymbol = new SimpleFillSymbol(style,colour,alpha);
+								if (outlineSymbol)
+								{
+									sfs.outline = outlineSymbol;
+								}
+								symbol = sfs;
+								
+								break;
+							}
+								
+							case "text":
+							{
+								var textcolour:uint = uint(templateXML.@colour);
+								var border:Boolean = templateXML.@border == "true";
+								var borderColour:uint = uint(templateXML.@bordercolour) || 0xFFFFFF;
+								var background:Boolean = templateXML.@background == "true";
+								var backgroundColour:uint = uint(templateXML.@borderColour) || 0x000000;
+								var placement:String = templateXML.@placement || "middle";
+								var textangle:Number = Number(templateXML.@angle) || 0;
+								var textxoffset:Number = Number(templateXML.@xoffset) || 0;
+								var textyoffset:Number = Number(templateXML.@yoffset) || 0;
+								
+								var ts:TextSymbol = new TextSymbol(null,null,textcolour,1,border,borderColour,
+									background,backgroundColour,placement,textangle,textxoffset,textyoffset);
+								
+								var font:String = templateXML.@font || "Arial";
+								var fontsize:Number = Number(templateXML.@fontsize) || 11;
+								var bold:Boolean = templateXML.@bold == "true";
+								var italic:Boolean = templateXML.@italic == "true";
+								var underline:Boolean = templateXML.@underline == "true";
+								var leftmargin:Number = Number(templateXML.@leftmargin) || 5;
+								var rightmargin:Number = Number(templateXML.@rightmargin) || 5;
+								var align:String = templateXML.@align || "center";
+								
+								var tf:TextFormat = new TextFormat(font,fontsize,textcolour,bold,italic,underline,
+									null,null,align,leftmargin,rightmargin);
+								ts.textFormat = tf;
+								
+								// Set alpha
+								ts.alpha = alpha;
+								
+								symbol = ts;								
+								
+								break;
+							}
+						}
+						
+						var prototype:Graphic = new Graphic(null,symbol,{});
+						template.prototype = prototype;
+						templates.push(template);
+					}
+					catch(error:Error)
+					{
+						trace("Template load error: " + error.toString());							
+					}
+				}
+				
+				// Sort on the group names to order the templates.
+				templates.sortOn(["groupname","name"]);
+				
+				// Set the templatePicker templates
+				templatePicker.graphicTemplates = templates;
+				
+				// Save the default templates as the users starting templates
+				if (overwritelocal)
+				{
+					saveLocalTemplates();
+				}
+			}
+			
+			/** 
+			 * Loads the current users stored templates into the template picker - if the user 
+			 * does no have any stored templates, it loads the default templates
+			 */
+			private function loadLocalTemplates():void
+			{
+				if (_templatesSO)
+				{
+					var loadedTemplates:Array = _templatesSO.data[DRAWTOOLTEMPLATES] as Array;
+					
+					var templates:Array = [];
+					for each (var tmp:Object in loadedTemplates)
+					{
+						var template:GraphicTemplate = new GraphicTemplate();
+						template.name = tmp.name;
+						template.description = tmp.description;
+						template.drawingTool = tmp.drawingTool;
+						template.groupname = tmp.groupname;
+						template.prototype = GraphicUtil.SerialObjectToGraphic(tmp.prototype);
+						
+						// Add to the array
+						templates.push(template);						
+					}
+					
+					// Sort on the group names to order the templates.
+					templates.sortOn(["groupname","name"], Array.CASEINSENSITIVE );
+					
+					// Set the templatePicker templates
+					templatePicker.graphicTemplates = templates;
+				}
+				
+				// Check that there were some templates loaded
+				if (templatePicker.graphicTemplates.length == 0)
+				{
+					// Load up the default templates from the widget config -
+					loadDefaultTemplates(true);
+				}
+			}
+			
+			/** 
+			 * Saves the currently loaded templates into the current users stored templates
+			 */
+			private function saveLocalTemplates():void
+			{
+				var templates:Array =[];
+				for each (var template:GraphicTemplate in templatePicker.graphicTemplates)
+				{
+					var tmp:Object = {};
+					tmp.name = template.name;
+					tmp.description = template.description;
+					tmp.drawingTool = template.drawingTool;
+					tmp.groupname = template.groupname;
+					tmp.prototype = GraphicUtil.GraphicToSerialObject(template.prototype);
+					templates.push(tmp);
+				}
+				
+				if (_templatesSO)
+				{
+					_templatesSO.data[DRAWTOOLTEMPLATES] = templates;
+					try
+					{
+						_templatesSO.flush();
+					}
+					catch (err:Error)
+					{
+						Alert.show("Error connecting to the local storage object.  If this persists please contact the GIS Administrator.\n" + err.toString(),
+							"Drawing Widget Save Local Templates",Alert.OK,map); 
+					}
+				}
+			}
+			
+
+			
+			/* TEMPLATE PICKER FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the selected template in the template picker changes 
+			 */
+			protected function templatePicker_selectedTemplateChangeHandler(event:GraphicTemplateEvent):void
+			{
+				// Deactivate the cut and reshape tools
+				_isCutting = cutButton.selected = false;
+				_isReshaping = reshapeButton.selected = false;
+				
+				// Check whether there is a template set
+				if (event.selectedTemplate)
+				{
+					// Reset the tool data provider
+					_arrayList = new ArrayList();
+					
+					// Check the template geometry type and update the UI
+					switch(event.selectedTemplate.CreateGeometryType)
+					{
+						case Geometry.MAPPOINT:
+						{
+							// Check for text mode
+							if (_textMode)
+							{
+								_arrayList.addItem(textIcon);
+							}
+							else
+							{
+								_arrayList.addItem(mapPointIcon);
+							}
+							
+							drawDropDownList.dataProvider = _arrayList;
+							break;
+						}
+							
+						case Geometry.POLYLINE:
+						{
+							for each (var polylineDrawTool:String in createOptions.polylineDrawTools)
+							{
+								if (polylineDrawTool == DrawTool.POLYLINE)
+								{
+									_arrayList.addItem(pointToPointLineIcon);
+								}
+								
+								if (polylineDrawTool == DrawTool.FREEHAND_POLYLINE)
+								{
+									_arrayList.addItem(freehandLineIcon);
+								}
+								
+								if (polylineDrawTool == DrawTool.LINE)
+								{
+									_arrayList.addItem(lineIcon);
+								}
+							}
+							drawDropDownList.dataProvider = _arrayList;
+							
+							break;
+						}
+							
+						case Geometry.POLYGON:
+						{
+							for each (var polygonDrawTool:String in createOptions.polygonDrawTools)
+							{
+								if (polygonDrawTool == DrawTool.POLYGON)
+								{
+									_arrayList.addItem(pointToPointPolygonIcon);
+								}
+								
+								if (polygonDrawTool == DrawTool.FREEHAND_POLYGON)
+								{
+									_arrayList.addItem(freehandPolygonIcon);
+								}
+								
+								if (polygonDrawTool == DrawTool.EXTENT)
+								{
+									_arrayList.addItem(extentIcon);
+								}
+								
+								if (polygonDrawTool == CreateOptions.AUTO_COMPLETE)
+								{
+									_arrayList.addItem(autoCompleteIcon);
+								}
+								
+								if (polygonDrawTool == DrawTool.CIRCLE)
+								{
+									_arrayList.addItem(circleIcon);
+								}
+								
+								if (polygonDrawTool == DrawTool.ELLIPSE)
+								{
+									_arrayList.addItem(ellipseIcon);
+								}
+							}
+							drawDropDownList.dataProvider = _arrayList;
+							break;	
+						}
+					}
+					
+					// If the _array list contains values 
+					var drawAction:String;
+					if (_arrayList.length > 0 && event.selectedTemplate.drawingTool)
+					{
+						var toolIndex:int = getDrawToolIndex(event.selectedTemplate.drawingTool);
+						
+						drawDropDownList.selectedIndex = -1;
+						if(toolIndex > -1)
+						{
+							drawDropDownList.selectedIndex = toolIndex;
+						}
+						else
+						{
+							drawDropDownList.selectedIndex = 0;
+						}
+						
+						// Update the draw settings
+						updateDrawSettings(drawDropDownList.selectedItem.drawId);
+					}
+					else
+					{
+						updateDrawSettings();
+					}
+				}
+				else
+				{
+					updateDrawSettings();					
+				}
+			}
+			
+			/**
+			 * Called when the contents of the template picker change (i.e. a new template added or an existing one removed).
+			 */
+			protected function templatePicker_templateListChangeHandler(event:GraphicTemplatePickerEvent):void
+			{
+				saveLocalTemplates();
+				deactivateTools();
+			}
+			
+			/**
+			 * Called when the reset buttton is clicked on the template picker. 
+			 */
+			protected function templatePicker_resetTemplatesHandler(event:GraphicTemplatePickerEvent):void
+			{
+				Alert.show("Click OK to reload the default templates (Note: This will clear all custom templates.)",
+					"Reset to default",Alert.OK|Alert.CANCEL,null,resetAction,null,Alert.OK);
+				
+				function resetAction(evt:CloseEvent):void 
+				{
+					if (evt.detail == Alert.OK)
+					{
+						if (_templatesSO)
+						{
+							// Clear and reset the local storage object
+							_templatesSO.clear();
+							
+							// Re-establish the shared object
+							_templatesSO = SharedObject.getLocal(DRAWTOOLTEMPLATES);
+						}
+						
+						// Clear the template picker
+						templatePicker.graphicTemplates = [];
+						
+						// Reload the default templates
+						loadDefaultTemplates(true);
+					}
+				}
+			}
+
+
+			
+			/* DRAWTOOL FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Use to get the index in the drawTool dropdown list of the given tools name 
+			 */
+			private function getDrawToolIndex(tool:String):int
+			{
+				var index:int = -1;
+				for (var i:int = 0; i < _arrayList.length; i++)
+				{
+					if (_arrayList.getItemAt(i).drawId == tool)
+					{
+						index = i;	
+						break;
+					}
+				}
+				return index;
+			}
+			
+			/** 
+			 * Called when the draw tool type from the drop down is changed
+			 */
+			protected function drawDropDownList_changeHandler(event:IndexChangeEvent):void
+			{
+				if (_arrayList.length > 0)
+				{
+					updateDrawSettings(drawDropDownList.selectedItem.drawId);
+				}
+				else
+				{
+					updateDrawSettings();
+				}
+			}
+			
+			/** 
+			 * Updates the drawing settings
+			 */
+			private function updateDrawSettings(drawAction:String = null):void
+			{
+				// Deactivate the current action 
+				drawTool.deactivate();
+				setMapAction(null,null,null,null); 
+				//setMapNavigation(NavigationTool.PAN, getDefaultString('pan'));
+				
+				// Reset text mode status
+				_textMode = false;
+				
+				// Confirm there is a selected template
+				if (templatePicker.selectedTemplate && drawAction)
+				{
+					// Set the symbol of draw tool.
+					var symbol:Symbol = templatePicker.selectedTemplate.prototype.symbol;
+					
+					drawTool.markerSymbol = null;
+					drawTool.lineSymbol = null;
+					drawTool.fillSymbol = null;
+					
+					if (symbol is MarkerSymbol)
+					{
+						drawTool.markerSymbol = symbol;
+					}
+					
+					if (symbol is LineSymbol)
+					{
+						drawTool.lineSymbol = symbol;
+					}
+					
+					if (symbol is FillSymbol)
+					{
+						drawTool.fillSymbol = symbol;
+					}
+					
+					if (symbol is TextSymbol)
+					{
+						_textMode = true;
+						drawTool.markerSymbol = symbol;
+					}
+					
+					// Reset the freehand flag
+					_isFreehand = false;
+					
+					// Activate the drawTool
+					var drawType:String;
+					var status:String;
+					
+					switch(drawAction)
+					{
+						case DrawTool.CIRCLE:
+						{
+							drawType = drawAction;
+							status = getDefaultString('drawCircleLabel');
+							break;
+						}
+
+						case DrawTool.ELLIPSE:
+						{
+							drawType = drawAction;
+							status = getDefaultString('drawEllipseLabel');
+							break;
+						}
+						
+						case DrawTool.LINE:
+						{
+							drawType = drawAction;
+							status = getDefaultString('drawLineLabel');
+							break;
+						}
+
+						case DrawTool.MAPPOINT:
+						{
+							drawType = drawAction;
+							status = getDefaultString('drawPointLabel');
+							break;
+						}
+							
+						case "extent":
+						{
+							drawType = DrawTool.EXTENT;
+							status = getDefaultString('drawRectangleLabel');
+							break;
+						}
+							
+						case "freehandLine":
+						{
+							drawType = DrawTool.FREEHAND_POLYLINE;
+							status = getDefaultString('drawFreehandLineLabel');
+							_isFreehand = true;
+							break;
+						}
+							
+						case "pointToPointLine":
+						{
+							drawType = DrawTool.POLYLINE;
+							status = getDefaultString('drawLineLabel');
+							break;
+						}
+							
+						case "freehandPolygon":
+						{
+							drawType = DrawTool.FREEHAND_POLYGON;
+							status = getDefaultString('drawFreehandPolygonLabel');
+							_isFreehand = true;
+							break;
+						}
+							
+						case "pointToPointPolygon":
+						{
+							drawType = DrawTool.POLYGON;
+							status = getDefaultString('drawPolygonLabel');
+							break;
+						}
+							
+						case "autoComplete":
+						{
+							
+							break;
+						}
+							
+						case "text":
+						{
+							drawType = DrawTool.MAPPOINT;
+							status = getDefaultString('drawFreehandLineLabel');
+							break;
+						}
+					}
+					
+					if (drawType)
+					{
+						// Dispatch a clear drawingtool event;
+						_dispatchedMessage = true; 
+
+						addSharedData("Deactivate_DrawTool", new ArrayCollection([{ widget: "DrawWidget" }]));
+						//AppEvent.dispatch(AppEvent.DATA_PUBLISH, { key: "Deactivate_DrawTool", widget: "DrawWidget" });
+						
+						// Set the viewer status text
+						AppEvent.setStatus(status);
+						
+						// Activate the drawing tool
+						drawTool.activate(drawType);
+					}
+				}
+			}
+			
+			
+			
+			/* INTERACTIVE MEASUREMENT FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Called at the beginning of a draw action.
+			 */
+			protected function drawTool_drawStartHandler(event:DrawEvent):void
+			{
+				// Add a label to display the results
+				var label:Label = new Label();
+				label.name = "measurementLabel";
+				map.staticLayer.addElement(label);
+				label.x = map.mouseX + 15;
+				label.y = map.mouseY - 50;
+				
+				label.setStyle("color",0x000000);
+				label.setStyle("fontWeight", flash.text.engine.FontWeight.BOLD);
+				
+				// Add glowfilter
+				var glow:spark.filters.GlowFilter = new spark.filters.GlowFilter(0xFFFFFF,0.7,6,6,4,1);
+				label.filters = [glow];
+			}
+			
+			/** 
+			 * Called as the mouse moves when the draw tool is activated.
+			 */
+			protected function drawTool_drawUpdateHandler(event:DrawEvent):void
+			{
+				var geometry:Geometry = event.graphic.geometry;
+				
+				var labelText:String = "";
+				var pt:MapPoint;
+				
+				switch(geometry.type) {
+					
+					case Geometry.MULTIPOINT:
+						var mpt:Multipoint = geometry as Multipoint;
+						labelText = mpt.points.length.toString();
+						
+						break;
+					
+					case Geometry.MAPPOINT:
+						// Do nothing
+						
+						break;
+					
+					case Geometry.POLYLINE:
+						var lin:Polyline = geometry as Polyline;
+						numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+						labelText = _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(lin) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr  + "\n" + 
+						_totalLengthLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(lin) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						break;
+					
+					case Geometry.POLYGON:
+						var pol:Polygon = geometry as Polygon;
+						
+						/*
+						switch (drawAction)
+						{
+							case "circle":
+								// Calculate the area
+								numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+								
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+								
+								// Calculate the radius
+								labelText += _radiusLabel + numberFormatter.format(GeometryUtil.getCircleRadius(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+								
+								break;
+							
+							default:
+							*/
+							// Calculate the area
+								numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+								labelText += _areaLabel + numberFormatter.format(GeometryUtil.returnSimpleArea(pol) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+								
+								// Calculate the perimeter
+								numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+								labelText += _perimeterLabel + numberFormatter.format(GeometryUtil.returnSimpleLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+								
+								// Calculate the last segment length 
+								labelText += _segmentLengthLabel + numberFormatter.format(GeometryUtil.returnLastSegmentLength(pol) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						/*}*/
+						
+						
+						break;
+					
+					case Geometry.EXTENT:
+						var ext:Extent = geometry as Extent;
+						// Calculate the area
+						numberFormatter.fractionalDigits = cboArea.selectedItem.precision;
+						labelText += _areaLabel + numberFormatter.format((ext.height * ext.width) * cboArea.selectedItem.conversion) + cboArea.selectedItem.abbr + "\n";
+						
+						// Calculate the perimeter
+						numberFormatter.fractionalDigits = cboDistance.selectedItem.precision;
+						labelText += _perimeterLabel + numberFormatter.format((ext.height * 2 + ext.width * 2) * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + "\n";
+						
+						// Calculate the height and width
+						labelText += _widthLabel + numberFormatter.format(ext.width * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr + " " +
+							_heightLabel + numberFormatter.format(ext.height * cboDistance.selectedItem.conversion) + cboDistance.selectedItem.abbr;
+						 
+						break;
+				}
+				
+				
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					label.text = labelText;
+					label.x = map.mouseX + 15;
+					label.y = map.mouseY - 50;
+				}
+			}
+			
+			/** 
+			 * Called at the end of of a draw action.
+			 */
+			protected function drawTool_drawEndHandler(event:DrawEvent):void
+			{
+				var label:Label = map.staticLayer.getChildByName("measurementLabel") as Label;
+				if (label)
+				{
+					map.staticLayer.removeElement(label);
+				}
+				
+				var graphic:Graphic;
+				
+				// Check the current edit action
+				if (_isCutting)
+				{
+					// Prepare the cut geometries
+					var targetGeometries:Array = [];
+					var targetGraphics:Array = [];
+					var cutPolyline:Polyline;
+					
+					if (event.graphic.geometry is Polyline)
+					{
+						cutPolyline = Polyline(event.graphic.geometry);
+						
+						for each (graphic in _holdingGraphics)
+						{
+							if (graphic.geometry is Polyline || graphic.geometry is Polygon)
+							{
+								targetGeometries.push(graphic.geometry);
+								targetGraphics.push(graphic);
+							}
+						}
+						
+						if (targetGeometries.length > 0)
+						{
+							// Call the cut task
+							geometryService.cut(targetGeometries,cutPolyline,
+								new AsyncResponder(geometryService_cutCompleteHandler,
+									geometryService_faultHandler,targetGraphics));					
+						}
+						else
+						{
+							Alert.show("There are no line or polygon graphics selected that can be cut.  Please try again.",
+								"Cut Graphics",Alert.OK,map);							
+						}
+					}
+				}
+				else if (_isReshaping)
+				{
+					var targetGraphic:Graphic = _holdingGraphics.getItemAt(0) as Graphic;
+					var targetGeometry:Geometry = targetGraphic.geometry;
+					var reshapePolyline:Polyline;
+					
+					if (event.graphic.geometry is Polyline)
+					{
+						reshapePolyline = Polyline(event.graphic.geometry);
+					}
+					
+					if (targetGeometry && reshapePolyline)
+					{
+						// Call the reshape task
+						geometryService.reshape(targetGeometry,reshapePolyline,
+							new AsyncResponder(reshapeComplete,
+								geometryService_faultHandler,targetGraphic));						
+					}
+					else
+					{
+						Alert.show("There is a problem with the selected graphic that prevents it being reshaped.  Please try again.",
+							"Reshape Graphic",Alert.OK,map);							
+					}
+				}
+				else
+				{
+					// Duplicate the graphic symbol to keep it disconnected from the template 
+					graphic = event.graphic;
+					graphic.symbol = SymbolUtil.DuplicateSymbol(graphic.symbol);
+					
+					if (_textMode)
+					{
+						// Display the text entry screen
+						var textWin:MultilineTextEditor = MultilineTextEditor(PopUpManager.createPopUp(this.map,MultilineTextEditor,false));
+						textWin.graphic = graphic;
+						
+						// Set the popup location
+						var mappoint:MapPoint = graphic.geometry as MapPoint;
+						var screenpoint:Point = map.toScreen(mappoint);
+						var targetPoint:Point = map.localToGlobal(screenpoint);
+						textWin.popX = targetPoint.x;
+						textWin.popY = targetPoint.y;
+						
+						// Add listener for text added
+						AppEvent.addListener(MultilineTextEditor.TEXTEDITOR_TEXTADDED, addTextGraphic);
+					}
+					else
+					{
+						// Add the drawn graphic to the map. 
+						_graphicsLayer.add(graphic);
+					}
+				}
+				
+				function addTextGraphic(event:AppEvent):void
+				{
+					// Remove the listener
+					var textWin:MultilineTextEditor = event.target as MultilineTextEditor;
+					AppEvent.removeListener(MultilineTextEditor.TEXTEDITOR_TEXTADDED, addTextGraphic);
+
+					// Get the graphic
+					var graphic:Graphic = event.data.graphic;
+					if (graphic)
+					{
+						// Check that there is text in the label
+						var txtSymbol:TextSymbol = graphic.symbol as TextSymbol;
+						if (txtSymbol.text && txtSymbol.text.length > 0) 
+						{
+							// Add the drawn graphic to the map. 
+							_graphicsLayer.add(graphic);
+						}
+					}
+				}
+				
+				function reshapeComplete(result:Geometry, token:Object = null):void
+				{
+					var targetGraphic:Graphic = token as Graphic;
+					if (Polygon(result).rings.length > 0 && targetGraphic)
+					{
+						// Hide the info window
+						hideInfoWindow();
+						
+						// Create a new graphic to put result in
+						var newGraphic:Graphic = GraphicUtil.CopyGraphic(targetGraphic);
+						
+						// Update the geometry of the first graphic in the list
+						newGraphic.geometry = result;
+						
+						// Add the graphic to the map
+						_graphicsLayer.add(newGraphic);
+						
+						// Remove the original graphics
+						_holdingGraphics.removeAll();
+						_holdingGraphics.addItem(targetGraphic);
+						
+						// Add associated graphics
+						var associate:Graphic = getAssociatedGraphic(targetGraphic);
+						if (associate != null)
+							_holdingGraphics.addItem(associate);
+						
+						// Remove the selected graphics
+						RemoveGraphics(_holdingGraphics);
+						
+						// Set the selected graphic
+						setSelectedGraphics([newGraphic]);
+						
+						// Recalculate the lengths and widths
+						calculateAreasAndLengths(newGraphic);
+					}
+					else
+					{
+						Alert.show("There is a problem with the selected graphic that prevents it being reshaped or the reshaping line did not intersect the target graphic.  Please try again.",
+							"Reshape Graphic",Alert.OK,map);
+					}
+				}
+			}
+			
+
+			
+			/* GENERAL FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/** 
+			 * Deactivates the all the drawing tools
+			 */
+			private function deactivateTools(remoteCall:Boolean = false):void
+			{
+				drawTool.deactivate();	
+				editTool.deactivate();
+				templatePicker.selectedTemplate = null;
+				
+				// Deactivate any active select tools
+				if (selectToolToggleButton.selected)
+				{
+					selectToolToggleButton.selected = false;
+				}
+
+				if (!remoteCall) 
+				{
+					// Deactivate the selection tool 
+					setMapNavigation(NavigationTool.PAN,getDefaultString("panLabel"));
+				}
+			}
+			
+			/**
+			 * Hides the info window related to a graphic in the graphic layer associated with this widget.
+			 */
+			private function hideInfoWindow(forceClose:Boolean = false):void
+			{
+				if (map.infoWindow.contentOwner == null || (map.infoWindow.contentOwner is Graphic && 
+					Graphic(map.infoWindow.contentOwner).graphicsLayer === _graphicsLayer) || 
+					map.infoWindow.contentOwner is Map  || forceClose)
+
+				{
+					map.infoWindow.hide();
+				}
+			}
+			
+			/** 
+			 * Called when the help button on the widget menu is clicked
+			 */
+			private function showHelp():void 
+			{
+				var urlRequest:URLRequest = new URLRequest(_helpLocation);
+				navigateToURL(urlRequest, "_blank");
+			}
+			
+			/**
+			 * Called from the widget menu
+			 */
+			private function deleteAllGraphics():void
+			{
+				checkDelete(true);
+			}	
+			
+			/** 
+			 * Gets the user to check if they want to deleted the graphics
+			 */
+			private function checkDelete(allGraphics:Boolean = true):void 
+			{
+				if (allGraphics) 
+				{
+					// Add all graphics to the holding array
+					_holdingGraphics.removeAll();
+					
+					var graphic:Graphic;
+					for (var i:Number = 0; i < _graphicsLayer.graphicProvider.length; i++)
+					{
+						graphic = _graphicsLayer.graphicProvider[i] as Graphic;
+						_holdingGraphics.addItem(graphic);
+					}
+					
+					// Check if there are any graphics to be deleted
+					if (_holdingGraphics.length > 0)
+					{
+						Alert.show("Are you sure you wish to delete all of the graphic(s) in the map?", 
+							"Warning", Alert.YES|Alert.NO, null, alert_CheckDeleteHandler, null, Alert.NO);
+					}
+				} 
+				else 
+				{
+					// Delete the graphics currently in the holding array
+					Alert.show("Are you sure you wish to delete the selected graphic(s)?", 
+						"Warning", Alert.YES|Alert.NO, null, alert_CheckDeleteHandler, null, Alert.NO);
+				}
+				
+				function alert_CheckDeleteHandler(event:CloseEvent):void
+				{
+					// Check for user's response
+					if (event.detail==Alert.YES)
+					{
+						// Remove the selected graphics
+						RemoveGraphics(_holdingGraphics);
+						
+						// Clear _holdingGraphics
+						_holdingGraphics = new ArrayCollection();
+					}
+				}
+			}
+			
+			/** 
+			 * Deletes the supplied graphics from the graphics layer and refreshes the graphic lists
+			 */
+			private function RemoveGraphics(graphics:ArrayCollection):void 
+			{
+				// Hide the info window
+				hideInfoWindow();
+				
+				// Iterate through each graphic in the supplied array and remove from 
+				// the graphics layer and the selected graphics array
+				for (var i:int = 0; i < graphics.length; i ++) 
+				{
+					var graphic:Graphic = graphics[i] as Graphic;
+					
+					// Check that it is not null
+					if (graphic != null) 
+					{
+						// Remove from the graphics layer
+						_graphicsLayer.remove(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Clears the specified graphic from the selected graphics collection.
+			 */
+			private function ClearSelectedGraphic(graphic:Graphic):void
+			{
+				// Confirm that the graphic is in the _holding Graphcs collection
+				if (_holdingGraphics.length > 0 && _holdingGraphics.contains(graphic))
+				{
+					// Clear the selection glow applied to filters
+					graphic.filters = [];
+				}
+			}
+			
+			
+			
+			/* EXPORT GRAPHIC FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Serialises all the graphics currently in the graphics layer and calls 
+			 * for the user to select/enter a file to save the serialised features to.  
+			 */
+			private function exportGraphics():void
+			{
+				var ac:ArrayCollection = new ArrayCollection();
+				
+				if (_graphicsLayer && _graphicsLayer.graphicProvider.length > 0)
+				{
+					for each (var graphic:Graphic in _graphicsLayer.graphicProvider)
+					{
+						var object:Object;
+						
+						// Check if this is a label and it has a parent graphic
+						if (graphic.symbol is TextSymbol)
+						{
+							if (getParentGraphic(graphic) == null)
+							{
+								object = GraphicUtil.GraphicToSerialObject(graphic);
+								ac.addItem(object);
+							}
+						}
+						else
+						{
+							object = GraphicUtil.GraphicToSerialObject(graphic);
+							ac.addItem(object);
+						}
+					}
+					
+					// Check that the file reference has been initialised
+					if(!_fr)
+					{
+						_fr = new FileReference();
+					}
+					
+					// Save the file
+					_fr.addEventListener(Event.COMPLETE, exportGraphicsSaveComplete);
+					_fr.addEventListener(IOErrorEvent.IO_ERROR, exportGraphicsIOError);
+					
+					//_fr.save(JSONUtil.encode(ac.toArray()),"SavedGraphics.txt");
+					var jsn:JSONEncoder = new JSONEncoder();
+					_fr.save(jsn.encode(ac),"SavedGraphics.txt");
+				}
+				else
+				{
+					// Show the no graphics message.
+					Alert.show("There aren't any graphics in the drawing layer to export.","Export Graphics",Alert.OK,map);
+				}
+			}
+			
+			/**
+			 * Called when the file reference save action has been completed. 
+			 */
+			private function exportGraphicsSaveComplete(evt:Event):void 
+			{
+				// Remove the save action event listeners
+				_fr.removeEventListener(Event.COMPLETE, exportGraphicsSaveComplete);
+				_fr.removeEventListener(IOErrorEvent.IO_ERROR, exportGraphicsIOError);
+				
+				// Report action complete
+				CursorManager.removeBusyCursor();
+				Alert.show("Graphics File Saved","Save File",Alert.OK, map);
+			}
+			
+			/**
+			 * Called when the save action returns an IO Error.
+			 */
+			private function exportGraphicsIOError(evt:IOErrorEvent):void
+			{
+				// Remove the save action event listeners
+				_fr.removeEventListener(Event.COMPLETE, exportGraphicsSaveComplete);
+				_fr.removeEventListener(IOErrorEvent.IO_ERROR, exportGraphicsIOError);
+				
+				// Report error
+				CursorManager.removeBusyCursor();
+				Alert.show("An error occured while saving the current map graphics to a file","Save File",Alert.OK, map);
+			}
+			
+			/**
+			 * Takes serialised graphics saved in a file designated by the user, de-serialises 
+			 * and adds them to those currently in the graphics layer.  
+			 */
+			private function importGraphics():void
+			{
+				// Create the FileReference instance
+				_fr = new FileReference();
+				
+				// Listen for when they select a file
+				_fr.addEventListener(Event.SELECT, loadOnFileSelect);
+				
+				// Listen for when then cancel out of the browse dialog
+				_fr.addEventListener(Event.CANCEL,loadOnCancel);
+				
+				// Open a native browser dialog that filters for text files
+				_fr.browse(FILE_TYPES);
+			}
+			
+			/** 
+			 * Called when the user selects a file from the browse dialog
+			 */
+			private function loadOnFileSelect(e:Event):void
+			{
+				// Listen for when the file has loaded
+				_fr.addEventListener(Event.COMPLETE, loadOnLoadComplete);
+				
+				// Listen for any errors reading the file
+				_fr.addEventListener(IOErrorEvent.IO_ERROR, loadOnLoadError);
+				
+				// Load the content of the file
+				_fr.load();
+			}
+			
+			/** 
+			 * Called when the user cancels out of the browser dialog
+			 */
+			private function loadOnCancel(e:Event):void
+			{
+				_fr = null;
+			}
+			
+			/** 
+			 * Called when the file has completed loading
+			 */
+			private function loadOnLoadComplete(e:Event):void
+			{
+				// Show the working icon
+			 	CursorManager.setBusyCursor();
+				var hideCursor:Boolean = true;
+				_projectTaskCount = 0;
+				
+				// Remove event listeners
+				_fr.removeEventListener(Event.COMPLETE, loadOnLoadComplete);
+				_fr.removeEventListener(IOErrorEvent.IO_ERROR, loadOnLoadError);
+
+				var graphic:Graphic;
+				
+				// Get the data from the file as a ByteArray
+				var data:ByteArray = _fr.data;
+				var fileSize:Number = _fr.size;
+				var i:Number;
+
+				// Determine the type of file being loaded
+				var filename:String = _fr.name;
+				var filetype:String = filename.substr(filename.lastIndexOf(".") + 1,filename.length);
+
+				var projParam:ProjectParameters = null;
+				switch (filetype)
+				{
+					case "gpx":
+					{
+						var features:Object = GPXUtil.GenerateGraphics(data,fileSize);
+						if (features != null)
+						{
+							// Create a project parameters object
+							projParam = new ProjectParameters();
+							
+							if (map.spatialReference.wkid != this.wgs84wkid)
+							{
+								// Project the graphics to match the map spatial reference
+								
+								// Check for point graphics
+								if ((features.points as Array).length > 0)
+								{
+									if (isWebMercator(map.spatialReference.wkid))
+									{
+										for each (graphic in features.points)
+										{
+											graphic.geometry = WebMercatorUtil.geographicToWebMercator(graphic.geometry);
+											_graphicsLayer.add(graphic);
+										}
+									}
+									else
+									{
+										// Reset the hide cursor flag
+										hideCursor = false;
+	
+										// Build list of point geometries
+										var pts:Array = [];
+										for each (graphic in features.points)
+										{
+											pts.push(graphic.geometry);
+										}
+	
+										// Project the geometry into the map coordinate system.
+										projParam.geometries = pts;
+										projParam.outSpatialReference = map.spatialReference;
+
+										_projectTaskCount ++;
+										geometryService.project(projParam, new AsyncResponder(project_resultHandler, project_faultHandler, features.points));
+									}
+								}
+	
+								// Check for line graphics
+								if ((features.lines as Array).length > 0)
+								{
+									if (isWebMercator(map.spatialReference.wkid))
+									{
+										for each (graphic in features.lines)
+										{
+											graphic.geometry = WebMercatorUtil.geographicToWebMercator(graphic.geometry);
+											_graphicsLayer.add(graphic);
+										}
+	
+									}
+									else
+									{
+										// Reset the hide cursor flag
+										hideCursor = false;
+										
+										// Build list of point geometries
+										var lines:Array = [];
+										for each (graphic in features.lines)
+										{
+											lines.push(graphic.geometry);
+										}
+										
+										// Project the geometry into the map coordinate system.
+										projParam.geometries = lines;
+										projParam.outSpatialReference = map.spatialReference;
+
+										_projectTaskCount ++;
+										geometryService.project(projParam, new AsyncResponder(project_resultHandler, project_faultHandler, features.lines));
+									}
+								}
+								
+								// Check for a bounds object
+								if (features.extent != null)
+								{
+									if (isWebMercator(map.spatialReference.wkid))
+									{
+										var extent:Geometry = WebMercatorUtil.geographicToWebMercator(features.extent);
+										map.extent = extent.extent.expand(1.25);
+									}
+									else
+									{
+										hideCursor = false;
+										
+										// Project the extent geometry into the map coordinate system.
+										projParam.geometries = [features.extent.toPolygon()];
+										projParam.outSpatialReference = map.spatialReference;
+										
+										_projectTaskCount ++;
+										geometryService.project(projParam, new AsyncResponder(project_extentHandler, project_faultHandler));
+									}
+								}
+	
+								if(hideCursor || _projectTaskCount == 0)
+								{
+									// Show the finished message
+									CursorManager.removeBusyCursor();
+									Alert.show("GPX File Loaded","Load File",Alert.OK, map);
+								}
+								
+							}
+							else
+							{
+								// Add the graphics to the map
+								for each (graphic in features.points)
+								{
+									_graphicsLayer.add(graphic);
+								}
+	
+								for each (graphic in features.lines)
+								{
+									_graphicsLayer.add(graphic);
+								}
+	
+								for each (graphic in features.polygons)
+								{
+									_graphicsLayer.add(graphic);
+								}
+	
+								// Show the finished message
+								CursorManager.removeBusyCursor();
+								Alert.show("GPX File Loaded", "Load File", Alert.OK, map);
+							}
+						}
+						else
+						{
+							Alert.show("There was an error with the GPX file - it may not be a GPX 1.1 format file","Load File", Alert.OK, map);
+						}
+							
+						break;
+					}
+						
+					default:
+					{
+						// File is a text file
+						var jsn:JSONDecoder = new JSONDecoder();
+						
+						// Commented out to handle 4.6 issue with JSON multiple name reference.  Uses the JSONEncoder object instead.  
+						//var dobj:Object = JSONUtil.decode(data.readUTFBytes(data.bytesAvailable));				
+						
+						var dobj:Object = jsn.decode(data.readUTFBytes(data.bytesAvailable));				
+						
+						var graphics:Array = new Array();
+						
+						// Check for legacy format data
+						if (!LegacyGraphicLoaderUtil.isLegacyFormat(dobj))
+						{
+							for (i = 0; i < dobj.list.source.length; i++)
+							{
+								var object:Object = dobj.list.source[i];
+								graphic = GraphicUtil.SerialObjectToGraphic(object);
+								graphics.push(graphic);
+							}
+						}
+						else
+						{
+							// Get the formatted graphics
+							graphics = LegacyGraphicLoaderUtil.ImportGraphics(dobj);
+						}
+						
+						// Add the graphics to the map.
+						var hasProjected:Boolean = false;
+						for each (graphic in graphics)
+						{
+							// Check if coordinate system of graphic matches the map
+							if (graphic.geometry.spatialReference.wkid == map.spatialReference.wkid) 
+							{
+								_graphicsLayer.add(graphic);
+							}
+							else 
+							{
+								hasProjected = true;
+								
+								// Project to match the map
+								projParam = getProjectParams(graphic.geometry.spatialReference.wkid, map.spatialReference.wkid);
+								projParam.geometries = [graphic.geometry];
+								
+								// Call the geometry service project task
+								_projectTaskCount ++;
+								geometryService.project(projParam, new AsyncResponder( project_resultHandler, project_faultHandler, [graphic])); 
+							}
+						}						
+						
+						// Show the finished message
+						if (!hasProjected) 
+						{
+							CursorManager.removeBusyCursor();
+							Alert.show("Saved Graphics File Loaded","Load File",Alert.OK, map);
+						}
+					}
+				}
+				
+				// Clean up the FileReference instance
+				_fr = null;
+				
+				function project_resultHandler(result:Object, token:Object = null):void
+				{
+					if (result)
+					{
+						var i:Number;
+						for (i = 0; i < token.length; i++)
+						{
+							var graphic:Graphic = token[i] as Graphic;
+							var geometry:Geometry = (result as Array)[i];
+
+							// Update the geometry on the graphic;
+							graphic.geometry = geometry;
+
+							// Add the graphic to the map
+							_graphicsLayer.add(graphic);
+						}
+					}
+
+					// Show the finished message
+					_projectTaskCount --;
+					
+					if (_projectTaskCount <= 0)
+					{
+						CursorManager.removeBusyCursor();
+						Alert.show("GPX File Loaded","Load File",Alert.OK, map);
+					}
+				}
+				
+				function project_extentHandler(result:Object, token:Object = null):void
+				{
+					if (result)
+					{
+						var extent:Polygon = result[0];
+						map.extent = extent.extent.expand(1.25);
+					}
+
+					// Show the finished message
+					CursorManager.removeBusyCursor();
+				}
+				
+				function project_faultHandler(fault:Fault, token:Object = null):void
+				{
+					// Show the error message
+					CursorManager.removeBusyCursor();
+					Alert.show(fault.faultString + "\n\n" + fault.faultDetail, "project Fault " + fault.faultCode);
+				}
+				
+				function getProjectParams(inputWKID:int, targetWKID:int):ProjectParameters
+				{
+					// Create a new project parameters
+					var projParam:ProjectParameters = new ProjectParameters();
+					projParam.outSpatialReference = new SpatialReference(targetWKID);
+					
+					// Create a datam transformation
+					var datTransform:DatumTransform = new DatumTransform();
+					
+					for (var i:int =0; i < spatialDetails.length; i++)
+					{
+						var sd:Object = spatialDetails[i];
+						if (sd.inputWKID == inputWKID &&
+							sd.outputWKID == targetWKID) {
+							datTransform.wkid = sd.datTransform;
+							projParam.datumTransform = datTransform;
+							projParam.transformForward = sd.transformForward;
+							break;
+						}
+					}
+					return projParam;
+				}
+			}
+			
+			/** 
+			 * Called if an error occurs while loading the file contents
+			 */
+			private function loadOnLoadError(e:IOErrorEvent):void
+			{
+				// Remove event listeners
+				_fr.removeEventListener(Event.COMPLETE, loadOnLoadComplete);
+				_fr.removeEventListener(IOErrorEvent.IO_ERROR, loadOnLoadError);
+				
+				// Report error
+				CursorManager.removeBusyCursor();
+				Alert.show("An error occured while loading saved graphics from file.","Load File",Alert.OK, map);
+
+				trace("Error loading file : " + e.text);
+			}	
+			
+			
+			
+			
+			/* GRAPHIC LAYER FUNCTIONS
+			---------------------------------------------------------------------------------- */
+			
+			/**
+			 * Updates the flag specifying whether the mouse is over a graphic to true.
+			 */
+			private function graphicsLayer_graphicRollOverHandler(event:MouseEvent):void
+			{
+				_overGraphic = true;
+			}
+			
+			/**
+			 * Updates the flag specifying whether the mouse is over a graphic to false.
+			 */
+			private function graphicsLayer_graphicRollOutHandler(event:MouseEvent):void
+			{
+				_overGraphic = false;
+			}
+			
+			/** 
+			 * Called when a graphic is added to the graphics layer. Adds mouseover, 
+			 * mouseout, doubleclick, and click listeners to this graphic for this 
+			 * widget to use to control symbology and movements
+			 */ 
+			protected function graphicsLayer_graphicAddedHandler(event:GraphicEvent):void
+			{
+				// Set as the last drawn graphic
+				_lastDrawnGraphic = event.graphic;
+				
+				if (_lastDrawnGraphic.attributes)
+				{
+					// Check if showmeasurements is aactive - overide template settings if it is
+					if (showMeasurementsButton.selected)
+					{
+						// Add the show measurements flag
+						_lastDrawnGraphic.attributes["_showMeasurements"] = showMeasurementsButton.selected;
+					}
+				}
+				else
+				{
+					// Prepare the graphic properties item for this graphic.
+					prepareGraphic(_lastDrawnGraphic);
+					
+					// Add the show measurements flag
+					_lastDrawnGraphic.attributes["_showMeasurements"] = showMeasurementsButton.selected;
+				}
+				
+				// Add the contextmenu options to the graphic
+				graphic_updateContextMenu(_lastDrawnGraphic);
+				
+				// Call the area/length calculations
+				calculateAreasAndLengths(_lastDrawnGraphic);
+				
+				// Add the handlers for altering the shape
+				addGraphicListeners(_lastDrawnGraphic);
+			}
+			
+			/** 
+			 * Called when a graphic is removed from the graphics layer. Removes the mouseover, 
+			 * mouseout, doubleclick, and click listeners from this graphic.
+			 */
+			protected function graphicsLayer_graphicRemovedHandler(event:GraphicEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow(true);
+				
+				// Remove handlers from the provided graphic
+				var graphic:Graphic = event.graphic;
+				removeGraphicListeners(graphic);
+				
+				// Remove any label graphics
+				var aGraphic:Graphic = getAssociatedGraphic(graphic);
+				if (aGraphic)
+				{
+					_graphicsLayer.remove(aGraphic);
+				}
+
+				// Remove any measurment label graphics
+				aGraphic = getMeasurementGraphic(graphic);
+				if (aGraphic)
+				{
+					_labelsLayer.remove(aGraphic);
+				}
+			}			
+			
+			/**
+			 * Adds listeners to the specified graphic for click, doubleclick and mouseover events.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i> graphic feature to apply the listeners to.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function addGraphicListeners(graphic:Graphic):void
+			{
+				// Check that a graphic was provided
+				if (graphic)
+				{
+					// Clear any existing listeners
+					removeGraphicListeners(graphic);
+					
+					// Add the new listeners
+					graphic.addEventListener(MouseEvent.CLICK, graphic_ClickHandler);
+					graphic.addEventListener(MouseEvent.DOUBLE_CLICK, graphic_DoubleClickHandler);
+					graphic.addEventListener(MouseEvent.MOUSE_OVER, graphic_MouseOverHandler);
+					graphic.addEventListener(MouseEvent.MOUSE_OUT, graphic_MouseOutHandler);
+					
+					// Add tooltip to the graphic
+					graphic.toolTip = "Double Click to Edit";
+				}
+			}
+			
+			/**
+			 * Removes listeners from the specified graphic for click, doubleclick and mouseover events.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>graphic feature to remove the listeners from.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function removeGraphicListeners(graphic:Graphic):void
+			{
+				// Check that a graphic was provided
+				if (graphic)
+				{
+					// Remove the listeners
+					graphic.removeEventListener(MouseEvent.CLICK, graphic_ClickHandler);
+					graphic.removeEventListener(MouseEvent.DOUBLE_CLICK, graphic_DoubleClickHandler);
+					graphic.removeEventListener(MouseEvent.MOUSE_OVER, graphic_MouseOverHandler);
+					graphic.removeEventListener(MouseEvent.MOUSE_OUT, graphic_MouseOutHandler);
+
+					// Add tooltip to the graphic
+					graphic.toolTip = "";
+				}
+			}
+			
+			/**
+			 * Applies the graphic listeners to all the graphics in the graphics layer associated with this widget.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>None.</i></li>
+			 * </ul>
+			 * </p>
+			 */
+			private function applyAllGraphicListeners():void
+			{
+				if (_graphicsLayer)
+				{
+					// Iterate through the graphics
+					for each (var graphic:Graphic in _graphicsLayer.graphicProvider)
+					{
+						// Clear existing listeners
+						removeGraphicListeners(graphic);
+						
+						// Apply new listener
+						addGraphicListeners(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Clears the graphic listeners for all the graphics in the graphics layer associated with this widget.
+			 */
+			private function removeAllGraphicListeners():void
+			{
+				// Iterate through the graphics
+				for each (var graphic:Graphic in _graphicsLayer.graphicProvider)
+				{
+					// Remove the listeners from the graphic
+					removeGraphicListeners(graphic);
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Graphic event functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when a graphic is clicked with the mouse.
+			 */
+			private function graphic_ClickHandler(event:MouseEvent):void
+			{
+				// Get the graphic clicked
+				var graphic:Graphic = Graphic(event.currentTarget);
+				
+				// Check if this is an append action
+				if ((event.ctrlKey || selectionDropDownList.selectedItem.selectionName == "addToSelection" ) 
+					&& !_holdingGraphics.contains(graphic))
+				{
+					// Show the mapinfo window
+					//showGraphicInfoWindow(graphic);
+					
+					// Append the graphic to the holding graphics collection
+					setSelectedGraphics([graphic],true);
+					setEditGraphics([graphic],true);
+				}
+				else if ((event.ctrlKey || selectionDropDownList.selectedItem.selectionName == "subtractFromSelection" ) 
+					&& _holdingGraphics.contains(graphic))
+				{
+					// Hide the map info window
+					hideInfoWindow();
+					
+					// Remove the graphic from the holding graphics collection
+					removeSelectedGraphics([graphic]);				
+				}
+				else if (selectionDropDownList.selectedItem.selectionName == "subtractFromSelection"  
+					&& !_holdingGraphics.contains(graphic))
+				{
+					// Hide the map info window
+					hideInfoWindow();
+
+					// Do nothing - nothing to remove	
+				}
+				else
+				{
+					// Show the map info window
+					// showGraphicInfoWindow(graphic);
+					
+					// Set the graphic as the holding graphics collection
+					setSelectedGraphics([graphic],false);
+					setEditGraphics([graphic],false);
+				}
+			}
+ 
+			/**
+			 * Called when a graphic is double clicked with the mouse.
+			 */
+			private function graphic_DoubleClickHandler(event:MouseEvent):void
+			{
+				// Get the graphic clicked
+				var graphic:Graphic = Graphic(event.currentTarget);
+				
+				// Check if this is an append action
+				if ((event.ctrlKey || selectionDropDownList.selectedItem.selectionName == "addToSelection" ) 
+					&& !_holdingGraphics.contains(graphic))
+				{
+					// Show the mapinfo window
+					showGraphicInfoWindow(graphic);
+					
+					// Append the graphic to the holding graphics collection
+					setSelectedGraphics([graphic],true);
+				}
+				else if ((event.ctrlKey || selectionDropDownList.selectedItem.selectionName == "subtractFromSelection" ) 
+					&& _holdingGraphics.contains(graphic))
+				{
+					// Hide the map info window
+					hideInfoWindow();
+					
+					// Remove the graphic from the holding graphics collection
+					removeSelectedGraphics([graphic]);				
+				}
+				else if (selectionDropDownList.selectedItem.selectionName == "subtractFromSelection"  
+					&& !_holdingGraphics.contains(graphic))
+				{
+					// Hide the map info window
+					hideInfoWindow();
+					
+					// Do nothing - nothing to remove	
+				}
+				else
+				{
+					// Show the map info window
+					showGraphicInfoWindow(graphic);
+					
+					// Set the graphic as the holding graphics collection
+					setSelectedGraphics([graphic],false);
+				}
+			}
+
+			
+			/**
+			 * Display the Map Info Window and set the content to the graphic inspector display the details of the supplied graphic.
+			 */			
+			private function showGraphicInfoWindow(graphic:Graphic):void
+			{
+				if (graphic && graphic.symbol)
+				{
+					var pt:MapPoint = GeometryUtil.getMapPoint(graphic.geometry);					
+	
+					inspector.graphic = graphic;
+					map.infoWindow.label = "Graphic Details";
+					map.infoWindow.content = inspector;
+					map.infoWindow.contentOwner = graphic;
+					map.infoWindow.show(pt);
+				}
+			}
+			
+			/**
+			 * Called when the mouse moves over the specified graphic.
+			 */
+			private function graphic_MouseOverHandler(event:MouseEvent):void
+			{
+				// Get the graphic clicked
+				var graphic:Graphic = Graphic(event.currentTarget);
+				
+				// Applies the highlight from the graphic and the graphic list
+				showHighlight(graphic);
+				
+				// Highlight the item in the datagroup
+				graphicsDG.highlightGraphic(graphic);
+			}
+			
+			/**
+			 * Called when the mouse moves off the specified graphic.
+			 */
+			private function graphic_MouseOutHandler(event:MouseEvent):void
+			{
+				// Get the graphic clicked
+				var graphic:Graphic = Graphic(event.currentTarget);
+				
+				// Clears the highlight from the graphic and the graphic list
+				clearHighlight(graphic);
+
+				// Clear the highlight from the item in the datagroup
+				graphicsDG.clearHighlightGraphic(graphic);
+			}
+
+			
+			/* -------------------------------------------------------------------
+			Edit tool event functions 
+			---------------------------------------------------------------------- */
+
+			/**
+			 * Called at the beginning of the graphic move action.
+			 */
+			protected function editTool_graphicsMoveStartHandler(event:EditEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called at the beginning of the graphic rotate action.
+			 */
+			protected function editTool_graphicRotateFirstHandler(event:EditEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called at the beginning of the graphic scale action.
+			 */
+			protected function editTool_graphicScaleFirstHandler(event:EditEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called at the beginning of the graphic vertex move action.
+			 */
+			protected function editTool_vertexMoveStartHandler(event:EditEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called when the editTool is active and when the user clicks the mouse button.
+			 */
+			private function editTool_mouseDownHandler(event:MouseEvent):void
+			{
+				if (_isCutting || _isReshaping)
+				{
+					// Do Nothing
+				}
+				else
+				{
+					map.removeEventListener(MouseEvent.MOUSE_DOWN, editTool_mouseDownHandler);
+					map.addEventListener(MouseEvent.MOUSE_UP, editTool_mouseUpHandler);
+					map.addEventListener(MouseEvent.MOUSE_MOVE, editTool_mouseMoveHandler);
+				}
+			}
+			
+			/**
+			 * Called when the editTool is active and after the user clicks the mouse button.
+			 */
+			private function editTool_mouseUpHandler(event:MouseEvent):void
+			{
+				if (!_overGraphic && !_isCutting && !_isReshaping)
+				{
+					map.removeEventListener(MouseEvent.MOUSE_UP, editTool_mouseUpHandler);
+					map.removeEventListener(MouseEvent.MOUSE_MOVE, editTool_mouseMoveHandler);
+					
+					_isEditing = false;
+					_editGraphic = null;
+					_lastActiveEditType = "none";
+					_holdingGraphics.removeAll();
+					editTool.deactivate();
+					clearSelectFilter();
+				}
+			}
+			
+			/**
+			 * Called when the editTool is active and the user moves the mouse.
+			 */
+			private function editTool_mouseMoveHandler(event:MouseEvent):void
+			{
+				if (_isCutting || _isReshaping)
+				{
+					// Do Nothing
+				}
+				else
+				{
+					map.addEventListener(MouseEvent.MOUSE_DOWN, editTool_mouseDownHandler);
+					map.removeEventListener(MouseEvent.MOUSE_UP, editTool_mouseUpHandler);
+					map.removeEventListener(MouseEvent.MOUSE_MOVE, editTool_mouseMoveHandler);
+				}
+			}
+			
+			/**
+			 * Called when the mouse button is clicked on the ghost vertex.
+			 */
+			private function editTool_ghostVertexMouseDownHandler(event:EditEvent):void
+			{
+				// Force the mouse over flag to be true
+				_overGraphic = true;
+				
+				// Call the hide measure label
+				hideMeasureLabel(event);
+			}
+			
+			/**
+			 * Adds listeners to the editTool to handle measurement changes.
+			 */
+			private function addEditToolEventListeners():void
+			{
+				editTool.addEventListener(EditEvent.GHOST_VERTEX_MOUSE_DOWN, editTool_ghostVertexMouseDownHandler);
+				editTool.addEventListener(EditEvent.CONTEXT_MENU_SELECT, hideMeasureLabel);
+				editTool.addEventListener(EditEvent.VERTEX_MOVE_START, hideMeasureLabel);
+				
+				editTool.addEventListener(EditEvent.GRAPHICS_MOVE_START, hideMeasureLabel);
+				editTool.addEventListener(EditEvent.GRAPHIC_ROTATE_START, hideMeasureLabel);
+				editTool.addEventListener(EditEvent.GRAPHIC_SCALE_START, hideMeasureLabel);
+				
+				editTool.addEventListener(EditEvent.VERTEX_ADD, editTool_vertexAddDeleteHandler);
+				editTool.addEventListener(EditEvent.VERTEX_DELETE, editTool_vertexAddDeleteHandler);
+				editTool.addEventListener(EditEvent.VERTEX_MOVE_STOP, editTool_vertexMoveStopHandler);
+				
+				editTool.addEventListener(EditEvent.GRAPHICS_MOVE_STOP, editTool_graphicsMoveStopHandler);
+				editTool.addEventListener(EditEvent.GRAPHIC_ROTATE_STOP, editTool_graphicRotateStopHandler);
+				editTool.addEventListener(EditEvent.GRAPHIC_SCALE_STOP, editTool_graphicScaleStopHandler);
+			}
+			
+			/**
+			 * Removes listeners from the editTool that handle measurement changes.
+			 */
+			private function removeEditToolEventListeners():void
+			{
+				editTool.removeEventListener(EditEvent.GHOST_VERTEX_MOUSE_DOWN, editTool_ghostVertexMouseDownHandler);
+				editTool.removeEventListener(EditEvent.CONTEXT_MENU_SELECT, hideMeasureLabel);
+				editTool.removeEventListener(EditEvent.VERTEX_MOVE_START, hideMeasureLabel);
+				
+				editTool.removeEventListener(EditEvent.GRAPHICS_MOVE_START, hideMeasureLabel);
+				editTool.removeEventListener(EditEvent.GRAPHIC_ROTATE_START, hideMeasureLabel);
+				editTool.removeEventListener(EditEvent.GRAPHIC_SCALE_START, hideMeasureLabel);
+				
+				editTool.removeEventListener(EditEvent.VERTEX_ADD, editTool_vertexAddDeleteHandler);
+				editTool.removeEventListener(EditEvent.VERTEX_DELETE, editTool_vertexAddDeleteHandler);
+				editTool.removeEventListener(EditEvent.VERTEX_MOVE_STOP, editTool_vertexMoveStopHandler);
+				
+				editTool.removeEventListener(EditEvent.GRAPHICS_MOVE_STOP, editTool_graphicsMoveStopHandler);
+				editTool.removeEventListener(EditEvent.GRAPHIC_ROTATE_STOP, editTool_graphicRotateStopHandler);
+				editTool.removeEventListener(EditEvent.GRAPHIC_SCALE_STOP, editTool_graphicScaleStopHandler);
+			}
+			
+			/**
+			 * Hides the measurement label associated with current edit graphic (if one exists). 
+			 */
+			private function hideMeasureLabel(event:EditEvent):void
+			{
+				if (_measurementLabelShown)
+				{
+					getMeasurementGraphic(_editGraphic).visible = false;
+				}
+			}
+			/**
+			 * Called when the user deletes a vertex in the current edit graphic.
+			 */
+			private function editTool_vertexAddDeleteHandler(event:EditEvent):void
+			{
+				if (map.wrapAround180)
+				{
+					normalizeGraphicGeometry(event.graphic);
+				}
+				else
+				{
+					calculateAreasAndLengths(event.graphic);
+				}
+			}
+			
+			/**
+			 * Called after the user moves a vertex in the current edit graphic.
+			 */
+			private function editTool_vertexMoveStopHandler(event:EditEvent):void
+			{
+				if (map.wrapAround180)
+				{
+					normalizeGraphicGeometry(event.graphic);
+				}
+				else
+				{
+					calculateAreasAndLengths(event.graphic);
+				}
+			}
+			
+			/**
+			 * Called after the user moves the current edit graphic.
+			 */
+			private function editTool_graphicsMoveStopHandler(event:EditEvent):void
+			{
+				var graphic:Graphic;
+				if (map.wrapAround180)
+				{
+					for each (graphic in event.graphics)
+					{
+						normalizeGraphicGeometry(graphic);
+					}
+				}
+				else
+				{
+					for each (graphic in event.graphics)
+					{
+						calculateAreasAndLengths(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Called after the user rotates the current edit graphic.
+			 */
+			private function editTool_graphicRotateStopHandler(event:EditEvent):void
+			{
+				if (map.wrapAround180)
+				{
+					normalizeGraphicGeometry(event.graphic);
+				}
+				else
+				{
+					calculateAreasAndLengths(event.graphic);
+				}
+			}
+			
+			/**
+			 * Called after the user scales the current edit graphic.
+			 */
+			private function editTool_graphicScaleStopHandler(event:EditEvent):void
+			{
+				if (map.wrapAround180)
+				{
+					normalizeGraphicGeometry(event.graphic);
+				}
+				else
+				{
+					calculateAreasAndLengths(event.graphic);
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Graphic context menu functions 
+			---------------------------------------------------------------------- */
+			
+			/** 
+			 * Updates the context menu for a graphic based on its current state
+			 */
+			private function graphic_updateContextMenu(graphic:Graphic):void
+			{
+				// Create context menu for graphic
+				var cm:ContextMenu = new ContextMenu();
+				cm.hideBuiltInItems();
+				
+				// Set hasTextSymbol Flag
+				var isText:Boolean = false;
+				if (graphic.symbol is TextSymbol||graphic.symbol is CompositeSymbol)
+					isText = true;
+				
+				// Define context meneu item
+				var item:ContextMenuItem;
+				
+				// Add the graphic properties link
+				item = new ContextMenuItem("Graphic Properties");
+				item.enabled = true;
+				item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_editGraphicProperties);
+				cm.customItems.push(item);
+				
+				// Add zoom to 
+				item = new ContextMenuItem("Zoom To Graphic");
+				item.enabled = true;
+				item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_zoomToGraphic);
+				item.separatorBefore = true;
+				cm.customItems.push(item);
+				
+				// Add options for non text graphics
+				if (!isText)
+				{
+					// Add recalculate measurements options
+					if (graphic.attributes["showMeasurements"] == true)
+					{
+						// Add a hide label item 
+						item = new ContextMenuItem("Hide Graphic Measurements");
+						item.enabled = true;
+						item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_removeGraphicMeasurements);
+						cm.customItems.push(item);
+					} 
+					else 
+					{
+						item = new ContextMenuItem("Label Graphic Measurements");
+						item.enabled = true;
+						item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_labelGraphicMeasurements);
+						cm.customItems.push(item);
+					}
+					
+					// Add create buffer option
+					item = new ContextMenuItem("Create Graphic Buffer");
+					item.enabled = true;
+					item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_bufferGraphic);
+					cm.customItems.push(item);
+				}
+				
+				// Add copy/paste/delete options
+				item = new ContextMenuItem("Copy Graphic\tCtrl+C");
+				item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_copyGraphic);
+				item.enabled = true;
+				item.separatorBefore = true;
+				cm.customItems.push(item);
+				
+				item = new ContextMenuItem("Paste Graphic\tCtrl+V");
+				item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_pasteGraphic);
+				item.enabled = true;
+				cm.customItems.push(item);
+				
+				item = new ContextMenuItem("Delete Graphic\tDelete");
+				item.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,cm_deleteGraphic);
+				item.separatorBefore = true;
+				cm.customItems.push(item);
+				
+				// Add context menu to graphic
+				graphic.contextMenu = cm;
+			}			
+			
+			/** 
+			 * Opens the symbology properties for this graphic
+			 */
+			private function cm_editGraphicProperties(event:ContextMenuEvent):void
+			{
+				var graphic:Graphic = Graphic(event.contextMenuOwner);
+				
+				// Open the edit properties dialog for this graphic
+				showGraphicInfoWindow(graphic);
+			}
+			
+			/** 
+			 * Zooms the map to the extent of this graphic
+			 */
+			private function cm_zoomToGraphic(event:ContextMenuEvent):void
+			{
+				// Call zoomToGraphic
+				zoomToGraphic(Graphic(event.contextMenuOwner));
+			}
+			
+			/**
+			 * Toggles the removal of the graphic measurements
+			 */
+			private function cm_removeGraphicMeasurements(event:ContextMenuEvent):void
+			{
+				// Reset the show measurements flag on the graphic
+				var graphic:Graphic = Graphic(event.contextMenuOwner);
+				
+				// Removethe graphic label
+				deactivateGraphicLabels([graphic]);
+			}
+			
+			/** 
+			 * Toggles the addition of the graphic measurements 
+			 */
+			private function cm_labelGraphicMeasurements(event:ContextMenuEvent):void
+			{
+				// Set the show measurements flag on the graphic
+				var graphic:Graphic = Graphic(event.contextMenuOwner);
+				
+				// Apply the graphic label
+				activateGraphicLabels([graphic]);
+			}
+			
+			/** 
+			 * Starts the graphic buffer process
+			 */
+			private function cm_bufferGraphic(event:ContextMenuEvent):void
+			{
+				// Call the buffer graphics function - don't need to check if text graphic - 
+				// this should already be filtered out by context menu setup
+				bufferGraphics([Graphic(event.contextMenuOwner)]);
+			}
+			
+			/** 
+			 * Starts the graphic copy process
+			 */
+			private function cm_copyGraphic(event:ContextMenuEvent):void
+			{
+				// Set this graphic as the holding array
+				_holdingGraphics.removeAll();
+				_holdingGraphics.addItem(Graphic(event.contextMenuOwner));
+			}
+			
+			/** 
+			 * Starts the graphic paste process
+			 */
+			private function cm_pasteGraphic(event:ContextMenuEvent):void
+			{
+				// Confirm that there are graphics in the holding collection.
+				if (_holdingGraphics.length > 0)
+				{
+					// Call the copy function.
+					CopyGraphics(_holdingGraphics.toArray());
+				}
+			}
+			
+			/** 
+			 * Context menu for removing the graphic (and associated graphics) from the map
+			 */
+			private function cm_deleteGraphic(event:ContextMenuEvent):void
+			{
+				// Set this graphic as the holding array
+				_holdingGraphics.removeAll();
+				_holdingGraphics.addItem(Graphic(event.contextMenuOwner));
+				
+				// Add associated graphics
+				var graphic:Graphic = getAssociatedGraphic(Graphic(event.contextMenuOwner));
+				if (graphic != null)
+					_holdingGraphics.addItem(graphic);
+				
+				// Remove the selected graphics
+				RemoveGraphics(_holdingGraphics);
+				
+				// Remove the measurment graphic
+				graphic = getMeasurementGraphic(Graphic(event.contextMenuOwner));
+				if (graphic != null)
+					_labelsLayer.remove(graphic);
+			}
+			
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Buffer Actions 
+			---------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the user clicks the buffer features button
+			 */
+			protected function generateBuffersButton_clickHandler(event:MouseEvent):void
+			{
+				// Check that there are selected graphics to buffer
+				if (_holdingGraphics.length > 0)
+				{
+					// Call the buffer action
+					bufferGraphics(_holdingGraphics.toArray(), chkUnionBuffers.selected);
+				} 
+				else 
+				{
+					// Alert the user there are no graphics to buffer
+					Alert.show("There are no selected graphics to buffer!!","Buffer Graphics",Alert.OK);
+				}
+			}
+			
+			/** 
+			 * Called when the buffer unit combo closes
+			 */
+			protected function cboBuffer_closeHandler(event:DropDownEvent):void
+			{
+				setBufferToolDisplayState();
+			}
+			
+			/** 
+			 * Changes the display state of the buffer tools based on the user's selected 
+			 */
+			private function setBufferToolDisplayState():void 
+			{
+				// Check if distance units set to 'Custom Distance'
+				var itm:Object = cboBuffer.selectedItem;
+				
+				// Check for no selected item
+				if (itm != null) 
+				{
+					// Get the item value
+					if (itm.label == "Custom Distance") 
+					{
+						_isCustomDistance = true;
+						if (txtBufferDistance.text == "") 
+							txtBufferDistance.text = "1000";
+					} 
+					else 
+					{
+						_isCustomDistance = false;
+						txtBufferDistance.text = cboBuffer.selectedItem.distance;
+					}
+				}
+			}
+			
+			/** 
+			 * Starts a buffer process - taken from code developed by HDC
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics [Array]: </i> Array of graphic features use as the geometry source to buffer</li>
+			 * <li><i>unionFeatures [Boolean]: </i> Boolean flag specifiy whether thre results of the geometry 
+			 * buffer task should be merged together if they overlap <b>(true)</b>, or be returned as separate 
+			 * buffer rings <b>(false)</b>.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function bufferGraphics(graphics:Array, unionFeatures:Boolean = false):void 
+			{
+				// Build array of geometries
+				var geometries:Array = [];
+				
+				// Iterate through each graphic and add the geometry to the array
+				for each (var graphic:Graphic in graphics)
+				{
+					// Check for extent type
+					switch(graphic.geometry.type) {
+						case Geometry.EXTENT: {
+							
+							// Construct a polygon with same properties as the extent
+							var ext:Extent = graphic.geometry.extent;
+							var ring:Array = new Array(new MapPoint(ext.xmin, ext.ymin), new MapPoint(ext.xmin, ext.ymax), 
+								new MapPoint(ext.xmax, ext.ymax), new MapPoint(ext.xmax, ext.ymin), new MapPoint(ext.xmin, ext.ymin));
+							var pol:Polygon = new Polygon([ring],map.spatialReference);
+							geometries.push(pol);
+							break;
+						}
+						default:
+						{
+							geometries.push(graphic.geometry);
+							break;
+						}
+					}
+				}
+				
+				// Setup buffer parameters
+				var bufferParameters:BufferParameters = new BufferParameters();
+				var bufferDistanceArray:Array = [];
+				var i:Number;
+				
+				// Get the buffer distance
+				var bufferDistance:int = int(txtBufferDistance.text);
+				var conversion:Number = 1;
+				
+				// Get the buffer unit
+				if (cboBuffer.selectedItem.label == "Custom Distance")
+				{
+					conversion = Number(cboBufferUnit.selectedItem.conversion) || 1; 	
+				}
+				else
+				{
+					// Find the unit in the distance list
+					for each (var object:Object in _configDistance)
+					{
+						if (object.label == cboBuffer.selectedItem.unit)
+						{
+							conversion = Number(object.conversion); 
+							break;
+						}
+					}
+				}
+				
+				// Create array of buffer distances based on number of rings to be generated.
+				for (i = int(numsBufferRingCount.value); i > 0; i--)
+				{
+					bufferDistanceArray.push(i * int(bufferDistance / conversion));
+				} 
+				
+				bufferParameters.geometries = geometries;
+				bufferParameters.distances = bufferDistanceArray;
+				bufferParameters.unit = GeometryService.UNIT_METER;
+				bufferParameters.bufferSpatialReference = map.spatialReference;
+				bufferParameters.unionResults = unionFeatures;
+				
+				// Call buffer task
+				geometryService.buffer(bufferParameters);
+			}
+			
+			/**
+			 * Called when the geometry service returns a buffer task result.
+			 */
+			protected function geometryService_bufferCompleteHandler(event:GeometryServiceEvent):void
+			{
+				var buffers:Array = geometryService.bufferLastResult;
+				if (buffers.length > 0)
+				{
+					for each (var polygon:Polygon in buffers)
+					{
+						// Create a new graphic based on this polygon
+						var graphic:Graphic = new Graphic(polygon,SymbolUtil.RandomSimpleFillSymbol());
+						_graphicsLayer.add(graphic);
+					}
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			ESRI Widget Code - used to make sure the works with other standard widgets 
+			---------------------------------------------------------------------- */
+			
+			/** 
+			 * Called when the event listen picks up data being published (listen set in init)
+			 */ 
+			private function sharedDataUpdated(event:AppEvent):void
+			{
+				var data:Object = event.data;
+				if (data.key == "Deactivate_DrawTool")
+				{
+					if (!_dispatchedMessage)
+					{
+						// Clear any active drawing tools
+						deactivateTools(true);
+						
+						// Clear the active template
+						templatePicker.clearSelection();
+					} 
+					else 
+					{
+						_dispatchedMessage = false;
+					}
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Graphic list handlers 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the item renderer for a graphic is clicked.
+			 */
+			protected function graphicsDG_graphicClickHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Set as the selected graphic
+				setSelectedGraphics([graphic]);
+				
+				if (event.ctrlKey)
+				{
+					// Get the centerpoint for the geometry
+					var pt:MapPoint = GeometryUtil.getMapPoint(graphic.geometry);
+					
+					// Center the map on this geometry point
+					map.centerAt(pt);
+				}
+			}
+			
+			/**
+			 * Called when the item renderer for a graphic is dispatches a buffer event (from the context menu).
+			 */
+			protected function graphicsDG_graphicBufferHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Buffer the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				if (graphic && !(graphic.symbol is TextSymbol))
+				{
+					// Call the buffer graphics function
+					bufferGraphics([graphic]);
+				}
+			}
+			
+			/**
+			 * Called when the item renderer for a graphic is dispatches a copy event (from the context menu).
+			 */
+			protected function graphicsDG_graphicCopyHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Copy the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Set this graphic as the holding array
+				_holdingGraphics.removeAll();
+				_holdingGraphics.addItem(graphic);
+				
+				// Update the selected graphics
+				setSelectedGraphics(_holdingGraphics.toArray());
+			}
+			
+			/** 
+			 * Called when the delete icon is clicked on one of the graphics
+			 */ 
+			protected function graphicsDG_graphicDeleteHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Delete the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+
+				// Set this graphic as the holding array
+				clearSelectedGraphics();
+				_holdingGraphics.addItem(graphic);
+				
+				// Add associated graphics
+				var label:Graphic = getAssociatedGraphic(graphic);
+				if (label != null)
+					_holdingGraphics.addItem(label);
+				
+				// Remove the selected graphics
+				RemoveGraphics(_holdingGraphics);
+				
+				// Remove measurement graphics
+				label = getMeasurementGraphic(graphic);
+				if (label != null)
+					_labelsLayer.remove(label);
+			}
+			
+			/**
+			 * Called when the item renderer for a graphic is double clicked.
+			 */
+			protected function graphicsDG_graphicDoubleClickHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Do a delayed call to the zoomToGraphic.  Gives enough time for the properties to refresh.
+				setTimeout(zoomToGraphic,300,graphic);
+			}
+			
+			/** 
+			 * Called when the graphic list dispatches an edit properties event from 
+			 * either the popup menu or a click
+			 */
+			protected function graphicsDG_graphicEditPropertiesHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+
+				// Open the edit properties dialog for this graphic
+				showGraphicInfoWindow(graphic);
+			}
+			
+			/**
+			 * Called when the graphic list dispatches a hide measurements event from 
+			 * either the popup menu or a click
+			 */
+			protected function graphicsDG_graphicHideMeasurementsHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Turn off the measurement labels
+				deactivateGraphicLabels([graphic]);
+			}
+			
+			/**
+			 * Called when the graphic list dispatches a show measurements event from 
+			 * either the popup menu or a click
+			 */
+			protected function graphicsDG_graphicLabelMeasurementsHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Turn on the measurement labels
+				activateGraphicLabels([graphic]);
+			}
+			
+			/**
+			 * Called when the user mouses off a graphic in the graphic list
+			 */
+			protected function graphicsDG_graphicMouseOutHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+
+				// Remove the highlight the feature
+				clearHighlight(graphic);
+				
+				// Remove the hightlight from the item renderer
+				graphicsDG.clearHighlightGraphic(graphic);
+			}
+			
+			/**
+			 * Called when the user mouses over a graphic in the graphic list
+			 */
+			protected function graphicsDG_graphicMouseOverHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Highlight the feature
+				showHighlight(graphic);
+				
+				// Highlight the item renderer (use append to make sure teh glow around the graphic is maintained
+				graphicsDG.highlightGraphic(graphic);
+			}
+			
+			/**
+			 * Called when the graphic list dispatches a paste event either from the popup or a click
+			 */
+			protected function graphicsDG_graphicPasteHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Confirm that there are graphics in the holding collection.
+				if (_holdingGraphics.length > 0)
+				{
+					// Call the copy function.
+					CopyGraphics(_holdingGraphics.toArray());
+				}
+			}
+			
+			/**
+			 * Called when the graphic list dispatches a zoom to event either from the popup or a click
+			 */
+			protected function graphicsDG_graphicZoomToHandler(event:GraphicPropertiesItemRendererEvent):void
+			{
+				// Get the graphic attached to the object that called this event
+				var graphic:Graphic = event.graphic;
+				
+				// Zoom to the graphic
+				if (graphic)
+				{
+					zoomToGraphic(graphic);
+				}
+			}
+			
+			/**
+			 * Called when the mouse moves off the graphic list
+			 */
+			protected function graphicsDG_rollOutHandler(event:MouseEvent):void
+			{
+				//  Stop any highlights
+				graphicHighlight.stop();
+				graphicHighlight.targets = [];
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Highlight functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Used to apply a glow affect to the supplied feature.
+			 */
+			private function showHighlight(object:Object, append:Boolean = false):void
+			{
+				// Stop the animation playing
+				graphicHighlight.stop();
+				
+				if (append)
+				{
+					graphicHighlight.targets.push(object);
+				}
+				else
+				{
+					graphicHighlight.targets = [object];
+				}
+				
+				// Ensure the animation is playing
+				graphicHighlight.play();
+			}
+			
+			/**
+			 * Used to remove a glow affect from the supplied feature.
+			 */
+			private function clearHighlight(object:Object):void
+			{
+				if (graphicHighlight.targets)
+				{
+					var index:int = graphicHighlight.targets.indexOf(object);
+					if (index > -1)
+					{
+						graphicHighlight.targets.splice(index,1);
+					}
+					
+					// Check for length
+					if (graphicHighlight.targets.length == 0)
+					{
+						graphicHighlight.stop();
+					}
+				}
+			}
+			
+			/**
+			 * Applies the selection glow to selected graphics and clears the glow from non-selected graphics.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>None.</i></li>
+			 * </ul>
+			 * </p>	
+			 */			
+			private function applySelectFilter():void
+			{
+				// Clear the select filters for all graphics in the current selection
+				for each (var graphic:Graphic in _holdingGraphics)
+				{
+					// Apply the selection flag on the graphic
+					graphic.attributes["selected"] = true;
+					
+					// Apply the filter to the graphic
+					graphic.filters = [graphicSelectGlow];				
+				}
+			}
+			
+			/**
+			 * Clears the selection glow from previously selected graphics.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>None.</i></li>
+			 * </ul>
+			 * </p>	
+			 */	
+			private function clearSelectFilter():void
+			{
+				for each (var graphic:Graphic in _graphicsLayer.graphicProvider)
+				{
+					// Clear the selection flag on the graphic
+					graphic.attributes["selected"] = false;
+					
+					// Remove the filter from the graphic
+					graphic.filters = [];		
+				}
+			}
+			
+			/**
+			 * Updates the selected graphics collection.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics: </i> Array of graphics to be added to the selection</li>
+			 * <li><i>append: </i> Boolean variable depicting whether the provided collection 
+			 * should be added to any existing selected graphics <b>(TRUE)</b> or should replace 
+			 * the current selected graphics <b>(FALSE)</b></li>
+			 * </ul>
+			 * </p>
+			 */
+			private function setSelectedGraphics(graphics:Array, append:Boolean = false):void
+			{
+				// Check if these graphics should be appended to the current selcetion
+				if (!append)
+				{
+					clearSelectedGraphics();
+				}
+				
+				// Iterate through each graphic in the provided collection
+				for each (var graphic:Graphic in graphics)
+				{
+					// Append this graphic to the _holdingGraphics collection
+					_holdingGraphics.addItem(graphic);
+				}
+				
+				// Add selection glow
+				applySelectFilter();
+			}
+			
+			/**
+			 * Removes the specified graphic from the selected graphics collection.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics: </i> Array of graphics to be removed to the selection</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function removeSelectedGraphics(graphics:Array):void
+			{
+				// Hide the infowindow
+				hideInfoWindow();
+				
+				// Iterate through the provided graphics
+				for each (var graphic:Graphic in graphics)
+				{
+					// Update the selected flag
+					graphic.attributes["selected"] = false;
+					
+					// Remove the filter from the graphic
+					graphic.filters = [];	
+					
+					// Remove this graphic from the _holdingGraphics collection
+					_holdingGraphics.removeItemAt(_holdingGraphics.getItemIndex(graphic));
+				}
+			}
+			
+			/**
+			 * Clears the selected graphics collection.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>None.</i></li>
+			 * </ul>
+			 * </p>	
+			 */	
+			private function clearSelectedGraphics():void
+			{
+				// Clear the current selection
+				clearSelectFilter();
+				_holdingGraphics.removeAll();
+			}
+
+			/**
+			 * Activates the edit tool and sets graphics to be edited to the specified graphics.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics: </i> Array of graphics to be added to the edit collection</li>
+			 * <li><i>append: </i> Boolean variable depicting whether the provided collection 
+			 * should be added to any existing editable graphics <b>(TRUE)</b> or should replace 
+			 * the current selected graphics <b>(FALSE)</b></li>
+			 * </ul>
+			 * </p>
+			 */
+			private function setEditGraphics(graphics:Array, append:Boolean = false):void
+			{
+				// Check if these graphics should be appended to the current selcetion
+				if (!append)
+				{
+					clearSelectedGraphics();
+				}
+				
+				// Iterate through each graphic in the provided collection
+				for each (var graphic:Graphic in graphics)
+				{
+					// Append this graphic to the _holdingGraphics collection
+					_holdingGraphics.addItem(graphic);
+				}
+				
+				// Update the selection set
+				if (_holdingGraphics.length == 0)
+				{
+					// No selected graphics - clear the selection tools
+					_editGraphic = null;
+					_lastActiveEditType = "none";
+					editTool.deactivate();
+				}
+				else if (_holdingGraphics.length == 1)
+				{
+					// Check if this is the current edit Graphic
+					if (_editGraphic !== graphic)
+					{
+						_editGraphic = graphic;
+						_lastActiveEditType = "none"; // make sure move and edit vertices is the 1st mode
+					}
+					
+					// Check the geometry type of the graphic
+					if (_editGraphic.geometry is Polyline || _editGraphic.geometry is Polygon)
+					{
+						// Check the last edit action 
+						if (_lastActiveEditType == "none")
+						{
+							_isEditing = true;
+							_lastActiveEditType = "moveEditVertices";
+							editTool.activate(EditTool.MOVE | EditTool.EDIT_VERTICES, [ _editGraphic ]);
+						}
+						else if (_lastActiveEditType == "moveEditVertices")
+						{
+							_isEditing = true;
+							_lastActiveEditType = "moveRotateScale";
+							editTool.activate(EditTool.MOVE | EditTool.SCALE | EditTool.ROTATE, [ _editGraphic ]);
+						}
+						else if (_lastActiveEditType == "moveRotateScale")
+						{
+							_isEditing = false;
+							_editGraphic = null;
+							_lastActiveEditType = "none";
+							editTool.deactivate();
+						}
+					}
+					else if (_editGraphic.geometry is Extent)
+					{
+						// Check the last edit action 
+						if (_lastActiveEditType == "none")
+						{
+							_isEditing = true;
+							_lastActiveEditType = "moveScale";
+							editTool.activate(EditTool.MOVE | EditTool.SCALE, [ _editGraphic ]);
+						}
+						else
+						{
+							_isEditing = false;
+							_editGraphic = null;
+							_lastActiveEditType = "none";
+							editTool.deactivate();
+						}
+					}
+					else
+					{
+						// Check the last edit action 
+						if (_lastActiveEditType == "none")
+						{
+							_isEditing = true;
+							_lastActiveEditType = "moveEditVertices";
+							editTool.activate(EditTool.EDIT_VERTICES | EditTool.MOVE, [ _editGraphic ]);
+						}
+						else
+						{
+							_isEditing = false;
+							_editGraphic = null;
+							_lastActiveEditType = "none";
+							editTool.deactivate();
+						}
+					}
+					
+					// Check if this graphic has an associated label graphic
+					_measurementLabelShown = false;
+					if (_editGraphic && getMeasurementGraphic(_editGraphic))
+					{
+						_measurementLabelShown = true;
+					}
+					
+					// Clear existing listeners 
+					removeEditToolEventListeners();
+					map.removeEventListener(MouseEvent.MOUSE_DOWN, editTool_mouseDownHandler);
+					
+					// Add listeners
+					if (_editGraphic)
+					{
+						addEditToolEventListeners();
+						map.addEventListener(MouseEvent.MOUSE_DOWN, editTool_mouseDownHandler);
+					}
+				}
+				else
+				{
+					// Set as moving
+					_isEditing = true;
+					_lastActiveEditType = "moveScale";
+					editTool.activate(EditTool.MOVE, _holdingGraphics.toArray());
+				}
+			}
+
+			
+			
+			/* -------------------------------------------------------------------
+			Autocomplete functions - to be completed
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the geometry service returns a result from the autocomplete task.
+			 */
+			protected function geometryService_autoCompleteCompleteHandler(event:GeometryServiceEvent):void
+			{
+				// TODO Auto-generated method stub
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Cut functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user clicks the cut toggle button.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by UI object when it is clicked.</li>
+			 * </ul>
+			 * </p>	
+			 */	
+			protected function cutButton_clickHandler(event:MouseEvent):void
+			{
+				// Update the cutting flag
+				_isReshaping = reshapeButton.selected = false;
+				
+				// Update the cutting flag
+				_isCutting = cutButton.selected;
+				if (cutButton.selected)
+				{
+					// Set the viewer status text
+					AppEvent.setStatus(getDefaultString('drawLineLabel'));
+					
+					// Activate the draw tool in line mode
+					drawTool.lineSymbol = new SimpleLineSymbol("solid",uint("#FF0000"),1,2);
+					drawTool.activate(DrawTool.POLYLINE);
+				}
+				else
+				{
+					// Deactivate the drawing tool
+					drawTool.deactivate();
+
+					// Reset to map navigation
+					setMapAction(null,null,null,null);
+				}
+			}
+			
+			/**
+			 * Called when the geometry service returns a result from the cut task.
+			 */
+			protected function geometryService_cutCompleteHandler(result:CutResult, token:Object = null):void
+			{
+				// Check that cut result was created
+				if (result.geometries.length > 1)
+				{
+					var graphics:Array = token as Array;
+					var newGraphics:Array = [];
+					
+					// Iterate through the results
+					for (var i:int = 0; i < result.geometries.length; i++)
+					{
+						// Get the graphic index
+						var index:int = result.cutIndexes[i];
+						var geometry:Geometry = result.geometries[i];
+						var graphic:Graphic = graphics[index] as Graphic;
+						
+						// Duplicate the input graphic
+						var newGraphic:Graphic = GraphicUtil.CopyGraphic(graphic);
+						
+						// Set the cut geometry as the duplicates geometry
+						newGraphic.geometry = geometry;
+						
+						// Add the new graphic to the map
+						_graphicsLayer.add(newGraphic);
+						
+						// Append to the new graphics collection
+						newGraphics.push(newGraphic);
+					}
+					
+					// Remove original graphics
+					for each (graphic in graphics)
+					{
+						_graphicsLayer.remove(graphic);
+					}
+					
+					// Set the cut graphics as the selected set
+					setSelectedGraphics(newGraphics);
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Intersect functions - to be completed
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the geometry service returns a result from the intersect task.
+			 */
+			protected function geometryService_intersectCompleteHandler(event:GeometryServiceEvent):void
+			{
+				// TODO Auto-generated method stub
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Reshape functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the Reshape Tool Button is clicked
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by UI object when it is clicked.</li>
+			 * </ul>
+			 * </p>	
+			 */	
+			protected function reshapeButton_clickHandler(event:MouseEvent):void
+			{
+				// Update the cutting flag
+				_isCutting = cutButton.selected = false;
+				
+				// Update the reshaping flag
+				_isReshaping = reshapeButton.selected;
+				if (reshapeButton.selected)
+				{
+					// Set the viewer status text
+					AppEvent.setStatus(getDefaultString('drawLineLabel'));
+
+					// Activate the draw tool in line mode
+					drawTool.lineSymbol = new SimpleLineSymbol("solid",uint("#FF0000"),1,2);
+					drawTool.activate(DrawTool.POLYLINE);
+				}
+				else
+				{
+					// Deactivate the drawing tool
+					drawTool.deactivate();
+
+					// Reset to map navigation
+					setMapAction(null,null,null,null);
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Union functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the merge button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by UI object when it is clicked.</li>
+			 * </ul>
+			 * </p>	
+			 */
+			protected function mergeButton_clickHandler(event:MouseEvent):void
+			{
+				// Hide the infowindow
+				hideInfoWindow();
+				
+				// Get geometries of the selected graphics
+				var geometries:Array = [];
+				for each (var graphic:Graphic in _holdingGraphics)
+				{
+					geometries.push(graphic.geometry);
+				}
+				
+				// Call the union task of the geometry service
+				geometryService.union(geometries,
+					new AsyncResponder(mergeComplete,geometryService_faultHandler,_holdingGraphics.toArray()));
+				
+				function mergeComplete(result:Geometry, token:Object):void
+				{
+					// Check for valid result
+					if (result)
+					{
+						var mergeGraphics:Array = token as Array;
+						var templateGraphic:Graphic = mergeGraphics[0];
+						
+						// Create a new graphic to put result in
+						var newGraphic:Graphic = GraphicUtil.CopyGraphic(templateGraphic);
+						
+						// Update the geometry of the first graphic in the list
+						newGraphic.geometry = result;
+						
+						// Add the graphic to the map
+						_graphicsLayer.add(newGraphic);
+						
+						// Remove the original graphics
+						_holdingGraphics.removeAll();
+						for each (var graphic:Graphic in mergeGraphics)
+						{
+							_holdingGraphics.addItem(graphic);
+							
+							// Add associated graphics
+							var associate:Graphic = getAssociatedGraphic(graphic);
+							if (associate != null)
+								_holdingGraphics.addItem(associate);
+							
+							associate = getMeasurementGraphic(graphic);
+							if (associate != null)
+								_labelsLayer.remove(associate);
+						}
+						
+						// Remove the selected graphics
+						RemoveGraphics(_holdingGraphics);
+					}
+					else
+					{
+						Alert.show("Unable to Merger Graphics","Merge Graphics",Alert.OK, map);						
+					}
+				}
+			}
+			
+
+			/* -------------------------------------------------------------------
+			Select graphic functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the clear selection button ic clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by UI object when it is clicked.</li>
+			 * </ul>
+			 * </p>	
+			 */	
+			protected function clearSelectionButton_clickHandler(event:MouseEvent):void
+			{
+				// Call the clear selection graphics method
+				clearSelectedGraphics();
+				
+				// Hide the info window
+				hideInfoWindow();
+			}
+
+			/**
+			 * Called when the select tool toggle button is clicked.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event raised by UI object when it is clicked.</li>
+			 * </ul>
+			 * </p>	
+			 */	
+			protected function selectToolToggleButton_clickHandler(event:MouseEvent):void
+			{
+				// Check the selection state
+				if (selectToolToggleButton.selected)
+				{
+					// Activate the selection tool
+					setMapAction(DrawTool.EXTENT,"Select Graphics", new SimpleFillSymbol(),selectToolDrawComplete);
+				}
+				else
+				{
+					// Deactivate the selection tool
+					setMapAction(null,null,null,null);
+				}
+			}
+			
+			/**
+			 * Called when the select tool completes the draw extent action. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [DrawEvent]: </i>Event raised by draw tool when the draw action has been completed..</li>
+			 * </ul>
+			 * </p>	
+			 */
+			private function selectToolDrawComplete(event:DrawEvent):void
+			{
+				var extent:Extent = event.graphic.geometry as Extent;
+				var graphic:Graphic;
+				var results:ArrayCollection = new ArrayCollection;
+				for (var i:Number = 0; i < _graphicsLayer.graphicProvider.length; i++)
+				{
+					graphic = _graphicsLayer.graphicProvider[i] as Graphic;
+					
+					// If the graphic geometry is contained within extent, highlight it and add it to the results list
+					if (extent.contains(graphic.geometry))
+					{
+						results.addItem(graphic);
+					}
+				}
+				
+				// Call the select method
+				switch(selectionDropDownList.selectedItem.selectionName)
+				{
+					case "addToSelection":
+					{
+						// Append the graphics to the holding graphics collection
+						setSelectedGraphics(results.toArray(),true);
+						break;
+					}
+						
+					case "subtractFromSelection":
+					{
+						// Remove the graphics from the holding graphics collection
+						removeSelectedGraphics(results.toArray());				
+						break;
+					}
+						
+					default:
+					{
+						// Set the graphics as the holding graphics collection
+						setSelectedGraphics(results.toArray(),false);
+						break;
+					}
+				}
+				
+				// Reactivate the selection tool
+				if (selectToolToggleButton.selected)
+				{
+					setMapAction(DrawTool.EXTENT,"Select Graphics", new SimpleFillSymbol(),selectToolDrawComplete);
+				}
+			}
+
+			
+			/* -------------------------------------------------------------------
+			General geoprocessing functions 
+			---------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the geometry service returns a result from the simplify task.
+			 */
+			protected function geometryService_simplifyCompleteHandler(event:GeometryServiceEvent):void
+			{
+				var polygon:Polygon = event.result[0] as Polygon;
+				_lastDrawnGraphic.geometry = polygon; //update to avoid simplifying again
+				
+				// Recalculate the measurements and add a label if appropriate
+				calculateAreasAndLengths(_lastDrawnGraphic);
+			}
+			
+			/**
+			 * Called when the geometry service returns a fault result from a geoprocessing task.
+			 */
+			protected function geometryService_faultHandler(event:Fault, token:Object = null):void
+			{
+				// Show the fault message
+				Alert.show(event.faultString,"Geometry Process Fault",Alert.OK, map);
+			}
+			
+			/**
+			 * Corrects the graphic geometry for the position around around the 180 line
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>The polyline graphic currently part of the 
+			 * graphics layer for which measurements whould be recalculated.</li>
+			 * </ul>
+			 * </p>			
+			 */
+			private function normalizeGraphicGeometry(graphic:Graphic):void
+			{
+				// Normalize
+				GeometryUtil.normalizeCentralMeridian([ graphic.geometry ], GeometryServiceSingleton.instance, 
+					new AsyncResponder(getNormalizedGeometryFunction, faultFunction));
+				
+				function getNormalizedGeometryFunction(item:Object, token:Object = null):void
+				{
+					var normalizedGeometries:Array = item as Array;
+					graphic.geometry = normalizedGeometries[0];
+					_isEditing = true;
+					
+					if (graphic.geometry is Polyline || graphic.geometry is Polygon)
+					{
+						if (_lastActiveEditType == "moveEditVertices")
+						{
+							editTool.activate(EditTool.MOVE | EditTool.EDIT_VERTICES, [ graphic ]);
+						}
+						else if (_lastActiveEditType == "moveRotateScale")
+						{
+							editTool.activate(EditTool.MOVE | EditTool.SCALE | EditTool.ROTATE, [ graphic ]);
+						}
+					}
+					else if (graphic.geometry is Extent)
+					{
+						if (_lastActiveEditType == "moveScale")
+						{
+							editTool.activate(EditTool.MOVE | EditTool.SCALE, [ graphic ]);
+						}
+					}
+					else
+					{
+						if (_lastActiveEditType == "moveEditVertices")
+						{
+							editTool.activate(EditTool.EDIT_VERTICES | EditTool.MOVE, [ graphic ]);
+						}
+					}
+					
+					// Update measurement details
+					calculateAreasAndLengths(graphic);
+				}
+				
+				function faultFunction(fault:Fault, token:Object = null):void
+				{
+					dispatchEvent(new FaultEvent(FaultEvent.FAULT, false, false, fault));
+				}
+			}
+			
+			/**
+			 * Calls the appropriate measurement calculation function based on the type of the supplied geometry. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>The polygon graphic currently part of the 
+			 * graphics layer for which measurements whould be recalculated.</li>
+			 * </ul>
+			 * </p>						 
+			 */
+			private function calculateAreasAndLengths(graphic:Graphic):void
+			{
+				switch (graphic.geometry.type)
+				{
+					case Geometry.MAPPOINT:
+					{
+						if (graphic.attributes && graphic.attributes.showMeasurements && !graphic.symbol is TextSymbol)
+						{
+							// Generate the label point for the graphic
+							var labelPoint:MapPoint = MapPoint(graphic.geometry);
+							
+							// Update the measurement label
+							var label:String = DrawWidgetLabelFormatter.createPointMeasurementLabel(labelPoint, numberFormatter);
+							addMeasurementLabel(label, labelPoint, graphic);
+						}
+						break;					
+					}
+					case Geometry.POLYLINE:
+					{
+						calculatePolylineLengths(graphic);
+						break;
+					}
+					case Geometry.POLYGON:
+					{
+						calculatePolygonAreasAndLengths(graphic);
+						break;
+					}
+					case Geometry.EXTENT:
+					{
+						// Convert it to polygon for measurement					
+						graphic.geometry = Extent(graphic.geometry).toPolygon();
+						calculatePolygonAreasAndLengths(graphic); 
+						break;
+					}
+				}
+			}
+			
+			/**
+			 * Updates the length measurements of the given polyline 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>The polyline graphic currently part of the 
+			 * graphics layer for which measurements whould be recalculated.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function calculatePolylineLengths(graphic:Graphic):void
+			{
+				// Calculate the length of the supplied polyline graphic
+				var polylineToMeasure:Polyline
+				
+				var wkid:Number = graphic.geometry.spatialReference.wkid;
+				if (wkid == wgs84wkid)
+				{
+					polylineToMeasure = Polyline(graphic.geometry);
+					updateMeasurements(polylineToMeasure,graphic);
+				}
+				else if (isWebMercator(wkid))
+				{
+					polylineToMeasure = WebMercatorUtil.webMercatorToGeographic(graphic.geometry) as Polyline;
+					updateMeasurements(polylineToMeasure,graphic);
+				}
+				else
+				{
+					var geographicSpatialReference:SpatialReference = new SpatialReference(wgs84wkid);
+					
+					var projParam:ProjectParameters = new ProjectParameters();
+					projParam.geometries = [ graphic.geometry ];
+					projParam.outSpatialReference = geographicSpatialReference;
+					
+					geometryService.project(projParam, new AsyncResponder(project_resultHandler, project_faultHandler, graphic));
+				}
+				
+				function project_resultHandler(result:Object, token:Object = null):void
+				{
+					if (result)
+					{
+						var polyline:Geometry = (result as Array)[0];
+						var graphic:Graphic = token as Graphic;
+						updateMeasurements(Polyline(polyline),graphic);
+					}
+				}
+				
+				function project_faultHandler(fault:Fault, token:Object = null):void
+				{
+					Alert.show(fault.faultString + "\n\n" + fault.faultDetail, "project Fault " + fault.faultCode);
+				}
+				
+				function updateMeasurements(polyline:Polyline, graphic:Graphic):void
+				{
+					var lengths:Array = GeometryUtil.geodesicLengths([ polyline ], Units.METERS);
+					
+					// Update the length measurement of the graphic's attributes
+					if (graphic.attributes)
+					{
+						graphic.attributes["_lengthMeasurement"] = lengths[0];
+					}
+					
+					// Check if this graphic is set to show a measurement label
+					if (graphic.attributes && graphic.attributes.showMeasurements)
+					{
+						// Calculate the measurement based on the current length units 
+						var abbrDist:String = cboDistance.selectedItem.abbr;
+						var convDist:Number = cboDistance.selectedItem.conversion;
+						var precDist:Number = cboDistance.selectedItem.precision;
+						var length:Number = lengths[0] * convDist;
+						
+						// Generate the label point for the graphic
+						var labelPoint:MapPoint = GeometryUtil.getLabelPosition(graphic.geometry);
+						
+						// Update the measurement label
+						var label:String = DrawWidgetLabelFormatter.createLengthsLabel(length,
+							_lengthLabel, abbrDist, precDist, numberFormatter);
+						addMeasurementLabel(label, labelPoint, graphic);
+					}
+					else
+					{
+						// Remove any associated measurement graphics
+						var associated:Graphic = getMeasurementGraphic(graphic);
+						if (associated)
+						{
+							_labelsLayer.remove(associated);
+						}
+					}
+					
+					// Force the graphics list to refresh
+					graphicsDG.invalidateList();
+				}
+			}
+			
+			/**
+			 * Updates the area and perimeter measurements of the given polygon
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>The polygon graphic currently part of the 
+			 * graphics layer for which measurements whould be recalculated.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function calculatePolygonAreasAndLengths(graphic:Graphic):void
+			{
+				// Calulate the area and perimeter of the supplied polygon
+				var polygonToMeasure:Polygon
+				
+				var wkid:Number = graphic.geometry.spatialReference.wkid;
+				if (wkid == wgs84wkid)
+				{
+					polygonToMeasure = Polygon(graphic.geometry);
+					updateMeasurements(polygonToMeasure,graphic);
+				}
+				else if (isWebMercator(wkid))
+				{
+					polygonToMeasure = WebMercatorUtil.webMercatorToGeographic(graphic.geometry) as Polygon;
+					updateMeasurements(polygonToMeasure,graphic);
+				}
+				else
+				{
+					var geographicSpatialReference:SpatialReference = new SpatialReference(wgs84wkid);
+					
+					var projParam:ProjectParameters = new ProjectParameters();
+					projParam.geometries =[ graphic.geometry ];
+					projParam.outSpatialReference = geographicSpatialReference;
+					
+					geometryService.project(projParam, 
+						new AsyncResponder(project_resultHandler, project_faultHandler, graphic));
+				}
+				
+				function project_resultHandler(result:Object, token:Object = null):void
+				{
+					if (result)
+					{
+						var polygon:Geometry = (result as Array)[0];
+						var graphic:Graphic = token as Graphic;
+						updateMeasurements(Polygon(polygon),graphic);
+					}
+				}
+				
+				function project_faultHandler(fault:Fault, token:Object = null):void
+				{
+					Alert.show(fault.faultString + "\n\n" + fault.faultDetail, "project Fault " + fault.faultCode);
+				}
+				
+				function updateMeasurements(polygon:Polygon, graphic:Graphic):void
+				{
+					// Remove any associated graphics
+					var associatedGraphic:Graphic = getMeasurementGraphic(graphic);
+					if (associatedGraphic)
+					{
+						_labelsLayer.remove(associatedGraphic);
+					}
+					
+					var lengths:Array = GeometryUtil.geodesicLengths([ new Polyline(polygon.rings)], Units.METERS);
+					var areas:Array = GeometryUtil.geodesicAreas([ polygon ], Units.SQUARE_METERS);
+					
+					// Update the area and length measurements of the graphic's attributes
+					if (graphic.attributes)
+					{
+						graphic.attributes["_areaMeasurement"] = areas[0];
+						graphic.attributes["_lengthMeasurement"] = lengths[0];
+					}
+					
+					// Check if this graphic is set to show a measurement label
+					if (graphic.attributes && graphic.attributes.showMeasurements)
+					{
+						// Calculate the measurements based on the current units 
+						var abbrArea:String = cboArea.selectedItem.abbr;
+						var convArea:Number = cboArea.selectedItem.conversion;
+						var precArea:Number = cboArea.selectedItem.precision;
+						var abbrDist:String = cboDistance.selectedItem.abbr;
+						var convDist:Number = cboDistance.selectedItem.conversion;
+						var precDist:Number = cboDistance.selectedItem.precision;
+						var area:Number = areas[0] * convArea;
+						var length:Number = lengths[0] * convDist;
+						
+						// Generate the label point for the graphic
+						var labelPoint:MapPoint = GeometryUtil.getLabelPosition(graphic.geometry);
+						
+						// Update the measurement label
+						var label:String = DrawWidgetLabelFormatter.createAreasAndLengthsLabel(area, _areaLabel, 
+							abbrArea, precArea, length, _lengthLabel, abbrDist, precDist, numberFormatter);
+						addMeasurementLabel(label, labelPoint, graphic);
+					}
+
+					// Force the graphics list to refresh
+					graphicsDG.invalidateList();
+				}
+			}
+			
+			/**
+			 * Adds a label graphic to the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>label [String]: </i>Text to be displayed on the label</li>
+			 * <li><i>labelPoint [MapPoint]: </i>Location to use as the anchor for the label</li>
+			 * <li><i>asociatedGraphic [Graphic]: </i>Optional graphic to link to the label.  
+			 * If set, when this graphic is moved the label will be moved to match.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function addDrawLabel(label:String, labelPoint:MapPoint, 
+										  associatedGraphic:Graphic = null):void
+			{
+				// Create a text symbol
+				var txtSym:TextSymbol = new TextSymbol(label);
+				txtSym.yoffset = 8;
+				var txtFormat:TextFormat = new TextFormat("Arial", 12, 0x000000, true); // black label
+				txtSym.textFormat = txtFormat;
+				
+				// Create the new graphic
+				var graphic:Graphic = new Graphic(labelPoint);
+				graphic.symbol = txtSym;
+				
+				// Remove measurement label if any
+				if (associatedGraphic)
+				{
+					_graphicsLayer.remove(getAssociatedGraphic(associatedGraphic));
+					graphic.name = associatedGraphic.id;
+				}
+				
+				// Add the graphic to the map
+				_graphicsLayer.add(graphic);
+			}
+
+			/**
+			 * Adds a measurement label graphic to the measurments graphics layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>label [String]: </i>Text to be displayed on the label</li>
+			 * <li><i>labelPoint [MapPoint]: </i>Location to use as the anchor for the label</li>
+			 * <li><i>asociatedGraphic [Graphic]: </i>Optional graphic to link to the label.  
+			 * If set, when this graphic is moved the label will be moved to match.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function addMeasurementLabel(label:String, labelPoint:MapPoint, 
+										  associatedGraphic:Graphic = null):void
+			{
+				// Create a text symbol
+				var txtSym:TextSymbol = new TextSymbol(label);
+				txtSym.yoffset = 8;
+				var txtFormat:TextFormat = new TextFormat("Arial", 12, 0x000000, true); // black label
+				txtSym.textFormat = txtFormat;
+				
+				// Create the new graphic
+				var graphic:Graphic = new Graphic(labelPoint);
+				graphic.symbol = txtSym;
+				
+				// Remove existing measurement label if any
+				if (associatedGraphic)
+				{
+					//var oldLabelGraphic:Graphic = getAssociatedGraphic(associatedGraphic); 
+					var oldLabelGraphic:Graphic = getMeasurementGraphic(associatedGraphic); 
+					
+					_labelsLayer.remove(oldLabelGraphic);
+					graphic.name = associatedGraphic.id;
+				}
+				
+				// Add the graphic to the map
+				_labelsLayer.add(graphic);
+			}
+			
+			/**
+			 * Determines whether the provided spatial reference ID represents a web mercator coordinate system. 
+			 */
+			private function isWebMercator(wkid:Number):Boolean
+			{
+				return wkid == 102100 || wkid == 3857 || wkid == 102113;
+			}
+			
+			
+			/**
+			 * Adds measurement labels to the supplied graphics
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics [Array]: </i>An array of graphic objects currently part of the 
+			 * graphics layer that should have a measuremnet label applied.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function activateGraphicLabels(graphics:Array):void
+			{
+				// Iterate through each graphic in the supplied array
+				for each (var graphic:Graphic in graphics)
+				{
+					if (graphic.symbol is TextSymbol)
+					{
+						// Do nothing						
+					}
+					else
+					{
+						// Update the showMeasurements flag
+						graphic.attributes.showMeasurements = true;
+						
+						// Update the context menu
+						graphic_updateContextMenu(graphic);
+						
+						// Call the calculate function to update the measurements and display the label. 
+						calculateAreasAndLengths(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Removes associated labels from the supplied graphics
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics [Array]: </i>An array of graphic objects currently part of the 
+			 * graphics layer that should have a measuremnet label removed.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function deactivateGraphicLabels(graphics:Array):void
+			{
+				// Iterate through each graphic in the supplied array
+				for each (var graphic:Graphic in graphics)
+				{
+					// Update the showMeasurements flag
+					graphic.attributes.showMeasurements = false;
+					
+					// Update the context menu
+					graphic_updateContextMenu(graphic);
+					
+					// Get associated label graphics
+					var labelGraphic:Graphic = getMeasurementGraphic(graphic);
+					if (labelGraphic != null)
+						_labelsLayer.remove(labelGraphic);
+				}
+			}
+			
+			/** 
+			 * Returns a graphic associated with another graphic e.g. a measurement label, 
+			 * a leader label, etc
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i> graphic feature for which the associated graphic is to be searched for.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getAssociatedGraphic(graphic:Graphic):Graphic
+			{
+				var result:Graphic;
+				if (graphic)
+				{
+					for (var i:int = 0; i < _graphicsLayer.numGraphics; )
+					{
+						var gra:Graphic = Graphic(_graphicsLayer.getChildAt(i));
+						if (gra.name != null && gra.name == graphic.id)
+						{
+							result = gra;
+							break;
+						}
+						else
+						{
+							i++;
+						}
+					}
+				}				
+				return result;
+			}
+
+			/** 
+			 * Returns a graphic associated with another graphic e.g. a measurement label, 
+			 * a leader label, etc
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i> graphic feature for which the associated graphic is to be searched for.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getMeasurementGraphic(graphic:Graphic):Graphic
+			{
+				var result:Graphic;
+				if (graphic)
+				{
+					for (var i:int = 0; i < _labelsLayer.numGraphics; )
+					{
+						var gra:Graphic = Graphic(_labelsLayer.getChildAt(i));
+						if (gra.name != null && gra.name == graphic.id)
+						{
+							result = gra;
+							break;
+						}
+						else
+						{
+							i++;
+						}
+					}
+				}				
+				return result;
+			}
+			
+			/** 
+			 * Returns a linked parent of the specified graphic e.g. a measurement label graphics linked graphic
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i> graphic feature for which the associated graphic is to be searched for.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getParentGraphic(graphic:Graphic):Graphic
+			{
+				var result:Graphic;
+				for (var i:int = 0; i < _graphicsLayer.numGraphics; )
+				{
+					var gra:Graphic = Graphic(_graphicsLayer.getChildAt(i));
+					if (graphic.name != null && gra.id == graphic.name)
+					{
+						result = gra;
+						break;
+					}
+					else
+					{
+						i++;
+					}
+				}
+				return result;
+			}
+			
+			/**
+			 * Makes copies of the supplied graphics and adds them to the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphics [Array]: </i>An array of graphic objects currently part of the 
+			 * graphics layer that should be copied</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function CopyGraphics(graphics:Array):void
+			{
+				var newGraphics:Array = [];
+				// Iterate through each graphic in the supplied array
+				for each (var graphic:Graphic in graphics)
+				{
+					// Create a copy of the graphic
+					var newGraphic:Graphic = GraphicUtil.CopyGraphic(graphic);
+					_graphicsLayer.add(newGraphic);
+					
+					// Add the newgraphic to the temp storage array
+					newGraphics.push(newGraphic);
+				}
+				clearSelectedGraphics();
+			}
+			
+			/**
+			 * Focuses the graphic on the map.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>graphic [Graphic]: </i>The graphic currently part of the 
+			 * graphics layer to which the map exent should be set.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function zoomToGraphic(graphic:Graphic):void
+			{
+				if (graphic)
+				{
+					if (graphic.geometry is MapPoint)
+					{
+						// Center the map on this geometry point instead of setting extent
+						map.centerAt(graphic.geometry as MapPoint);
+					}
+					else
+					{
+						map.extent = graphic.geometry.extent; 
+					}
+					
+					if (!map.extent.contains(graphic.geometry))
+					{
+						map.level--;
+					}
+				}			
+			}
+
+			/**
+			 * Called when the user clicks the zoom to extent button.
+			 */
+			protected function zoomToExtent_clickHandler(event:MouseEvent):void
+			{
+				var extent:Extent;
+				for (var i:int = 0; i < _graphicsLayer.numGraphics; )
+				{
+					var gra:Graphic = Graphic(_graphicsLayer.getChildAt(i));
+
+					if (gra)
+					{
+						var gExtent:Extent;
+						if (gra.geometry.type == Geometry.MAPPOINT)
+						{
+							
+							gExtent = GeometryUtil.createExtentAroundMapPoint(gra.geometry as MapPoint,map.extent.width/100,map);	
+						}
+						else
+						{
+							gExtent = gra.geometry.extent;							
+						}
+
+						
+						if (extent == null)
+						{
+							extent = gExtent;
+						}
+						else
+						{
+							extent = extent.union(gExtent);							
+						}
+					}
+					
+					// Iterate to next graphic
+					i++;
+				}
+				
+				// Set the extent if calculated extent is valid 
+				if (extent)
+				{
+					map.extent = extent;
+					
+					if (!map.extent.contains(extent))
+					{
+						map.level--;
+					}
+				}
+			}
+			
+			/**
+			 * Called when the user toggles the show measurements button
+			 */
+			protected function showMeasurementsButton_changeHandler(event:Event):void
+			{
+				if (showMeasurementsButton.selected)
+				{
+					showMeasurementsButton.toolTip = _showMeasurementsOffTooltip;
+				}
+				else
+				{
+					showMeasurementsButton.toolTip = _showMeasurementsOnTooltip;
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Graphic visibility functions 
+			---------------------------------------------------------------------- */
+
+			/**
+			 * Called when the visibility but is clicked
+			 */
+			protected function toggleVisibility_clickHandler(event:Event):void
+			{
+				// Check for graphics
+				var gl:int = _graphicsLayer.graphicProvider.length;
+				if (gl > 0)
+				{
+					// Get the first graphic to determine the defasult visibility state
+					var graphic:Graphic = _graphicsLayer.graphicProvider[0] as Graphic;
+					
+					var vis:Boolean = !graphic.visible;
+					
+					for (var i:int = 0; i < gl; i ++)
+					{
+						(_graphicsLayer.graphicProvider[i] as Graphic).visible = vis;								
+					}
+				}
+			}
+			
+			
+			
+			/* -------------------------------------------------------------------
+			Graphic moving functions 
+			---------------------------------------------------------------------- */
+
+			/**
+			 * Called when the move to top button on the graphic list is clicked.
+			 */
+			protected function graphicMoveToTopButton_clickHandler(event:MouseEvent):void
+			{
+				if (_holdingGraphics.length > 0)
+				{
+					for each (var graphic:Graphic in _holdingGraphics)
+					{
+						// The graphic will be temporarily removed from the list
+						_graphicsLayer.remove(graphic);
+
+						// The graphic will be moved to the bottom of the list
+						_graphicsLayer.add(graphic);
+					}
+				}
+			}
+			
+			/**
+			 * Called when the move down button on the graphic list is clicked.
+			 */
+			protected function graphicMoveDownButton_clickHandler(event:MouseEvent):void
+			{
+				if (_holdingGraphics.length > 0)
+				{
+					for each (var graphic:Graphic in _holdingGraphics)
+					{
+						// Get the graphic index
+						var graphics:ArrayCollection = ArrayCollection(_graphicsLayer.graphicProvider);
+						
+						var index:int = graphics.getItemIndex(graphic);
+						var newIndex:int;
+						
+						// The graphic will be temporarily removed from the list
+						_graphicsLayer.remove(graphic);
+						
+						// Check if this is the current top most graphic
+						if (index == 0)
+						{
+							// The graphic will be moved to the bottom of the list
+							_graphicsLayer.add(graphic);
+						}
+						else
+						{
+							// The graphic will be moved up one slot
+							graphics.addItemAt(graphic, index - 1);
+							
+							// Manually add the graphic listeners - done becasue adding graphics using this method doesn't trigger the graphic added event
+							addGraphicListeners(graphic);
+						}
+					}
+					
+					// Refresh the graphics list
+					graphicsDG.graphicsLayer = _graphicsLayer;
+				}
+			}
+			
+			/**
+			 * Called when the move up button on the graphic list is clicked.
+			 */
+			protected function graphicMoveUpButton_clickHandler(event:MouseEvent):void
+			{
+				if (_holdingGraphics.length > 0)
+				{
+					for each (var graphic:Graphic in _holdingGraphics)
+					{
+						// Get the graphic index
+						var graphics:ArrayCollection = ArrayCollection(_graphicsLayer.graphicProvider);
+						
+						var count:int = graphics.length;
+						var index:int = graphics.getItemIndex(graphic);
+						
+						// The graphic will be temporarily removed from the list
+						_graphicsLayer.remove(graphic);
+						
+						// Check if this is the current top most graphic
+						if (index == count - 1)
+						{
+							// The graphic will be moved to the top of the list
+							graphics.addItemAt(graphic, 0);
+						}
+						else
+						{
+							// The graphic will be moved down one slot
+							graphics.addItemAt(graphic, index + 1);
+						}
+
+						// Manually add the graphic listeners - done becasue adding graphics using this method doesn't trigger the graphic added event
+						addGraphicListeners(graphic);
+					}
+					
+					// Refresh the graphics list
+					graphicsDG.graphicsLayer = _graphicsLayer;
+				}
+			}
+			
+			/**
+			 * Called when the move to bottom button on the graphic list is clicked.
+			 */
+			protected function graphicMoveToBottomButton_clickHandler(event:MouseEvent):void
+			{
+				if (_holdingGraphics.length > 0)
+				{
+					// Get the graphic index
+					var graphics:ArrayCollection = ArrayCollection(_graphicsLayer.graphicProvider);
+
+					for each (var graphic:Graphic in _holdingGraphics)
+					{
+						// The graphic will be temporarily removed from the list
+						_graphicsLayer.remove(graphic);
+
+						// The graphic will be moved to the top of the list
+						graphics.addItemAt(graphic, 0);
+
+						// Manually add the graphic listeners - done becasue adding graphics using this method doesn't trigger the graphic added event
+						addGraphicListeners(graphic);
+					}
+					
+					// Refresh the graphics list
+					graphicsDG.graphicsLayer = _graphicsLayer;
+				}
+			}
+			
+			/* -------------------------------------------------------------------
+			Graphic inspector functions 
+			---------------------------------------------------------------------- */
+
+			/**
+			 * Called when the graphic inspector raises an edit event.  Used to signal that the specified graphic should be edited.
+			 */
+			protected function inspector_editClickedHandler(event:GraphicInspectorEvent):void
+			{
+				if (event.graphic)
+				{
+					setEditGraphics([event.graphic]);
+				}
+			}
+
+			protected function toolbar_creationCompleteHandler(event:FlexEvent):void
+			{
+				resizeToolbar();
+			}
+
+			protected function toolbar_resizeHandler(event:ResizeEvent):void
+			{
+				resizeToolbar();				
+			}
+			
+			private function resizeToolbar():void
+			{
+				// Get the group width
+				var grpWidth:Number = toolbar.width;
+				var rows:int = 1;
+				var gp:Number = 2;
+				
+				// Iterate through the children of the group and work out if the total of the widths exceeds the width of the group
+				for (var i:int = 0; i < toolbar.numChildren; i++)
+				{
+					var chld:DisplayObject = toolbar.getChildAt(i);
+					var wid:Number = chld.width + gp;
+					if (grpWidth - wid < 0)
+					{
+						rows += 1;
+						grpWidth = toolbar.width - wid;
+					}
+					else
+					{
+						grpWidth -= wid;
+					}
+				}
+				
+				// Update the height of the group
+				if (rows * 28 > toolbar.height)
+				{
+					toolbar.height = rows * 28;
+				}
+			}
+			
+
+			/* -------------------------------------------------------------------
+			Graphic widget attribute functions  
+			---------------------------------------------------------------------- */
+			
+			private function prepareGraphic(graphic:Graphic):void
+			{
+				if (!graphic)
+				{
+					// No graphic - do nothing
+					return;
+				}
+				
+				// Validate the spatial reference is set
+				if (graphic.geometry.spatialReference == null)
+				{
+					graphic.geometry.spatialReference = this.map.spatialReference;
+				}
+				
+				// Check for valid geometry on polylines and polygons
+				switch(graphic.geometry.type)
+				{
+					case Geometry.POLYGON:
+					case Geometry.POLYLINE:
+						if (graphic.geometry.extent.width == 0 && graphic.geometry.extent.height == 0)
+						{
+							// Invalid geometry - remove from layer
+							_graphicsLayer.remove(graphic);
+							return;
+						}
+						
+						break;
+					
+					default:
+						// Do nothing
+						break;
+				}
+				
+				// Check for attributes
+				if (!graphic.attributes)
+				{
+					graphic.attributes = {};
+				}
+				
+				// Add/set the selected attribute to false
+				graphic.attributes._selected = false;
+				
+				// Add a title attribute
+				if (!graphic.attributes._title)
+				{
+					var title:String = "";
+					
+					if (graphic.geometry)
+					{
+						switch (graphic.geometry.type)
+						{
+							case Geometry.MAPPOINT:
+							{
+								// Check symbol type
+								if (graphic.symbol is TextSymbol)
+								{
+									title = "Label Graphic";						
+								}
+								else
+								{
+									title = "Marker Graphic";						
+								}
+								break;
+							}
+								
+							case Geometry.MULTIPOINT:
+							{
+								title = "Multipoint Graphic";							
+								break;
+							}
+								
+							case Geometry.POLYLINE:
+							{
+								title = "Line Graphic";						
+								break;
+							}
+								
+							case Geometry.EXTENT:
+							case Geometry.POLYGON:
+							{
+								title = "Polygon Graphic";							
+								break;
+							}
+						}
+					}
+					
+					graphic.attributes._title = title;
+				}
+				
+				// Add a content attribute
+				if (!graphic.attributes._content)
+				{
+					graphic.attributes._content = "";
+				}
+				
+				// Add a link attribute
+				if (!graphic.attributes._link)
+				{
+					graphic.attributes._link = "";
+				}
+				
+				// Add a showMeasurments attribute
+				if (!graphic.attributes._showMeasurements)
+				{
+					graphic.attributes._showMeasurements = false;
+				}
+				
+				// Add an areaMeasurments attribute
+				if (!graphic.attributes._areaMeasurements)
+				{
+					graphic.attributes._areaMeasurements = 0;
+				}
+				
+				// Add a lengthMeasurments attribute
+				if (!graphic.attributes._lengthMeasurements)
+				{
+					graphic.attributes._lengthMeasurements = 0;
+				}
+				
+				// Add a point attribute
+				if (!graphic.attributes._point)
+				{
+					var point:Object;
+					if (graphic.geometry.type == Geometry.MAPPOINT)
+					{
+						point = (graphic.geometry as MapPoint).toJSON();	
+					}
+					else
+					{
+						point = GeometryUtil.getMapPoint(graphic.geometry).toJSON();	
+					}
+					
+					graphic.attributes._point = point;
+				}
+			}			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Geometry service for drawing processes -->
+		<esri:GeometryService id="geometryService" 
+							  url="http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer"
+							  showBusyCursor="true"
+							  autoCompleteComplete="geometryService_autoCompleteCompleteHandler(event)"
+							  bufferComplete="geometryService_bufferCompleteHandler(event)"
+							  intersectComplete="geometryService_intersectCompleteHandler(event)"
+							  simplifyComplete="geometryService_simplifyCompleteHandler(event)" />
+		
+		<!-- Create options object for the current tools -->
+		<esri:CreateOptions id="createOptions" />
+		
+		<!-- Drawing tool used to create new graphics -->
+		<esri:DrawTool id="drawTool" 
+					   drawStart="drawTool_drawStartHandler(event)" 
+					   drawEnd="drawTool_drawEndHandler(event)" 
+					   drawUpdate="drawTool_drawUpdateHandler(event)" 
+					   map="{map}" showDrawTips="true" />
+		
+		<!-- Editing tool used to update existing graphics -->
+		<esri:EditTool id="editTool" map="{map}" 
+					   graphicsMoveStart="editTool_graphicsMoveStartHandler(event)"
+					   graphicRotateFirst="editTool_graphicRotateFirstHandler(event)" 
+					   graphicScaleFirst="editTool_graphicScaleFirstHandler(event)"
+					   vertexMoveStart="editTool_vertexMoveStartHandler(event)"/> 
+		
+		<!--- @private -->
+		<fx:Object id="mapPointIcon"
+				   drawId="mappoint"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/ElementMarker16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointLabel')}"/>
+		
+		<!-- Icons for polyline drawing -->
+		<!--- @private -->
+		<fx:Object id="pointToPointLineIcon"
+				   drawId="pointToPointLine"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/ElementPolyline16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="freehandLineIcon"
+				   drawId="freehandLine"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/ElementFreehand16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateFreehandLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="lineIcon"
+				   drawId="line"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/ElementLine16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateLineLabel')}"/>
+		
+		<!-- Icons for polygon drawing -->
+		<!--- @private -->
+		<fx:Object id="pointToPointPolygonIcon"
+				   drawId="pointToPointPolygon"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/EditingPolygonTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreatePointToPointLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="freehandPolygonIcon"
+				   drawId="freehandPolygon"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/FreehandPolygon_16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateFreehandLabel')}"/>
+		<!--- @private -->
+		<fx:Object id="extentIcon"
+				   drawId="extent"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/EditingExtent_16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateExtentLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="circleIcon"
+				   drawId="circle"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/EditingCircleTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateCircleLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="ellipseIcon"
+				   drawId="ellipse"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/EditingEllipseTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateEllipseLabel')}"/>
+		
+		<!--- @private -->
+		<fx:Object id="autoCompleteIcon"
+				   drawId="autoComplete"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/EditingAutoCompletePolygonTool16.png')"
+				   label="{resourceManager.getString('ESRIMessages', 'editorCreateAutoCompleteLabel')}"/>
+		
+		
+		<!--- @private -->
+		<fx:Object id="textIcon"
+				   drawId="text"
+				   icon="@Embed('widgets/DrawAdvanced/assets/images/ElementText16.png')"
+				   label="{'Place Text'}"/>	
+		
+		<!-- Filters used for displaying selected graphics -->
+		<s:GlowFilter id="graphicSelectGlow"
+					  blurX="25"
+					  blurY="25"
+					  color="{getStyle('focusColor')}" 
+					  strength="3.5" />
+		
+		<s:GlowFilter id="graphicHighlightGlow"
+					  blurX="25"
+					  blurY="25"
+					  color="{0x00FF00}" 
+					  strength="3.5"/>
+		
+		<s:AnimateFilter id="graphicHighlight"
+						 bitmapFilter="{graphicHighlightGlow}"
+						 duration="600"
+						 repeatCount="0"
+						 repeatBehavior="{RepeatBehavior.REVERSE}" > 
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>
+		
+		<!-- Number Formatter -->
+		<s:NumberFormatter id="numberFormatter" />
+		
+		<!-- Graphic Inspector -->
+		<components:GraphicInspector id="inspector" map="{map}" 
+									 graphicsLayer="{_graphicsLayer}" 
+									 areaMeasurementLabel="{_areaLabel}" 
+									 areaMeasurementSettings="{cboArea.selectedItem}"
+									 lengthMeasurementLabel="{_lengthLabel}"
+									 lengthMeasurementSettings="{cboDistance.selectedItem}"
+									 defaultMode="{_defaultInspectionMode}"
+									 perimeterMeasurementLabel="{_perimeterLabel}"
+									 zoomLabel="{_graphicInspectorZoomLabel}"
+									 linkLabel="{_graphicInspectorLinkLabel}"
+									 editLabel="{_graphicInspectorEditLabel}"
+									 deleteLabel="{_graphicInspectorDeleteLabel}"
+									 applyLabel="{_graphicInspectorApplyLabel}"
+									 cancelLabel="{_graphicInspectorCancelLabel}"
+									 zoomToolTip="{_graphicInspectorZoomTooltip}"
+									 linkToolTip="{_graphicInspectorLinkTooltip}"
+									 editToolTip="{_graphicInspectorEditTooltip}"
+									 deleteToolTip="{_graphicInspectorDeleteTooltip}"
+									 applyToolTip="{_graphicInspectorApplyTooltip}"
+									 cancelToolTip="{_graphicInspectorCancelTooltip}"
+									 measurementToolTip="{_graphicInspectorMeasurementTooltip}"
+									 editClicked="inspector_editClickedHandler(event)" />
+	</fx:Declarations>
+	
+	<viewer:states>
+		<s:State name="draw"/>
+		<s:State name="measurements"/>
+		<s:State name="graphicList"/>
+	</viewer:states>
+	
+	<viewer:transitions>
+		<s:Transition autoReverse="true" toState="*">
+			<s:Fade id="fade"/>
+		</s:Transition>
+	</viewer:transitions>
+	
+	<viewer:WidgetTemplate id="wTemplate"
+						   width="440" height="500"
+						   closed="widgetClosedHandler(event)"
+						   minHeight="300"
+						   minWidth="300"
+						   minimized="widgetMinimizedHandler(event)"
+						   open="widgetOpenedHandler(event)"
+						   visible="false" >
+		
+		<!-- Drawing tools and graphic templates -->
+		<s:Group id="drawingTools" width="100%" height="100%" visible="false" visible.draw="true">
+			<s:layout>
+				<s:VerticalLayout paddingLeft="5" paddingTop="10"/>
+			</s:layout>	
+			
+			<s:Label text="{getDefaultString('selectTemplateText')}"/>
+			<mx:Spacer/>
+			
+			<s:Scroller width="100%" height="100%"
+						focusEnabled="false"
+						hasFocusableChildren="true"
+						horizontalScrollPolicy="auto"
+						verticalScrollPolicy="auto">
+				<s:HGroup>
+					<s:VGroup horizontalAlign="center" verticalAlign="middle" width="100%">
+						<!--- TemplatePicker to display and pick graphic templates. -->
+						<components:GraphicTemplatePicker id="templatePicker" width="100%" height="100%" 
+														  showResetTemplatesButton="true"
+														  skinClass="widgets.DrawAdvanced.skins.GraphicTemplatePickerSkin" 
+														  selectedTemplateChange="templatePicker_selectedTemplateChangeHandler(event)"
+														  templateListChange="templatePicker_templateListChangeHandler(event)"
+														  resetTemplates="templatePicker_resetTemplatesHandler(event)" />
+					</s:VGroup>
+				</s:HGroup>
+			</s:Scroller>
+			
+			<!--- Toolbar component utilised for modifying the drawing tool settings. -->
+			<s:Group id="toolbar"
+					 width="100%"
+					 minHeight="35"
+					 horizontalCenter="0"
+					 includeInLayout="{_showToolbar}"
+					 verticalCenter="0"
+					 visible="{_showToolbar}"
+					 creationComplete="toolbar_creationCompleteHandler(event)"
+					 resize="toolbar_resizeHandler(event)" >
+				<s:layout>
+					<supportClasses:FlowLayout />
+				</s:layout>
+				
+				<!--- DropDownList for different selection options (new, add, subtract). -->
+				<s:DropDownList id="selectionDropDownList"
+								width="50" height="25"
+								enabled = "{templatePicker.selectedTemplate == null}"
+								itemRenderer="com.esri.ags.skins.supportClasses.EditorDropDownListItemRenderer"
+								labelField="label"
+								skinClass="com.esri.ags.skins.EditorSelectionDropDownListSkin"
+								toolTip="Click to change the selection mode"
+								selectedIndex="0" >
+					<s:dataProvider>
+						<s:ArrayList>
+							<fx:Object icon="@Embed('widgets/DrawAdvanced/assets/images/NewSelection.png')"
+									   label="{resourceManager.getString('ESRIMessages', 'editorNewSelectionLabel')}"
+									   selectionName="newSelection"/>
+							<fx:Object icon="@Embed('widgets/DrawAdvanced/assets/images/AddToSelection.png')"
+									   label="{resourceManager.getString('ESRIMessages', 'editorAddSelectionLabel')}"
+									   selectionName="addToSelection"/>
+							<fx:Object icon="@Embed('widgets/DrawAdvanced/assets/images/RemoveFromSelection.png')"
+									   label="{resourceManager.getString('ESRIMessages', 'editorSubtractSelectionLabel')}"
+									   selectionName="subtractFromSelection"/>
+						</s:ArrayList>
+					</s:dataProvider>
+				</s:DropDownList>
+
+				<!--- Button to toggle on the graphic selection tool. -->
+				<s:ToggleButton id="selectToolToggleButton" width="40" height="25" 
+								enabled="{ArrayCollection(_graphicsLayer.graphicProvider).length &gt; 0}"
+								selected="false"
+								skinClass="widgets.DrawAdvanced.skins.GraphicEditorSelectToolToggleButtonSkin"
+								toolTip="{_selectToolTooltip}"
+								click="selectToolToggleButton_clickHandler(event)" />
+				
+				<!--- Button to toggle on the graphic selection tool. -->
+				<s:Button id="clearSelectionButton" width="40" height="25"
+						      enabled="{_holdingGraphics &amp;&amp; _holdingGraphics.length > 0}"
+							  skinClass="widgets.DrawAdvanced.skins.ClearSelectionButtonSkin"
+							  toolTip="{_clearSelectionTooltip}"
+							  click="clearSelectionButton_clickHandler(event)" />
+				
+				<!--- DropDownList for different feature creation options. The options are based on FeatureTemplate selected from TemplatePicker. -->
+				<s:DropDownList id="drawDropDownList"
+								width="40" height="25"
+								enabled = "{templatePicker.selectedTemplate != null}"
+								itemRenderer="com.esri.ags.skins.supportClasses.EditorDropDownListItemRenderer"
+								skinClass="com.esri.ags.skins.EditorDrawDropDownListSkin"
+								toolTip="{resourceManager.getString('ESRIMessages', 'editorCreateOptionsTooltip')}"
+								change="drawDropDownList_changeHandler(event)" />
+				
+				<!--- Button to toggle on the creation of measurement labels when new graphics are created. -->
+				<s:ToggleButton id="showMeasurementsButton"
+								width="40" height="25"
+								skinClass="widgets.DrawAdvanced.skins.GraphicEditorShowMeasurementsToggleButtonSkin"
+								toolTip="Click to add measurement labels to all new graphics as they are added to the map."
+								change="showMeasurementsButton_changeHandler(event)"/>
+				
+				<!--- Button to perform cut(split) operation on polylines or polygons. -->
+				<s:ToggleButton id="cutButton"
+								width="40" height="25"
+								enabled="false"
+								includeInLayout="{_showCutTool}"
+								skinClass="widgets.DrawAdvanced.skins.GraphicEditorCutToggleButtonSkin"
+								toolTip="{resourceManager.getString('ESRIMessages', 'editorCutTooltip')}"
+								visible="{_showCutTool}" click="cutButton_clickHandler(event)" />
+				
+				<!--- Button to perform merge operation on selected polygons. -->
+				<s:Button id="mergeButton"
+						  width="40" height="25"
+						  enabled="false"
+						  includeInLayout="{_showMergeTool}"
+						  skinClass="widgets.DrawAdvanced.skins.GraphicEditorMergeButtonSkin"
+						  toolTip="{resourceManager.getString('ESRIMessages', 'editorMergeTooltip')}"
+						  visible="{_showMergeTool}" click="mergeButton_clickHandler(event)" />
+				
+				<!--- Button to perform reshape operation on selected polyline or polygon. -->
+				<s:ToggleButton id="reshapeButton"
+								width="40" height="25"
+								enabled="false"
+								includeInLayout="{_showReshapeTool}"
+								skinClass="widgets.DrawAdvanced.skins.GraphicEditorReshapeToggleButtonSkin"
+								toolTip="{resourceManager.getString('ESRIMessages', 'editorReshapeTooltip')}"
+								visible="{_showReshapeTool}" click="reshapeButton_clickHandler(event)" />
+				
+			</s:Group>
+			
+		</s:Group>
+		
+		<!-- Measurement settings screen -->
+		<s:Group id="measurements" height="100%" width="100%" visible.measurements="true" visible="false">
+			<s:layout>
+				<s:VerticalLayout gap="6" horizontalAlign="center"/>
+			</s:layout>
+			
+			<s:Label text="{_measurementsLabel}" width="100%" textAlign="center" styleName="WidgetTitle"/>
+			
+			<mx:Form id="frmMeasurements"
+					 width="100%"
+					 paddingBottom="0"
+					 verticalScrollPolicy="off" >
+				<mx:FormItem width="100%"
+							 label="{_areaUnitsLabel}" >
+					<s:DropDownList id="cboArea"
+									requireSelection="true"
+									selectedIndex="0"
+									width="100%" />
+				</mx:FormItem>
+				<mx:FormItem width="100%"
+							 label="{_distanceUnitsLabel}">
+					<s:DropDownList id="cboDistance"
+									requireSelection="true"
+									selectedIndex="0" 
+									width="100%" />
+				</mx:FormItem>
+			</mx:Form>
+			
+			<s:Label text="{_buffersLabel}" width="100%" textAlign="center" paddingTop="5" styleName="WidgetTitle"/>
+			
+			<mx:Form id="frmBuffers"
+					 width="100%"
+					 paddingBottom="0"
+					 verticalScrollPolicy="off">
+				<mx:FormItem width="100%"
+							 label="{_bufferunitLabel}">
+					
+					<s:DropDownList id="cboBuffer"
+									requireSelection="true"
+									selectedIndex="0"
+									close="cboBuffer_closeHandler(event)"
+									width="100%"/>
+				</mx:FormItem>
+				<mx:FormItem width="100%"
+							 label="{_bufferdistanceLabel}"
+							 visible="{_isCustomDistance}"
+							 includeInLayout="{_isCustomDistance}" >
+					<s:HGroup width="100%" verticalAlign="middle" gap="5">
+						<s:TextInput id="txtBufferDistance" text="" 
+									 fontWeight="normal"								 
+									 toolTip="{_bufferdistanceTooltip}"  
+									 restrict="0-9"
+									 width="100%" />
+						<s:DropDownList id="cboBufferUnit"
+										selectedIndex="0"
+										width="100%" />
+					</s:HGroup>
+				</mx:FormItem>
+				<mx:FormItem width="100%"
+							 label="{_buffernumberLabel}">
+					<s:NumericStepper id="numsBufferRingCount" 
+									  minimum="1" maximum="5" 
+									  toolTip="{_buffernumberTooltip}" 
+									  value="1" />
+				</mx:FormItem>
+				<mx:FormItem width="100%" label="{_unionBuffersLabel}">
+					<s:CheckBox id="chkUnionBuffers" label="" textAlignLast="left" toolTip="{_unionBuffersTooltip}"/>
+				</mx:FormItem>
+			</mx:Form>
+			
+			<s:HGroup width="100%" horizontalAlign="center">
+				<!--- Generate Buffers Button -->
+				<s:Button id="generateBuffersButton" 
+						  label="{_generateBuffersLabel}"
+						  toolTip="{_generateBuffersTooltip}" 
+						  click="generateBuffersButton_clickHandler(event)"
+						  width="200" height="25" 
+						  skinClass="widgets.DrawAdvanced.skins.GenerateBuffersButtonSkin2"
+						  enabled="{_holdingGraphics.length > 0}" />
+			</s:HGroup>
+		</s:Group>
+		
+		<!-- Graphic list screen -->
+		<s:Group id="graphicsList" height="100%" width="100%" visible.graphicList="true" visible="false">
+			<s:layout>
+				<s:VerticalLayout gap="6" horizontalAlign="center"/>
+			</s:layout>
+			
+			<s:HGroup width="100%" verticalAlign="middle">
+				
+				<s:Label text="{_graphicsListLabel}" width="100%" textAlign="center" styleName="WidgetTitle" />
+				
+				<s:Button id="toggleVisibility" width="25" height="25" click="toggleVisibility_clickHandler(event)" buttonMode="true" useHandCursor="true" 
+						  toolTip="{_toggleVisibilityTooltip}" skinClass="widgets.DrawAdvanced.skins.ToggleVisibilityButtonSkin" />				
+				<s:Button id="listClearSelection" width="25" height="25" click="clearSelectionButton_clickHandler(event)" buttonMode="true" useHandCursor="true" 
+						  toolTip="{_clearSelectionTooltip}" skinClass="widgets.DrawAdvanced.skins.ClearSelectionSmallButtonSkin" />				
+				<s:Button id="zoomToExtent" width="25" height="25" click="zoomToExtent_clickHandler(event)" buttonMode="true" useHandCursor="true" 
+						  toolTip="{_zoomToExtentTooltip}" skinClass="widgets.DrawAdvanced.skins.ZoomToExtentButtonSkin" />				
+			</s:HGroup> 
+			
+			<s:HGroup height="100%" width="100%" gap="3" >
+				
+				<!-- Graphic List -->
+				<s:Scroller height="100%" width="100%">
+					<components:GraphicDataGroup id="graphicsDG" 
+												 graphicBuffer="graphicsDG_graphicBufferHandler(event)"
+												 graphicClick="graphicsDG_graphicClickHandler(event)"
+												 graphicCopy="graphicsDG_graphicCopyHandler(event)"
+												 graphicDelete="graphicsDG_graphicDeleteHandler(event)"
+												 graphicDoubleClick="graphicsDG_graphicDoubleClickHandler(event)"
+												 graphicEditProperties="graphicsDG_graphicEditPropertiesHandler(event)"
+												 graphicHideMeasurements="graphicsDG_graphicHideMeasurementsHandler(event)"
+												 graphicLabelMeasurements="graphicsDG_graphicLabelMeasurementsHandler(event)"
+												 graphicMouseOut="graphicsDG_graphicMouseOutHandler(event)"
+												 graphicMouseOver="graphicsDG_graphicMouseOverHandler(event)"
+												 graphicPaste="graphicsDG_graphicPasteHandler(event)"
+												 graphicZoomTo="graphicsDG_graphicZoomToHandler(event)"
+												 rollOut="graphicsDG_rollOutHandler(event)"
+												 
+												 graphicsLayer="{_graphicsLayer}"
+												 
+												 areaFormat="{cboArea.selectedItem}" 
+												 lengthFormat="{cboDistance.selectedItem}"
+												 numberFormatter="{numberFormatter}" >
+						<components:layout>
+							<s:VerticalLayout gap="2"
+											  horizontalAlign="justify"
+											  useVirtualLayout="false"/>
+						</components:layout>
+					</components:GraphicDataGroup>
+					
+				</s:Scroller>
+				
+				<!-- Graphic Reorder Components -->
+				<s:VGroup id="vGrpGraphicOrder" gap="5" width="25" height="100%" verticalAlign="middle"
+						  visible="{graphicsDG.dataProvider.length > 1}" 
+						  includeInLayout="{graphicsDG.dataProvider.length > 1}" >
+					
+					<s:Button id="graphicMoveToTopButton" width="25" height="25" toolTip="{_reorderGraphicsToTopTooltip}" 
+							  click="graphicMoveToTopButton_clickHandler(event)"
+							  enabled="{_holdingGraphics.length > 0}"
+							  skinClass="widgets.DrawAdvanced.skins.MoveToTopButtonSkin" />
+
+					<s:Button id="graphicMoveUpButton" width="25" height="25" toolTip="{_reorderGraphicsUpTooltip}"
+							  click="graphicMoveUpButton_clickHandler(event)"
+							  enabled="{_holdingGraphics.length > 0}"
+							  skinClass="widgets.DrawAdvanced.skins.MoveUpButtonSkin" />
+
+					<s:Button id="graphicMoveDownButton" width="25" height="25" toolTip="{_reorderGraphicsDownTooltip}"
+							  click="graphicMoveDownButton_clickHandler(event)"
+							  enabled="{_holdingGraphics.length > 0}"
+							  skinClass="widgets.DrawAdvanced.skins.MoveDownButtonSkin" />
+					
+					<s:Button id="graphicMoveToBottomButton" width="25" height="25" toolTip="{_reorderGraphicsToBottomTooltip}"
+							  click="graphicMoveToBottomButton_clickHandler(event)"
+							  enabled="{_holdingGraphics.length > 0}"
+							  skinClass="widgets.DrawAdvanced.skins.MoveToBottomButtonSkin" />
+					
+				</s:VGroup>
+			
+			</s:HGroup>
+			
+		</s:Group>
+		
+	</viewer:WidgetTemplate>
+</viewer:BaseWidget>

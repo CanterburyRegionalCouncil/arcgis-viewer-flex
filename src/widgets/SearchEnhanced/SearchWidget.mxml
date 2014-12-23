@@ -1,0 +1,4297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY			: 	This widget is implements search tools for text and spatial queries.  It has listeners for for calls from other widgets.   
+
+SOURCE			: 	Parts of this widget are based on the code from the Search Widget developed by ESRI.
+
+DEVELOPED BY 	: 	Ryan Elley, ECan.
+
+CREATED			: 	12/06/2013
+DEPENDENCIES	: 
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan)	| 12/06/2013	| Initial Development based on version 2.5 Advanced Search Widget.   
+Ryan Elley (ECan)	| 18/07/2013	| Bug fix for cross-widget communication when not in debug mode.
+Ryan Elley (ECan)	| 17/08/2013	| Bug fix for selected record zoom extent not clearing properly when in new selection mode.
+									  Change so that if the map scale when zooming to results extent < zoom scale setting on the current layer, the zoom scale setting is used. 
+Ryan Elley (ECan)	| 27/08/2013	| Bug fix in layer exclusion code not being checked properly.
+Ryan Elley (ECan)	| 08/09/2013	| Bug fix in DateField use code not getting correct date format for use with queries.
+Ryan Elley (ECan)	| 20/03/2014	| Updates to work with Add Shapefile widget.
+									| Addition of query builder functionality widget.  Based on code from Mark Hoylund Selction Widget ver 1.5
+Ryan Elley (ECan)	| 07/06/2014	| Bug fix to Queued Search function to ensure all instances of variable in the query string are updated with the suggested value.
+-->
+
+<viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
+				   xmlns:fx=				"http://ns.adobe.com/mxml/2009" 
+				   xmlns:s=					"library://ns.adobe.com/flex/spark" 
+				   xmlns:mx=				"library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer=			"com.esri.viewer.*"
+				   xmlns:components=		"com.esri.viewer.components.*"
+				   xmlns:sc=				"widgets.SearchEnhanced.supportClasses.*"
+				   initialize=				"widgetInitializeHandler(event)" 
+				   widgetConfigLoaded=		"widgetConfigLoaded(event)" 
+				   xmlns:supportClasses=	"com.esri.ags.skins.supportClasses.*" >
+	
+	<fx:Style>
+		@namespace esri "http://www.esri.com/2008/ags";
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace viewer "com.esri.viewer.*";
+		
+		.exampleLabelStyle
+		{
+			fontSize: 10;
+			fontStyle: "italic";
+		}
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.AttachmentEvent;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.events.GraphicEvent;
+			import com.esri.ags.events.GraphicsLayerEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.events.ZoomEvent;
+			import com.esri.ags.geometry.Extent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.ArcGISDynamicMapServiceLayer;
+			import com.esri.ags.layers.ArcGISImageServiceLayer;
+			import com.esri.ags.layers.ArcGISTiledMapServiceLayer;
+			import com.esri.ags.layers.ArcIMSMapServiceLayer;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.layers.Layer;
+			import com.esri.ags.layers.supportClasses.AllDetails;
+			import com.esri.ags.layers.supportClasses.Field;
+			import com.esri.ags.layers.supportClasses.LayerDetails;
+			import com.esri.ags.layers.supportClasses.LayerInfo;
+			import com.esri.ags.portal.PopUpRenderer;
+			import com.esri.ags.portal.supportClasses.PopUpInfo;
+			import com.esri.ags.portal.supportClasses.PopUpMediaInfo;
+			import com.esri.ags.renderers.SimpleRenderer;
+			import com.esri.ags.skins.fieldClasses.DoubleField;
+			import com.esri.ags.skins.fieldClasses.IntegerField;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.symbols.SimpleFillSymbol;
+			import com.esri.ags.symbols.SimpleLineSymbol;
+			import com.esri.ags.symbols.SimpleMarkerSymbol;
+			import com.esri.ags.symbols.Symbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.supportClasses.AreasAndLengthsParameters;
+			import com.esri.ags.tasks.supportClasses.AreasAndLengthsResult;
+			import com.esri.ags.tasks.supportClasses.BufferParameters;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.components.FocusableImage;
+			
+			import mx.controls.Alert;
+			import mx.controls.DateField;
+			import mx.controls.textClasses.TextRange;
+			import mx.events.CloseEvent;
+			import mx.events.CollectionEvent;
+			import mx.events.CollectionEventKind;
+			import mx.events.EffectEvent;
+			import mx.events.FlexEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.collections.Sort;
+			import spark.collections.SortField;
+			import spark.components.FormItem;
+			import spark.components.TextInput;
+			import spark.components.supportClasses.ItemRenderer;
+			import spark.effects.animation.RepeatBehavior;
+			import spark.events.IndexChangeEvent;
+			
+			import widgets.SearchEnhanced.supportClasses.DrawnGraphicFeature;
+			import widgets.SearchEnhanced.supportClasses.PagingQueryTask;
+			import widgets.SearchEnhanced.supportClasses.ResultItem;
+			import widgets.SearchEnhanced.supportClasses.SearchLayer;
+			import widgets.supportClasses.SearchSuggestion;
+			import widgets.supportClasses.utils.GeometryUtil;
+			import widgets.supportClasses.utils.GraphicUtil;
+			import widgets.supportClasses.utils.MapUtil;
+			
+			
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+
+			// Selection method constants
+			private const SELECT_NEWSELECTION:String = "new";
+			private const SELECT_ADDTOSELECTION:String = "add";
+			private const SELECT_REMOVEFROMSELECTION:String = "remove";
+			private const SELECT_SELECTFROMSELECTION:String = "from";
+
+			private const LAYER_CLEARSELECTION:String = "SearchLayer_ClearSelection";
+			private const RESULTS_CLEARSELECTION:String = "Results_ClearSelection";
+
+			
+			// Icon location constants
+			private const ICON_URL:String = "assets/images/";
+			private const WIDGET_ICON_URL:String = "widgets/SearchEnhanced/assets/images/";
+
+			
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+
+			// Search Variables
+			[Bindable]
+			private var _layerCache:ArrayCollection = new ArrayCollection();
+			private var _selectedLayerIndex:int = 0;
+			private var _excludedLayers:XMLList;
+			private var _queuedSearches:ArrayCollection = new ArrayCollection();
+			private var _queuedSearchExtent:Extent;
+			private var _queuedSearchScale:Number = -1;
+			private var _loadingLayers:ArrayCollection = new ArrayCollection();
+			private var _loadingCount:int = 0;
+			
+			// Search by Expression Variables
+			[Bindable]
+			private var _showExpressions:Boolean;
+			private var _configExpressions:Array;
+			
+			// Search by Graphical Variables
+			[Bindable]
+			private var _layerInScale:Boolean = true;
+			[Bindable]
+			private var _layerInScaleMessage:String;
+			private var _pointSearchTolerance:Number = 6;
+			private var _finishDrawing:Boolean;
+			private var _selectedDrawingIcon:FocusableImage;
+			private var _selectedDrawingStatus:String;
+			private var _drawSymbol:Symbol;
+
+			// Drawing graphic selection variables
+			[Bindable]
+			private var _drawnGraphicsLayer:GraphicsLayer;
+			[Bindable]
+			private var _graphics:ArrayCollection = new ArrayCollection();
+			private var _areaLimit:Number = 12800000;
+			private var _lengthLimit:Number = 5000;
+			
+			// Query Builder Variables
+			[Bindable] 
+			private var _queryFields:Array = [];
+			[Bindable] 
+			private var _pagingQueryTask:PagingQueryTask = new PagingQueryTask;
+			
+			
+			// Debugging flag
+			private var _isdebug:Boolean;
+
+			// Default display symbols
+			private var _resultMarkerSymbol:Symbol;
+			private var _resultLineSymbol:Symbol;
+			private var _resultFillSymbol:Symbol;
+			
+			// Help file URL 
+			private var _helpLocation:String;
+
+			private var _attributeTableWidgetLabel:String;
+			private var _attributeTableWidgetID:int = -1;
+			
+			
+			// Layer Selection Labels
+			[Bindable]
+			private var _layerLabel:String;
+			[Bindable]
+			private var _selectionModeTooltip:String;
+			[Bindable]
+			private var _showSelectionTooltip:String;
+			[Bindable]
+			private var _zoomToSelectionTooltip:String;
+			
+			// Search By Expression Labels
+			[Bindable]
+			private var _expressionLabel:String;
+			
+			
+			// Search by Graphical Labels
+			[Bindable]
+			private var _pointLabel:String;
+			[Bindable]
+			private var _lineLabel:String;
+			[Bindable]
+			private var _freehandLineLabel:String;
+			[Bindable]
+			private var _polygonLabel:String;
+			[Bindable]
+			private var _freehandPolygonLabel:String;
+			[Bindable]
+			private var _rectangleLabel:String;
+			[Bindable]
+			private var _circleLabel:String;
+			[Bindable]
+			private var _clearLabel:String;
+			
+			// Query Builder Labels
+
+			[Bindable]
+			private var _executeSearchLabel:String;
+			
+			private var _overMaxScaleMsg:String;
+			
+			
+			// Widget titlebar label properties
+			private var _graphicalsearchLabel:String;
+			private var _drawingsearchLabel:String;
+			private var _textsearchLabel:String;
+			private var _querysearchLabel:String;
+			private var _resultsLabel:String;
+			private var _clearsearchLabel:String;
+			private var _helpLabel:String;
+
+			// Working Message Label
+			private var _workingLabel:String;
+			private var _noResultLabel:String;
+
+			// Renderer for infoowindow popup 
+			private var _popUpRenderer:PopUpRenderer = new PopUpRenderer();
+
+			
+			
+			/* WIDGET EVENT HANDLERS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the component is intialised.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FlexEvent]: </i>Event raised by the widget component when it is initialised.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function widgetInitializeHandler(event:FlexEvent):void
+			{
+				if (isPartOfPanel) // if widget is part of "left", "right" or "bottom" panel
+				{
+					this.percentWidth = this.percentHeight = 100;
+					wTemplate.percentWidth = wTemplate.percentHeight = 100;
+				}
+				else
+				{
+					wTemplate.width = wTemplate.minWidth = 430;
+					wTemplate.height = wTemplate.minHeight = 455;
+				}
+			}
+
+			/**
+			 * Called when the widget config has loaded.  Startes the widget functionality initialisation.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised by the widget when its config file has been loaded.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function widgetConfigLoaded(event:Event):void
+			{
+				if (configXML)
+				{
+					// Set the debug flag
+					_isdebug = configXML.debug[0] == "true";
+					
+					// Set up the geometry service for simplifying and buffering search geometry
+					if (GeometryServiceSingleton.instance.url) // using GeometryServiceSingleton
+					{
+						geometryService.url 		= GeometryServiceSingleton.instance.url;
+						geometryService.token 		= GeometryServiceSingleton.instance.token;
+						geometryService.proxyURL 	= GeometryServiceSingleton.instance.proxyURL;
+					}
+					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
+					{
+						geometryService.url 		= configXML.geometryservice.url;
+					}
+					
+					
+					
+					// Selection mode ---------------------------------------
+					
+					// Check for default selection mode
+					var selectionMode:String = configXML.initialselectionmode[0];
+					switch(selectionMode)
+					{
+						case "add":
+						{
+							// Set to add selection mode
+							cboSelectionMode.selectedIndex = 1;
+							break;
+						}
+							
+						case "subtract":
+						{
+							// Set to subtract selection mode
+							cboSelectionMode.selectedIndex = 2;
+							break;
+						}
+							
+						default: 
+						{
+							// Set to new selection mode
+							cboSelectionMode.selectedIndex = 0;
+						}
+					}
+					
+					// Set Autoshow Results Mode
+					var autoshowresults:String = configXML.autoshowresults[0];
+					if (autoshowresults == "false")
+					{
+						showSelectionResults.selected = false;
+					}
+
+					// Get the list of any excluded layers
+					if (configXML.excludedlayers)
+					{
+						_excludedLayers = configXML.excludedlayers.layer;
+					}
+					
+					// Load the layers
+					if ((configXML.layers && configXML.layers.@allowOthers == "true") || configXML.layers == null)
+					{
+						// Load the current layers in the map
+						var layers:ArrayCollection = this.map.layers as ArrayCollection;
+						for each(var layer:Layer in layers)
+						{
+							generateLayerCache(layer);	
+						}
+					}
+					
+					// Load layers from the xml config
+					if (configXML.layers)
+					{
+						var layersXML:XMLList = configXML.layers.layer; 
+						for each (var layerXML:XML in layersXML)
+						{
+							var loadLayer:Boolean = true;
+							
+							// Check if the cache already contains a layer with the url in the xml object
+							var layerUrl:String = layerXML.url[0].toString();
+							
+							// Check if layer details are already in cache
+							loadLayer = !checkforLayerInCache(layerUrl);
+							
+							// Check layer alias urls (if any)
+							if (loadLayer)
+							{
+								for each (var aliasXML:XML in layerXML.alias)
+								{
+									layerUrl = String(aliasXML.@url);
+									loadLayer = !checkforLayerInCache(layerUrl);
+									if (!loadLayer)
+										break;
+								}
+							}
+							
+							if (loadLayer)
+							{
+								generateLayerCacheFromXML(layerXML);
+							}
+						}
+					}
+					
+					// Set the default search layer
+					cboLayer.selectedIndex = 0;
+					updateExpressionSettings();
+					updateFieldListSettings();
+					updateSelectByLocationStatus();
+					
+					// Layer scale message
+					_overMaxScaleMsg = configXML.labels.overMaxScaleMsg || "You must zoom to 1:[value] before you can select features in this layer.";
+					updateLayerInScaleMessage();
+					
+					// Set up the display marker symbol for point features - if picture marker listed use this otherwise use a simple marker
+					var resultMarkerSymbolXOffset:Number;
+					var resultMarkerSymbolYOffset:Number;
+					
+					if (configXML.symbols.picturemarkersymbol[0])
+					{
+						const resultMarkerSymbolURL:String = configXML.symbols.picturemarkersymbol.@url || widgetIcon;
+						const resultMarkerSymbolHeight:Number = (configXML.symbols.picturemarkersymbol.@height != null) ? configXML.symbols.picturemarkersymbol.@height : 30;
+						const resultMarkerSymbolWidth:Number = (configXML.symbols.picturemarkersymbol.@width != null) ? configXML.symbols.picturemarkersymbol.@width : 30;
+						resultMarkerSymbolXOffset = (configXML.symbols.picturemarkersymbol.@xoffset != null) ? configXML.symbols.picturemarkersymbol.@xoffset : 0;
+						resultMarkerSymbolYOffset = (configXML.symbols.picturemarkersymbol.@yoffset != null) ? configXML.symbols.picturemarkersymbol.@yoffset : 0;
+						_resultMarkerSymbol = new PictureMarkerSymbol(resultMarkerSymbolURL, resultMarkerSymbolWidth, resultMarkerSymbolHeight, resultMarkerSymbolXOffset, resultMarkerSymbolYOffset);
+					}
+					else
+					{
+						const resultMarkerSymbolStyle:String = configXML.symbols.simplemarkersymbol.@style || SimpleMarkerSymbol.STYLE_SQUARE;
+						const resultMarkerSymbolSize:Number = configXML.symbols.simplemarkersymbol.@size || 15;
+						const resultMarkerSymbolColor:uint = configXML.symbols.simplemarkersymbol.@color || 0xFF0000;
+						const resultMarkerSymbolAlpha:Number = configXML.symbols.simplemarkersymbol.@alpha || 0.8;
+						resultMarkerSymbolXOffset = (configXML.symbols.simplemarkersymbol.@xoffset != null) ? configXML.symbols.simplemarkersymbol.@xoffset : 0;
+						resultMarkerSymbolYOffset = (configXML.symbols.simplemarkersymbol.@yoffset != null) ? configXML.symbols.simplemarkersymbol.@yoffset : 0;
+						
+						const resultMarkerSymbolOutlineStyle:String = configXML.symbols.simplemarkersymbol.outline.@style || SimpleLineSymbol.STYLE_SOLID;
+						const resultMarkerSymbolOutlineColor:uint = configXML.symbols.simplemarkersymbol.outline.@color || 0xFF0000;
+						const resultMarkerSymbolOutlineAlpha:Number = configXML.symbols.simplemarkersymbol.outline.@alpha || 1;
+						const resultMarkerSymbolOutlineWidth:Number = configXML.symbols.simplemarkersymbol.outline.@width || 2;
+						
+						var resultMarkerOutline:SimpleLineSymbol = new SimpleLineSymbol(resultMarkerSymbolOutlineStyle, resultMarkerSymbolOutlineColor,
+							resultMarkerSymbolOutlineAlpha, resultMarkerSymbolOutlineWidth);
+						_resultMarkerSymbol = new SimpleMarkerSymbol(resultMarkerSymbolStyle, resultMarkerSymbolSize, resultMarkerSymbolColor, 
+							resultMarkerSymbolAlpha, resultMarkerSymbolXOffset, resultMarkerSymbolYOffset,0,resultMarkerOutline);
+					}
+					
+					const resultLineSymbolColor:uint = configXML.symbols.simplelinesymbol.@color || 0xFF0000;
+					const resultLineSymbolAlpha:Number = (configXML.symbols.simplelinesymbol.@alpha[0] != null) ? configXML.symbols.simplelinesymbol.@alpha : 0.8;
+					const resultLineSymbolWidth:Number = (configXML.symbols.simplelinesymbol.@width[0] != null) ? configXML.symbols.simplelinesymbol.@width : 2;
+					_resultLineSymbol = new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, resultLineSymbolColor, resultLineSymbolAlpha, resultLineSymbolWidth);
+					
+					const resultFillSymbolColor:uint = configXML.symbols.simplefillsymbol.@color || 0xFF0000;
+					const resultFillSymbolAlpha:Number = (configXML.symbols.simplefillsymbol.@alpha[0] != null) ? configXML.symbols.simplefillsymbol.@alpha : 0.5;
+					const resultFillSymbolOutlineColor:uint = configXML.symbols.simplefillsymbol.outline.@color || 0xFF0000;
+					const resultFillSymbolOutlineAlpha:Number = (configXML.symbols.simplefillsymbol.outline.@alpha[0] != null) ? configXML.symbols.simplefillsymbol.outline.@alpha : 0.8;
+					const resultFillSymbolOutlineWidth:Number = (configXML.symbols.simplefillsymbol.outline.@width[0] != null) ? configXML.symbols.simplefillsymbol.outline.@width : 2;
+					_resultFillSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, resultFillSymbolColor, resultFillSymbolAlpha, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, resultFillSymbolOutlineColor, resultFillSymbolOutlineAlpha, resultFillSymbolOutlineWidth));
+					
+					// Initialise the search by drawn graphics
+					initDrawnGraphicsSearch();
+					
+					// Layer Labels
+					_layerLabel 					= configXML.labels.layerlabel[0] || getDefaultString("layerLabel");
+					_selectionModeTooltip 			= configXML.labels.selectionmodetooltip[0] || "Click to change the selection method";
+					_zoomToSelectionTooltip			= configXML.labels.zoomToselectiontooltip[0] || "Automatically zoom to results on selection change";
+					_showSelectionTooltip			= configXML.labels.showselectiontooltip[0] || "Automatically display results on selection change";
+					
+					// Search by Graphical Labels
+					_pointLabel 					= configXML.labels.pointlabel || getDefaultString("drawPointLabel");
+					_lineLabel 						= configXML.labels.linelabel || getDefaultString("drawLineLabel");
+					_freehandLineLabel 				= configXML.labels.freehandlinelabel || getDefaultString("drawFreehandLineLabel");
+					_polygonLabel 					= configXML.labels.polygonlabel || getDefaultString("drawPolygonLabel");
+					_freehandPolygonLabel 			= configXML.labels.freehandpolygonlabel || getDefaultString("drawFreehandPolygonLabel");
+					_rectangleLabel 				= configXML.labels.rectanglelabel || getDefaultString("drawRectangleLabel");
+					_circleLabel 					= configXML.labels.circlelabel || getDefaultString("drawCircleLabel");
+					_clearLabel 					= configXML.labels.clearlabel || getDefaultString("clearLabel");
+					
+					// Other Labels
+					_executeSearchLabel				= configXML.labels.executesearchlabel || getDefaultString("searchSubmitLabel");
+					
+					// Widget Titlebar Labels
+					_graphicalsearchLabel			= configXML.labels.graphicalsearchlabel[0] || getDefaultString("graphicalTitleBarTooltip");
+					_drawingsearchLabel				= configXML.labels.drawingsearchlabel[0] || "Search using drawn graphics";
+					_textsearchLabel				= configXML.labels.textsearchlabel[0] || getDefaultString("textTitleBarTooltip");
+					_querysearchLabel				= configXML.labels.querysearchlabel[0] || "Search by query expression";
+					_resultsLabel					= configXML.labels.resultslabel[0] || getDefaultString("resultsLabel");
+					_clearsearchLabel				= configXML.labels.clearsearchlabel[0] || "Clear selected features";
+					_helpLabel						= configXML.labels.helplabel[0] || "Help";
+					
+					// Working Message labels
+					_workingLabel					= configXML.labels.loadinglabel || getDefaultString("loadingLabel");
+					_noResultLabel 					= configXML.labels.noresultlabel || getDefaultString("noFeatures");
+					
+					// Configure Titlebar Buttons
+
+					// Add Search by location item
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_searchgraphical.png", _graphicalsearchLabel, showStateGraphicalInput);
+					
+					// Add Search by expression item
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_searchtext.png", _textsearchLabel, showStateTextInput);
+					
+					// Add Search by query item
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_searchquery.png", _querysearchLabel, showStateQueryInput);
+
+					// Add Search by expression item
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_searchdrawing.png", _drawingsearchLabel, showStateDrawingGraphicInput);
+					
+					// Add show reults item
+					wTemplate.addTitlebarButton(WIDGET_ICON_URL + "i_searchresults.png", _resultsLabel, showStateResultsList);
+					
+					// Add clear selection item
+					wTemplate.addTitlebarButton(ICON_URL + "i_clear.png", _clearsearchLabel, clearSelection, false);
+
+					// Add the show attribute table item if configured
+					if (configXML.includeAttributeTable == "true" && configXML.includeAttributeTable[0].@attributetablewidget)
+					{
+						_attributeTableWidgetLabel = configXML.includeAttributeTable[0].@attributetablewidget;
+						
+						// Add clear selection item
+						wTemplate.addTitlebarButton(ICON_URL + "i_table.png", "Show Datagrid", showDataGrid, false);
+					}
+					
+					// Set the initial view stae of the widget
+					var view:String = configXML.initialview[0];
+					switch(view)
+					{
+						case "graphical":
+						{
+							showStateGraphicalInput();
+							break;
+						}
+							
+						case "drawings":
+						{
+							showStateDrawingGraphicInput();
+							break;
+						}
+							
+						case "query":
+						{
+							showStateQueryInput();
+							break;
+						}
+
+						default:
+						{
+							showStateTextInput();
+							break;
+						}
+					}
+					
+					// Add show help item
+					_helpLocation = configXML.helplocationurl;
+					if (_helpLocation != "")
+					{
+						wTemplate.addTitlebarButton(ICON_URL + "i_help.png", _helpLabel, showHelp, false);
+					}
+					
+				}
+				
+				fade.targets = [ graphicalInput, textInput, queryInput, drawingGraphicInput, resultsList ];
+				wTemplate.visible = true;
+
+				// Add listeners for layer changes;
+				if (map)
+				{
+					map.addEventListener(MapEvent.LAYER_ADD, onLayerAdd, false, 0, true);
+					map.addEventListener(MapEvent.LAYER_REMOVE, onLayerRemove, false, 0, true);
+					map.addEventListener(MapEvent.LAYER_REMOVE_ALL, onLayerRemoveAll, false, 0, true);
+				
+					/* 
+					Add a listener for map scale changes to disable/enable the 	select by location tools if the current map scale is outside
+					valid minScale of the current selection layer.
+					*/
+					map.addEventListener(ZoomEvent.ZOOM_END, onZoomChangeHandler, false, 0, true);
+				}
+				
+				// Add listeners for the selection layer changes
+				AppEvent.addListener(SearchLayer.RESULT_LAYER_HIDDEN, resultsLayer_HiddenHandler);
+				AppEvent.addListener(SearchLayer.RESULT_LAYER_CLEARED, resultsLayer_ClearedHandler);
+				AppEvent.addListener(SearchLayer.RESULT_LAYER_UPDATED, resultsLayer_UpdatedHandler);
+				AppEvent.addListener(SearchLayer.QUERY_NORESULT, resultsLayer_NoResultHandler);
+				AppEvent.addListener(SearchLayer.QUERY_FAULT, resultsLayer_QueryFaultHandler);
+				AppEvent.addListener(SearchLayer.ZOOM_TO_RESULTS, resultsLayer_ZoomToSelectionHandler);
+				AppEvent.addListener(SearchLayer.CONVERT_RESULTS_TO_GRAPHICS, resultsLayer_ConvertToGraphicsHandler);
+				AppEvent.addListener(RESULTS_CLEARSELECTION, results_ClearSelectionHandler);
+				AppEvent.addListener(LAYER_CLEARSELECTION, resultsLayer_ClearSelectionHandler);
+				
+				AppEvent.addListener(SearchLayer.RECORD_APPLY_HIGHLIGHT, resultsLayer_ApplyRecordHighlightHandler);
+				AppEvent.addListener(SearchLayer.RECORD_REMOVE_HIGHLIGHT, resultsLayer_RemoveRecordHighlightHandler);
+				AppEvent.addListener(SearchLayer.RECORD_DOUBLECLICK, resultsLayer_RecordDoubleClickHandler);
+ 
+				// Add listeners for the queued searches collection
+				_queuedSearches.addEventListener(CollectionEvent.COLLECTION_CHANGE, queuedSearch_CollectionChangeHandler);
+				
+				//-----------------------------------------------------
+				// Check for a queued search from a widget such as the header controller search
+				//-----------------------------------------------------
+				AppEvent.addListener(AppEvent.DATA_SENT, runQueuedSearch);
+				AppEvent.addListener(AppEvent.DATA_NEW_PUBLISHED, runQueuedSearch);
+				AppEvent.dispatch(AppEvent.DATA_FETCH, { key: SearchSuggestion.SEARCH_RUN_QUEUED  });
+			}
+
+			/**
+			 * Called when the widget is closed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised by the widget when it is closed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function widgetClosedHandler(event:Event):void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+
+				// Deselect any selected graphic highlights
+				graphicsList.clearSelection();
+
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called when the widget is opened.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised by the widget when it is opened.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function widgetOpenedHandler(event:Event):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Called when the widget is minimised.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised by the widget when it is minimised.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function widgetMinimizedHandler(event:Event):void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Deselect any selected graphic highlights
+				graphicsList.clearSelection();
+
+				// Hide the info window
+				hideInfoWindow();
+			}
+
+			/**
+			 * Initialises the search by drawn graphics functionality 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function initDrawnGraphicsSearch():void
+			{
+				// Set up the drawn graphics layer used for converting to graphics
+				var drawnGraphicsLayerName:String = configXML.drawnGraphicsLayerName || "RedLiningGraphicsLayer";
+				var drawnGraphicsLayerAlias:String = configXML.drawnGraphicsLayerName.@alias || "Drawn Graphics";
+				_drawnGraphicsLayer = MapUtil.checkGraphicLayer(drawnGraphicsLayerName, map, drawnGraphicsLayerAlias);
+				
+				// Add listeners for handling graphics being added oor removed to the graphics layer
+				_drawnGraphicsLayer.addEventListener(GraphicEvent.GRAPHIC_ADD, graphicsLayer_addHandler);
+				_drawnGraphicsLayer.addEventListener(GraphicEvent.GRAPHIC_REMOVE, graphicsLayer_removeHandler);
+				_drawnGraphicsLayer.addEventListener(GraphicsLayerEvent.GRAPHICS_CLEAR, graphicsLayer_clearHandler);
+				
+				// Initialise the drawing graphics list
+				updateDrawingGraphicList();
+			}
+			
+			/**
+			 * Shows the Data Grid  
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function showDataGrid():void
+			{
+				// Force the workspace widget to be loaded
+				var widgetList:Array = configData.widgets;
+				for (var w:int = 0; w < widgetList.length; w++)
+				{
+					if (widgetList[w].label == _attributeTableWidgetLabel)
+					{
+						_attributeTableWidgetID = w;
+						AppEvent.dispatch(AppEvent.WIDGET_RUN, _attributeTableWidgetID);
+						break;
+					}
+				}
+			}
+			
+			
+			
+			/* WIDGET STATE UI
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Change the widget to the Graphical Input Screen state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showStateGraphicalInput():void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+
+				// Change the state				
+				this.currentState = "graphicalInput";
+				wTemplate.selectedTitlebarButtonIndex = 0;				
+			}
+
+			/**
+			 * Change the widget to the Text Input Screen state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showStateTextInput():void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Change the state				
+				this.currentState = "textInput";
+				wTemplate.selectedTitlebarButtonIndex = 1;				
+			}
+			
+			/**
+			 * Change the widget to the Query Input Screen state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showStateQueryInput():void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Update the field list
+				updateFieldListSettings();
+				
+				// Change the state				
+				this.currentState = "queryInput";
+				wTemplate.selectedTitlebarButtonIndex = 2;		
+			}
+
+			/**
+			 * Change the widget to the Drawing Graphic Input Screen state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showStateDrawingGraphicInput():void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Change the state				
+				this.currentState = "drawingGraphicInput";
+				wTemplate.selectedTitlebarButtonIndex = 3;				
+			}
+			
+			/**
+			 * Change the widget to the Results List state.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showStateResultsList():void
+			{
+				// Deactivate any working draw tools
+				deactivateDrawTool();
+				
+				// Change the state				
+				this.currentState = "resultsList";
+				wTemplate.selectedTitlebarButtonIndex = 4;		
+			}
+			
+			
+			
+			/* MAP HANDLER EVENTS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Registers the new map layer in the layer cache.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when a layer is added.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function onLayerAdd(event:MapEvent):void
+			{
+				var layer:Layer = event.layer;
+				if (!(layer is GraphicsLayer) || layer is FeatureLayer)
+				{
+					generateLayerCache(layer);
+				}
+			}
+			
+			/**
+			 * Removes the layer cache object(s) associated with removed layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when a layer is removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function onLayerRemove(event:MapEvent):void
+			{
+				// Find the layer in the cache
+				var layer:Layer = event.layer;
+				if (!(layer is GraphicsLayer) || layer is FeatureLayer)
+				{
+					var url:String;
+					
+					if (layer is ArcGISDynamicMapServiceLayer)
+					{
+						var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+						url = dLayer.url;
+					}
+					
+					if (layer is ArcGISTiledMapServiceLayer)
+					{
+						var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+						url = tLayer.url;
+					}
+					
+					if (layer is FeatureLayer)
+					{
+						var fLayer:FeatureLayer = FeatureLayer(layer);
+						url = fLayer.url;
+					}
+					
+					if (layer is ArcGISImageServiceLayer)
+					{
+						var iLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+						url = iLayer.url;
+					}
+					
+					// Remove the layer details
+					removeCacheDetails(url);
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+			}
+			
+			/**
+			 * Clears the all the layer cache objects.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MapEvent]: </i>Event raised by the map when all the layers are removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function onLayerRemoveAll(event:MapEvent):void
+			{
+				// Clear the cache
+				_layerCache.removeAll();
+				
+				// Refresh the layer list
+				populateLayerList();
+			}
+			
+			/**
+			 * Called when the map scale changes 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [ZoomEvent]: </i>Event raised by the map when all the layers are removed.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function onZoomChangeHandler(event:ZoomEvent):void
+			{
+				updateSelectByLocationStatus();
+			}
+
+			/**
+			 * Updates the layerInScale flag used to enable/disable the search by graphical functions
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateSelectByLocationStatus():void
+			{
+				var inScale:Boolean = true;
+				
+				// Confirm there is a selected layer
+				if (cboLayer.selectedItem)
+				{
+					var searchLayer:SearchLayer = cboLayer.selectedItem;
+					if (searchLayer.minscale != 0 && map.scale > searchLayer.minscale)
+					{
+						inScale = false;
+					}
+				}
+				else
+				{
+					inScale = false;
+				}
+				
+				// Check for a change in state
+				if (_layerInScale != inScale)
+				{
+					if (_layerInScale)
+					{
+						// Draw tools may be currently in use - disable and clear filter 
+						deactivateDrawTool();
+					}
+					
+					// Update the status
+					_layerInScale = inScale;
+				}
+			}
+			
+			/**
+			 * Updates the message that is displayed when the map is outside the srachable scale of the
+			 * current selected layer. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateLayerInScaleMessage():void
+			{
+				// Update the layerInScaleMessage
+				var searchLayer:SearchLayer = cboLayer.selectedItem;
+				if (searchLayer)
+				{
+					_layerInScaleMessage = _overMaxScaleMsg.replace("[value]",searchLayer.minscale.toString());
+				}	
+			}
+			
+			/**
+			 * Updates the cache of layer settings related to the specified layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layer [Layer]: </i>Layer to be used to generate the cache object.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function generateLayerCache(layer:Layer):void
+			{
+				if (layer && layer.name.indexOf("hiddenLayer_") == -1 && layer.name.indexOf(SearchLayer.RESULT_LAYER_LABEL) == -1)
+				{
+					// Check if the layer has loaded
+					if (!layer.loaded)
+					{
+						// Add a flag to the loading array so any queued calls get delayed until it has loaded
+						if (_loadingLayers.getItemIndex(layer) == -1)
+						{
+							_loadingLayers.addItem(layer);
+						}
+						
+						// Add listener for when it has loaded
+						layer.addEventListener(LayerEvent.LOAD, 
+							function (event:LayerEvent):void { 
+								generateLayerCache(event.layer); 
+							});
+						
+						// Add listener for load failure
+						layer.addEventListener(LayerEvent.LOAD_ERROR, 
+							function (event:LayerEvent):void {
+								var layer:Layer = event.layer;
+								var loadingIndex:int = _loadingLayers.getItemIndex(layer);
+								if (loadingIndex > -1)
+								{
+									_loadingLayers.removeItemAt(loadingIndex);
+								}
+							});
+
+						return;
+					}
+					else
+					{
+						// Remove flag from the loading array so any queued calls can be made
+						var loadingIndex:int = _loadingLayers.getItemIndex(layer);
+						if (loadingIndex > -1)
+						{
+							_loadingLayers.removeItemAt(loadingIndex);
+						}
+					}
+					
+					var layerUrl:String;
+					var layerXML:XML;
+					
+					if (layer is ArcGISDynamicMapServiceLayer)
+					{
+						var dLayer:ArcGISDynamicMapServiceLayer = ArcGISDynamicMapServiceLayer(layer);
+						
+						// Check that the layer is queryable
+						if (dLayer.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = dLayer.url;
+							
+							// Log state
+							debug('generateLayerCache [ArcGISDynamicMapServiceLayer] - ' + layerUrl);
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl) && !checkforLayerInExcluded(layerUrl))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = getLayerXML(layerUrl);
+								
+								// Populate the layer objects for the map service
+								dLayer.getAllDetails(new AsyncResponder(populateDynamicDetails, detailsFault, { layer:dLayer, xml:layerXML }));
+							}
+						} 
+					}
+					
+					if (layer is ArcGISTiledMapServiceLayer)
+					{
+						var tLayer:ArcGISTiledMapServiceLayer = ArcGISTiledMapServiceLayer(layer);
+						
+						// Check that the layer is queryable
+						if (tLayer.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = tLayer.url;
+							
+							// Log state
+							debug('generateLayerCache [ArcGISTiledMapServiceLayer] - ' + layerUrl);
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl) && !checkforLayerInExcluded(layerUrl))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = getLayerXML(layerUrl);
+								
+								// Populate the layer objects for the map service
+								tLayer.getAllDetails(new AsyncResponder(populateTiledDetails, detailsFault, { layer:tLayer, xml:layerXML }));
+							}
+						}
+					}
+					
+					if (layer is FeatureLayer)
+					{
+						var fLayer:FeatureLayer = FeatureLayer(layer);
+						
+						// Check that the layer is queryable
+						if (fLayer.url &&
+							fLayer.layerDetails && 
+							fLayer.layerDetails.capabilities && 
+							fLayer.layerDetails.capabilities.indexOf("Query") > -1)
+						{
+							layerUrl = fLayer.url;
+							
+							// Log state
+							debug('generateLayerCache [FeatureLayer] - ' + layerUrl);
+							
+							// Check if layer details are already in cache
+							if (!checkforLayerInCache(layerUrl) && !checkforLayerInExcluded(layerUrl))
+							{
+								// Check for details in the config specific to these layers
+								layerXML = getLayerXML(layerUrl);
+								
+								// Populate the layer objects for the map service
+								populateFeatureDetails(fLayer, layerXML);
+							}
+						}
+					}
+					
+					if (layer is ArcGISImageServiceLayer)
+					{
+						/*
+						var iLayer:ArcGISImageServiceLayer = ArcGISImageServiceLayer(layer);
+						layerUrl = iLayer.url;
+						
+						// Check if layer details are already in cache
+						if (!checkforLayerInCache(layerUrl,'ArcGISImageServiceLayer'))
+						{
+						// Check for details in the config specific to these layers
+						layerXML = getLayerXML(layerUrl);
+						
+						// Populate the layer objects for the map service
+						populateImageServiceDetails(iLayer);
+						}
+						*/
+					}
+					
+				}
+				
+				// Handler for a fault returned from the get details action				
+				function detailsFault(error:Object, layer:Object = null):void
+				{
+					Alert.show(error.toString());
+				}
+				
+				// Generates the settings object for a dynamic layer				
+				function populateDynamicDetails(details:AllDetails, token:Object = null):void
+				{
+					// Log state
+					debug('populateDynamicDetails [start]');
+					
+					var layer:ArcGISDynamicMapServiceLayer = token.layer as ArcGISDynamicMapServiceLayer;
+					var info:LayerInfo;
+					var detail:LayerDetails;
+					
+					// Iterate through the layer infos for each layer in the dynamic map service
+					for (var i:int = 0; i < layer.layerInfos.length; i++)
+					{
+						info = layer.layerInfos[i];
+						detail = details.layersDetails[i];
+						
+						// Check if this is a layer group or an image layer
+						if (detail.type == 'Feature Layer')
+						{
+							var lyrURL:String = layer.url + "/" + info.layerId;
+							
+							// Check if layer should be excluded)
+							if (!checkforLayerInExcluded(lyrURL))
+							{
+								var lyrLabel:String = info.name;
+								var lyrToken:String = layer.token;
+	
+								var resultSymbol:Symbol;
+								switch(detail.geometryType)
+								{
+									case Geometry.EXTENT:
+									case Geometry.POLYGON:
+										resultSymbol = _resultFillSymbol;
+										break;
+										
+									case Geometry.MAPPOINT:
+										resultSymbol = _resultMarkerSymbol;
+										break;
+									
+									case Geometry.POLYLINE:
+										resultSymbol = _resultLineSymbol;
+										break;
+								}
+								
+								var proxyURL:String;
+								var useAMF:Boolean;
+								if (layer.proxyURL)
+								{
+									proxyURL = layer.proxyURL; 
+								}
+								
+								// Log state
+								debug('populateDynamicDetails [getLayerXML] - ' + lyrURL);
+								
+								var layerXML:XML = getLayerXML(lyrURL);
+								var layerObj:SearchLayer;
+								if (layerXML) 
+								{
+									// Use the xml to set the layer details	
+									var lyrFields:XMLList = layerXML.fields;
+									var lyrTitleField:String = layerXML.titlefield;
+									var lyrExpressions:XMLList = layerXML.expressions;
+									var lyrLinks:XMLList = layerXML.links.layerLink;
+									var lyrZoomUseExtent:Boolean = layerXML.zoomscale[0] && layerXML.zoomscale[0].@useextent == "true";
+									var lyrZoomScale:Number = Number(layerXML.zoomscale) || 5000;
+									var lyrMinScale:Number = Number(layerXML.minscale) || 50000;
+									useAMF = layerXML.useamf[0] && layerXML.useamf == "true";
+									
+									// Create the searchLayer configuration object
+									layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, lyrFields,
+										lyrTitleField, lyrExpressions, lyrLinks, lyrZoomUseExtent, lyrZoomScale, 
+										lyrMinScale, useAMF, resultSymbol, map);
+								}
+								else
+								{
+									useAMF = true;
+									
+									// Use the default layer settings
+									layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, null, null, null,
+										null, true, 5000, 50000, useAMF, resultSymbol, map);
+								}
+								
+								// Log state
+								debug('populateDynamicDetails [checkLayerName] - ' + lyrURL);
+								
+								// Check for existing layers with this name
+								if (checkLayerName(lyrLabel))
+								{
+									var cnt:int = 1;
+									
+									while (checkLayerName(lyrLabel + " [" + cnt.toString() + "]"))
+									{
+										cnt ++;
+									}
+									lyrLabel = lyrLabel + " [" + cnt.toString() + "]";
+								} 						
+								
+								// Log state
+								debug('populateDynamicDetails [addToLayerCache] - ' + lyrURL);
+								
+								// Add the layer details to the cache
+								_layerCache.addItem(layerObj);
+							}
+						}
+					}
+					
+					// Refresh the layer list
+					populateLayerList();
+				}
+				
+				// Generates the settings object for a tiled layer				
+				function populateTiledDetails(details:AllDetails, token:Object = null):void
+				{
+					// Log state
+					debug('populateTiledDetails [start]');
+					
+					var layer:ArcGISTiledMapServiceLayer = token.layer as ArcGISTiledMapServiceLayer;
+					var info:LayerInfo;
+					var detail:LayerDetails;
+					
+					// Iterate through the layer infos for each layer in the dynamic map service
+					for (var i:int = 0; i < layer.layerInfos.length; i++)
+					{
+						info = layer.layerInfos[i];
+						detail = details.layersDetails[i];
+						
+						// Check if this is a layer group
+						if (detail.type == 'Feature Layer')
+						{
+							var lyrURL:String = layer.url + "/" + info.layerId;
+							
+							// Check if layer should be excluded)
+							if (!checkforLayerInExcluded(lyrURL))
+							{
+								var lyrLabel:String = info.name;
+								var lyrToken:String = layer.token;
+								
+								var resultSymbol:Symbol;
+								switch(detail.geometryType)
+								{
+									case Geometry.EXTENT:
+									case Geometry.POLYGON:
+										resultSymbol = _resultFillSymbol;
+										break;
+									
+									case Geometry.MAPPOINT:
+										resultSymbol = _resultMarkerSymbol;
+										break;
+									
+									case Geometry.POLYLINE:
+										resultSymbol = _resultLineSymbol;
+										break;
+								}
+								
+								var proxyURL:String;
+								var useAMF:Boolean;
+								if (layer.proxyURL)
+								{
+									proxyURL = layer.proxyURL; 
+								}
+								
+								// Log state
+								debug('populateTiledDetails [getLayerXML] - ' + lyrURL);
+								
+								var layerXML:XML = getLayerXML(lyrURL);
+								var layerObj:SearchLayer;
+								if (layerXML) 
+								{
+									// Use the xml to set the layer details	
+									var lyrFields:XMLList = layerXML.fields;
+									var lyrTitleField:String = layerXML.titlefield;
+									var lyrExpressions:XMLList = layerXML.expressions;
+									var lyrLinks:XMLList = layerXML.links.layerLink;
+									var lyrZoomUseExtent:Boolean = layerXML.zoomscale[0] && layerXML.zoomscale[0].@useextent == "true";
+									var lyrZoomScale:Number = Number(layerXML.zoomscale) || 5000;
+									var lyrMinScale:Number = Number(layerXML.minscale) || 50000;
+									useAMF = layerXML.useamf[0] && layerXML.useamf == "true";
+									
+									// Create the searchLayer configuration object
+									layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, lyrFields,
+										lyrTitleField, lyrExpressions, lyrLinks, lyrZoomUseExtent, lyrZoomScale, 
+										lyrMinScale, useAMF, resultSymbol, map);
+								}
+								else
+								{
+									useAMF = true;
+									
+									// Use the default layer settings
+									layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, null, null, null,
+										null, true, 5000, 50000, useAMF, resultSymbol, map);
+								}
+								
+								// Log state
+								debug('populateTiledDetails [checkLayerName] - ' + lyrURL);
+								
+								// Check for existing layers with this name
+								if (checkLayerName(lyrLabel))
+								{
+									var cnt:int = 1;
+									
+									while (checkLayerName(lyrLabel + " [" + cnt.toString() + "]"))
+									{
+										cnt ++;
+									}
+									lyrLabel = lyrLabel + " [" + cnt.toString() + "]";
+								} 						
+								
+								// Log state
+								debug('populateTiledDetails [addToLayerCache] - ' + lyrURL);
+								
+								// Add the layer details to the cache
+								_layerCache.addItem(layerObj);
+							}
+						}
+						
+						// Refresh the layer list
+						populateLayerList();
+					}
+				}
+				
+				// Generates the settings object for a feature layer				
+				function populateFeatureDetails(fLayer:FeatureLayer, token:Object = null):void
+				{
+					// Log state
+					debug('populateFeatureDetails [start]');
+				
+					var lyrURL:String = fLayer.url;
+					
+					// Check if layer should be excluded)
+					if (!checkforLayerInExcluded(lyrURL))
+					{
+						var lyrLabel:String = fLayer.name;
+						var lyrToken:String = fLayer.token;
+						
+						var resultSymbol:Symbol;
+						switch(fLayer.layerDetails.geometryType)
+						{
+							case Geometry.EXTENT:
+							case Geometry.POLYGON:
+								resultSymbol = _resultFillSymbol;
+								break;
+							
+							case Geometry.MAPPOINT:
+								resultSymbol = _resultMarkerSymbol;
+								break;
+							
+							case Geometry.POLYLINE:
+								resultSymbol = _resultLineSymbol;
+								break;
+						}
+						
+						var proxyURL:String;
+						var useAMF:Boolean;
+						if (fLayer.proxyURL)
+						{
+							proxyURL = fLayer.proxyURL; 
+						}
+						
+						var layerXML:XML = getLayerXML(lyrURL);
+						var layerObj:SearchLayer;
+						if (layerXML) 
+						{
+							// Use the xml to set the layer details	
+							var lyrFields:XMLList = layerXML.fields;
+							var lyrTitleField:String = layerXML.titlefield;
+							var lyrExpressions:XMLList = layerXML.expressions;
+							var lyrLinks:XMLList = layerXML.links.layerLink;
+							var lyrZoomUseExtent:Boolean = layerXML.zoomscale[0] && layerXML.zoomscale[0].@useextent == "true";
+							var lyrZoomScale:Number = Number(layerXML.zoomscale) || 5000;
+							var lyrMinScale:Number = Number(layerXML.minscale) || 50000;
+							useAMF = layerXML.useamf[0] && layerXML.useamf == "true";
+							
+							// Create the searchLayer configuration object
+							layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, lyrFields,
+								lyrTitleField, lyrExpressions, lyrLinks, lyrZoomUseExtent, lyrZoomScale, 
+								lyrMinScale, useAMF, resultSymbol, map);
+						}
+						else
+						{
+							useAMF = true;
+							
+							// Use the default layer settings
+							layerObj = new SearchLayer(lyrURL, proxyURL, lyrToken, lyrLabel, null, null, null,
+								null, true, 5000, 50000, useAMF, resultSymbol, map);
+						}
+						
+						// Log state
+						debug('populateFeatureDetails [checkLayerName] - ' + lyrURL);
+						
+						// Check for existing layers with this name
+						if (checkLayerName(lyrLabel))
+						{
+							var cnt:int = 1;
+							
+							while (checkLayerName(lyrLabel + " [" + cnt.toString() + "]"))
+							{
+								cnt ++;
+							}
+							lyrLabel = lyrLabel + " [" + cnt.toString() + "]";
+						} 						
+						
+						// Log state
+						debug('populateFeaturedDetails [addToLayerCache] - ' + lyrURL);
+						
+						// Add the layer details to the cache
+						_layerCache.addItem(layerObj);
+						
+						// Refresh the layer list
+						populateLayerList();
+					}
+				}
+			}
+			
+			/**
+			 * Updates the cache of layer settings related to the specified layer from an XML object from the confige XML file.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerXML [XML]: </i>Layer defintion from the config XML serach layers list to be used to generate the cache object.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function generateLayerCacheFromXML(layerXML:XML):void
+			{
+				// Create a feature layer from the layer URL Details
+				var lyrURL:String 				= layerXML.url;
+				var lyrLabel:String 			= layerXML.name;
+				var lyrToken:String 			= layerXML.token;
+				var useAMF:Boolean	 			= layerXML.useamf[0] && layerXML.useamf == "true";
+				var useProxy:Boolean 			= layerXML.useproxy[0] && layerXML.useproxy == "true";
+				
+				var proxyURL:String;
+				
+				// Set the proxy use
+				if (useProxy && configData.proxyUrl)
+				{
+					proxyURL = configData.proxyUrl;
+				}
+				
+				// Generate a cache object for this item
+				var featureLayer:FeatureLayer 	= new FeatureLayer(lyrURL, proxyURL, lyrToken);
+				featureLayer.name 				= lyrLabel;
+				
+				generateLayerCache(featureLayer);	
+			}
+			
+			/**
+			 * Returns the layer XML record for the given url if a record exists.  Also checks the urlaliases if any exist
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerUrl [String]: </i>Url end point for the map layer to be searched.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function getLayerXML(layerUrl:String):XML
+			{
+				var result:XML;
+				if (configXML.layers)
+				{
+					// Check for the primary url
+					result = configXML.layers.layer.(url == layerUrl)[0];
+
+					if (!result)
+					{
+						// Check for urlaliases
+						var alias:XML  = configXML.layers.layer.alias.(@url == layerUrl)[0];
+						
+						if (alias) {
+							result = alias.parent();
+						}
+					}
+				}
+				
+				return result;
+			}
+			
+			/**
+			 * Check for a layer in the search layers cache that uses the given URL.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>url [String]: </i>Url end point for the map layer to be searched.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function checkforLayerInCache(url:String):Boolean
+			{
+				var found:Boolean = false;
+				for each (var layer:SearchLayer in _layerCache)
+				{
+					if (layer.checkAlias(url))
+					{
+						found = true;
+						break;
+					}
+				}
+				return found;
+			}
+			
+			/**
+			 * Check for a layer in the excluded layers that uses the given URL.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>url [String]: </i>Url end point for the map layer to be excluded.</li>
+			 * </ul>
+			 * </p>
+			 */ 
+			private function checkforLayerInExcluded(url:String):Boolean
+			{
+				var result:Boolean = false;
+				var included:Boolean = false;
+				var loweredurl:String = url.toLowerCase();
+				
+				if (_excludedLayers && _excludedLayers.length() > 0)
+				{
+					for (var i:int = 0; i < _excludedLayers.length(); i++) 
+					{
+						var layerXML:XML = _excludedLayers[i];
+						
+						// Check if this url 
+						var layerURL:String = String(layerXML.@url).toLowerCase();
+
+						if (loweredurl.indexOf(layerURL) > -1)
+						{
+							var excludeVal:String = layerXML.toString();
+							var ids:Array;
+							var id:String;
+							
+							// CHeck the exclude record type
+							if (layerXML.@type == "exclude")
+							{
+								// Check if all layers are to be excluded
+								if (excludeVal == "all")
+								{
+									result = true;
+									break;
+								}
+								else
+								{
+									ids = excludeVal.split(",");
+
+									// Check if this layer is in the list
+									for each(id in ids)
+									{
+										if (layerURL + "/" + id == loweredurl)
+										{
+											result = true;
+											break;
+										}
+									}
+									
+									if (result == true)
+									{
+										break;
+									}
+								}
+							}
+							else
+							{
+								// Set the included flag so that the code nows it doesn; need to continue checking the eluded layers list
+								included = true;
+								
+								// Ckeck if the layer is in the included list
+								if (excludeVal == "all")
+								{
+									// This is an allowable layer - n more action required
+									break;
+								}
+								else
+								{
+									result = true;
+									ids = excludeVal.split(",");
+									
+									// Check if this layer is in the list
+									for each(id in ids)
+									{
+										if (layerURL + "/" + id == loweredurl)
+										{
+											result = false;
+											break;
+										}
+									}
+									
+									if (result == false)
+									{
+										break;
+									}
+								}
+							}
+						}
+	
+						if ( result || included )
+						{
+							break;
+						}
+					}
+				}
+				
+				return result;
+			}
+			
+			/**
+			 * Removes the given map service details from the layer cache. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>url [String]: </i>Url end point for the map layer to be removed from the layer cache.</li>
+			 * </ul>
+			 * </p>
+			 */
+			private function removeCacheDetails(url:String):void
+			{
+				// Iterate through the each of the aach objects and check if it has the correct url and layer type
+				for (var i:int = _layerCache.length - 1; i > -1; i--)
+				{
+					var layer:Object = _layerCache.getItemAt(i);
+					if (layer.url == url)
+					{
+						_layerCache.removeItemAt(i);
+					}
+				}
+			}
+			
+			/**
+			 * Updates the list of layers shown in the layers dropdown list
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function populateLayerList():void
+			{
+				// Sort the list by name
+				arrayCollectionSort(_layerCache, "label", false);
+					
+				// Refresh the dropdown list
+				cboLayer.dataProvider = _layerCache;
+				if (_selectedLayerIndex < _layerCache.length)
+				{
+					cboLayer.selectedIndex = _selectedLayerIndex;	
+				}
+				else
+				{
+					cboLayer.selectedIndex = 0;					
+				}
+			}
+			
+			/**
+			 * Checks for an existing layer with this namwe.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layername [String]: </i>Name label set on the layer object.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function checkLayerName(layername:String):Boolean
+			{
+				var found:Boolean = false;
+				for each(var layer:SearchLayer in _layerCache)
+				{
+					if(layer.label == layername)
+					{
+						found = true;
+						break;
+					}
+				}
+				return found;
+			}
+			
+			
+			
+			/* GEOMETRY SERVICE HANDLER EVENTS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the geometry service simplify task returns a result.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [FaultEvent]: </i>Fault event retuend when there is a fault from returned from the geometry service.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function geometryService_faultHandler(event:FaultEvent):void
+			{
+				showMessage(event.fault.toString(), false);
+			}
+
+			/**
+			 * Called when the geometry service simplify task returns a result.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [GeometryServiceEvent]: </i>Result event from the simplify task of the geometry service.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function geometryService_simplifyCompleteHandler(event:GeometryServiceEvent):void
+			{
+				// Call the execute action
+				executeQuery(cboLayer.selectedItem, null, event.result[0] as Polygon, cboSelectionMode.selectedItem.selectionName);
+			}
+
+			
+			
+			/* SEARCH LAYER UI
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the user changes the selected item in the search layer drop down list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [IndexChangeEvent]: </i>Event returned by the dropdown list when the slected object changes.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function cboLayer_changeHandler(event:IndexChangeEvent):void
+			{
+				// Call the update expression settings function
+				updateExpressionSettings();
+				
+				// Call the update field list settings function
+				updateFieldListSettings()
+				
+				// Update the layerInScaleMessage
+				updateLayerInScaleMessage();
+				
+				// Call the update select by location status function
+				updateSelectByLocationStatus();
+
+				// Update the selected index
+				_selectedLayerIndex = event.newIndex;
+			}
+
+			/** 
+			 * Used to update the expression settings whenever the layer is changed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateExpressionSettings():void
+			{
+				// Clear current settings
+				cboExpressions.dataProvider = null;
+				cboExpressions.selectedIndex = -1;
+				
+				// Get the current layer settings
+				var layerObj:SearchLayer = cboLayer.selectedItem;
+				
+				// Get the expressions (if any) for the current layer
+				if (layerObj && layerObj.expressions)
+				{
+					var exps:XMLList = layerObj.expressions.expression;
+					var lng:int = exps.length();
+					
+					if (lng > 0)
+					{
+						// Populate the search expressions
+						_configExpressions = [];
+						for (var i:int = 0; i < lng; i++)
+						{
+							var expPredictiveID:String = exps[i].@predictiveID;
+							var expLabel:String = exps[i].@label;
+							var expExpression:String = exps[i].@expressiontext;
+							var expParams:XMLList = exps[i].parameter;
+							
+							// Create the searchLayer configuration object
+							var searchExpression:Object =
+								{
+									predictiveID: expPredictiveID,
+									label: expLabel,
+									expression: expExpression,
+									parameters: expParams
+								};
+							
+							_configExpressions.push(searchExpression);
+						}
+						
+						if (!_showExpressions)
+							_showExpressions = true;
+					}
+					else
+					{
+						_configExpressions = [];
+						_showExpressions = false;
+					}
+					
+					// Set the expressions dropdown list
+					cboExpressions.dataProvider = new ArrayCollection(_configExpressions);
+					cboExpressions.selectedIndex = 0;
+					updateExpressionParameters();
+				} 
+				else 
+				{
+					// Hide the expressions and show the no expression message
+					cboExpressions.dataProvider = null;
+					_showExpressions = false;
+				}
+			}
+			
+			/** 
+			 * Called when the expression selection combo selected values are changed
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [IndexChangeEvent]: </i>Event returned by the dropdown list when the slected object changes.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function cboExpressions_changeHandler(event:IndexChangeEvent):void
+			{
+				// Set the expressions dropdown list
+				updateExpressionParameters();
+			}
+			
+			/** 
+			 * Updates the expression entry form details.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateExpressionParameters():void
+			{
+				// Clear existing form items
+				expressionParameters.removeAllElements();
+				
+				// Get the selected expression parameters
+				var expressionObj:Object = cboExpressions.selectedItem;
+				if (expressionObj)
+				{
+					var params:XMLList = expressionObj.parameters;
+					
+					// Add objects for each of the search expression parameters
+					for each (var param:XML in params)
+					{
+						// Get the paramter settings 
+						var inputType:String = String(param.@datatype);
+						var inputLabel:String = String(param.@label);
+						var exampleLabel:String = String(param.@example);
+						var tooltip:String = String(param.@tooltip);
+						var inputId:String = String(param.@id);
+						
+						// Create a form item and set the item label
+						var formItem:FormItem = new FormItem();
+						formItem.label = inputLabel;
+						formItem.required = true;
+						formItem.percentWidth = 100;
+						
+						// Construct the example label
+						var example:Label = new Label();
+						example.text = "Example: " + exampleLabel;
+						example.styleName = "exampleLabelStyle";
+						example.percentWidth = 100;
+						
+						switch (inputType)
+						{
+							case "date":
+							{
+								var dateInput:DateField = new DateField();
+								dateInput.formatString = "DD/MM/YYYY";
+								dateInput.toolTip = tooltip;
+								formItem.addElement(dateInput);
+								break;
+							}
+								
+							case "integer":
+							{
+								var intInput:IntegerField = new IntegerField();
+								intInput.widthInChars = 20;
+								intInput.toolTip = tooltip;
+								
+								var intGroup:VGroup = new VGroup();
+								intGroup.percentWidth = 100;
+								intGroup.horizontalAlign = "center";
+								intGroup.addElement(intInput);								
+								intGroup.addElement(example);
+								formItem.addElement(intGroup);
+								break;
+							}
+								
+							case "double":
+							{
+								var dblInput:DoubleField = new DoubleField();
+								dblInput.widthInChars = 20;
+								dblInput.toolTip = tooltip;
+								
+								var dblGroup:VGroup = new VGroup();
+								dblGroup.percentWidth = 100;
+								dblGroup.horizontalAlign = "center";
+								dblGroup.addElement(dblInput);								
+								dblGroup.addElement(example);
+								formItem.addElement(dblGroup);
+								break;
+							}
+								
+							case "list":
+							{
+								var cboInput:DropDownList = new DropDownList();
+								
+								// Build list of values
+								var list:ArrayCollection = new ArrayCollection();
+								var listitems:XMLList = param.listitem;
+								for each(var listitem:XML in listitems)
+								{
+									var itm:Object = {
+										name: listitem.@label,
+											code: listitem.@value
+									};
+									list.addItem(itm);
+								}
+								
+								cboInput.dataProvider = list;
+								cboInput.selectedIndex = 0;
+								cboInput.labelField = "name";
+								cboInput.width = 250;
+								cboInput.toolTip = tooltip;
+								formItem.addElement(cboInput);
+								
+								break;
+							}
+								
+							case "domain":
+							{
+								var domainFieldName:String = String(params.@domainfield);
+								var layer:FeatureLayer = cboLayer.selectedItem.layer;
+								/*
+								if (!layer.loaded)
+								{
+								layer.addEventListener(LayerEvent.LOAD,layer_loadHandler);
+								return;
+								} 
+								else 
+								{
+								var layerDetails:LayerDetails = layer.layerDetails;
+								var fld:Field = getField(layerDetails.fields, domainFieldName);
+								if (fld)
+								{
+								var domInput:DropDownList = new DropDownList();
+								var dom:CodedValueDomain = fld.domain as CodedValueDomain;
+								domInput.dataProvider = new ArrayCollection(dom.codedValues);
+								domInput.selectedIndex = 0;
+								domInput.labelField = "name";
+								domInput.width = 250;
+								domInput.toolTip = tooltip;
+								formItem.addChild(domInput);
+								}
+								}
+								*/
+								break;
+							}
+								
+							default:
+							{
+								var textInput:TextInput = new TextInput();
+								textInput.widthInChars = 20;
+								textInput.toolTip = tooltip;
+								
+								var textGroup:VGroup = new VGroup();
+								textGroup.percentWidth = 100;
+								textGroup.horizontalAlign = "center";
+								textGroup.addElement(textInput);								
+								textGroup.addElement(example);
+								formItem.addElement(textGroup);
+							}
+						}
+						
+						// Add formitem to the expression parameters form
+						expressionParameters.addElement(formItem);
+					} 
+				}
+			}
+			
+			/** 
+			 * Called wben a user clicks the Execute Search button.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event returned by the button being Clicked.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			protected function butExecuteExpressionSearch_clickHandler(event:MouseEvent):void
+			{
+				queryFeaturesExpression();
+			}
+			
+			/**
+			 * Called when the user mouses over one of the select by graphical shape option buttons.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event returned by the button being moused over.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function iconRollOverHandler(event:MouseEvent):void
+			{
+				clearSelectionFilter();
+				event.target.filters = [ glowFilter ];
+			}
+			
+			/**
+			 * Called when the user mouses off one of the select by graphical shape option buttons.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [MouseEvent]: </i>Event returned by the button being moused over.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function iconRollOutHandler(event:MouseEvent):void
+			{
+				clearSelectionFilter();
+			}
+			
+			/**
+			 * Clears the glow highlight from the selected feature.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function clearSelectionFilter():void
+			{
+				for (var i:int = 0; i < imageGroup.numChildren; i++)
+				{
+					if (imageGroup.getChildAt(i).filters && imageGroup.getChildAt(i).filters.length > 0)
+					{
+						if (!(_selectedDrawingIcon && imageGroup.getChildAt(i) === _selectedDrawingIcon))
+						{
+							imageGroup.getChildAt(i).filters = [];
+						}
+					}
+				}
+			}
+			
+			
+			
+			/* SELECTION FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Clears any currently selected features.  Closes any queued searches.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function clearSelection():void
+			{
+				// Hide the info window
+				hideInfoWindow();
+				
+				// Clear each selection layer
+				for each (var layer:SearchLayer in _layerCache)
+				{
+					layer.clearSelection();
+				}
+				
+				// Clear the queued searches collection
+				_queuedSearches.removeAll();
+				_queuedSearchExtent = null;
+				_queuedSearchScale = -1;
+			}
+
+			/**
+			 * Handles calls from other widgets to clear the selection of all records..
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event dispatced by the calling application.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function results_ClearSelectionHandler(event:AppEvent):void
+			{
+				clearSelection();
+			}
+			
+			/**
+			 * Called when a search layer is hidden.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the search layer.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_HiddenHandler(event:AppEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+			}
+			
+			/**
+			 * Handles when an object calls for the selected features of a layer to be cleared.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the object calling for a search layer selection to be cleared.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_ClearSelectionHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer;
+				if (event.data.layerid)
+				{
+					// Get the seaech layer from the cache
+					searchLayer = findSearchLayerByResultID(event.data.layerid);
+				}
+				else
+				{
+					searchLayer = event.data.searchLayer as SearchLayer;
+				}
+
+				if (searchLayer)
+				{
+					if ((event.data.records as Array).length > 0)
+					{
+						var records:Array;	
+						var objectidfield:String = searchLayer.resultsLayer.layerDetails.objectIdField || "_FID";
+						
+						// Clear the records with the given id
+						records = event.data.records as Array;
+
+						var recs:Array = [];
+						for each (var record:ResultItem in searchLayer.searchResults)
+						{
+							if (records && records.indexOf(record.graphic.attributes[objectidfield]) > -1 || records == null)
+							{
+								recs.push(record.graphic);
+							}
+						}
+
+						searchLayer.clearSelectedRecords(recs);
+					}
+					else
+					{
+						// Clear the full selection
+						searchLayer.clearSelection();
+					}
+				}
+			}
+			
+			/**
+			 * Called when a search layer's contents are cleared.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the search layer.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_ClearedHandler(event:AppEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Check if the results layer has already been added to the map
+				var layerId:String = searchLayer.resultsLayer.id;
+				if (map.getLayer(layerId) != null)
+				{
+					// Add the results layer to the map
+					map.removeLayer(searchLayer.resultsLayer);
+				}				
+			}
+			
+			/**
+			 * Called when a search layer's contents are updated.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the search layer.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_UpdatedHandler(event:AppEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+				
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Check if the results layer has already been added to the map
+				var layerId:String = searchLayer.resultsLayer.id;
+				if (map.getLayer(layerId) == null)
+				{
+					// Add the results layer to the map
+					map.addLayer(searchLayer.resultsLayer);
+				}
+
+				// Remove this layer from the queued searches collection
+				var index:int = _queuedSearches.getItemIndex(searchLayer);
+				if (_queuedSearches.getItemIndex(searchLayer) > -1) 
+				{
+					_queuedSearches.removeItemAt(index);
+				}
+			}
+
+			/**
+			 * Called when a search layer's contents are updated and no results were found.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the search layer.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_NoResultHandler(event:AppEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Check if the results layer has already been added to the map - add anyway even though no results
+				var layerId:String = searchLayer.resultsLayer.id;
+				if (map.getLayer(layerId) == null)
+				{
+					// Add the results layer to the map
+					map.addLayer(searchLayer.resultsLayer);
+				}
+				
+				// Remove this layer from the queued searches collection
+				var index:int = _queuedSearches.getItemIndex(searchLayer);
+				if (_queuedSearches.getItemIndex(searchLayer) > -1) 
+				{
+					_queuedSearches.removeItemAt(index);
+				}
+				
+				// Alert that no results were found.
+				showMessage(_noResultLabel + ".\n" + searchLayer.label, false);
+			}
+			
+			/**
+			 * Called when an error occurs which querying a search layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event returned by the search layer.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function resultsLayer_QueryFaultHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Remove this layer from the queued searches collection
+				var index:int = _queuedSearches.getItemIndex(searchLayer);
+				if (_queuedSearches.getItemIndex(searchLayer) > -1) 
+				{
+					_queuedSearches.removeItemAt(index);
+				}
+				
+				// Alert that there was a error performing the search.
+				showMessage("Error performing search on " + searchLayer.label + ".\n" + event.data.faultmessage, false);
+			}
+						
+			/**
+			 * Handles calls to zoom to the extent of the current record selection for a search layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised to call the zoom to selection.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function resultsLayer_ZoomToSelectionHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer;
+				
+				if (event.data.searchLayer)
+				{
+					searchLayer = event.data.searchLayer as SearchLayer;
+				}
+				else if (event.data.layerid)
+				{
+					searchLayer = this.findSearchLayerByResultID(event.data.layerid);
+				}
+				
+				if (searchLayer)
+				{
+					// Check for a selection extent
+					var extent:Extent = searchLayer.resultsExtent;
+					
+					// If an extent is found, set map to its extent
+					if (extent)
+					{
+						map.extent = extent.expand(1.1);
+						if (map.scale < searchLayer.zoomscale)
+						{
+							map.scale = searchLayer.zoomscale;
+						}
+					}
+					else
+					{
+						// Zoom to the full extent of the layer
+						extent = searchLayer.layer.initialExtent;
+						map.extent = extent.expand(1.1);
+						if (map.scale < searchLayer.zoomscale)
+						{
+							map.scale = searchLayer.zoomscale;
+						}
+					}
+				}
+			}
+
+			/**
+			 * Handles calls to convert the current record selection for a search layer into drawing graphics.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised to call the covert the selection to graphics.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function resultsLayer_ConvertToGraphicsHandler(event:AppEvent):void
+			{
+				// Hide the info window
+				hideInfoWindow();
+
+				var searchLayer:SearchLayer;
+				if (event.data.layerid)
+				{
+					// Get the seaech layer from the cache
+					searchLayer = findSearchLayerByResultID(event.data.layerid);
+				}
+				else
+				{
+					searchLayer = event.data.searchLayer as SearchLayer;
+				}
+
+				// Check for a selection extent
+				if (searchLayer && searchLayer.searchResults.length > 0 && _drawnGraphicsLayer)
+				{
+					var records:Array;	
+					var objectidfield:String = searchLayer.resultsLayer.layerDetails.objectIdField;
+					
+					if (event.data.records && (event.data.records as Array).length > 0)
+					{
+						records = event.data.records as Array;
+					}
+					
+					for each (var record:ResultItem in searchLayer.searchResults)
+					{
+						if (records && records.indexOf(record.graphic.attributes[objectidfield]) > -1 || records == null)
+						{
+							var graphic:Graphic = GraphicUtil.CopyGraphic(record.graphic);
+							if (graphic)
+							{
+								// Set symbol to a generic symbol
+								var symbol:Symbol;
+								var outline:SimpleLineSymbol = new SimpleLineSymbol("solid",0,1,2);
+								
+								switch (graphic.geometry.type)
+								{
+									case Geometry.MAPPOINT:
+									{
+										symbol = new SimpleMarkerSymbol("circle",12,0xFF0000,1,0,0,0,outline);
+										break;
+									}
+										
+									case Geometry.POLYGON:
+									case Geometry.EXTENT:
+									{
+										symbol = new SimpleFillSymbol("solid",0,0.5,outline);
+										break;
+									}
+										
+									case Geometry.POLYLINE:
+									{
+										symbol = outline;								
+										break;
+									}
+								}
+								graphic.symbol = symbol;
+								
+								// Add to the drawing layer
+								_drawnGraphicsLayer.add(graphic);
+							}
+						}
+					}					
+				}
+				else
+				{
+					Alert.show("The drawing widget has not been configured for use with this component.  Please contact your administrator if you require this functionality.",
+						"Convert Selection to Drawing Graphics", Alert.OK, map);
+				}
+			}
+			
+			/**
+			 * Handles calls to highlight the a record in the current record selection for a search layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised to call to highlight a graphic in the selection.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function resultsLayer_ApplyRecordHighlightHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Check the layer is visible
+				if (searchLayer.resultsLayer.visible && event.data.resultItem)
+				{
+					clearTimeout(_hitimer);
+					var searchResult:ResultItem = event.data.resultItem as ResultItem;
+					var mapExtentContainsSearchResult:Boolean = map.extent.containsXY(searchResult.center.x, searchResult.center.y);
+					
+					if (mapExtentContainsSearchResult)
+					{
+						_hitimer = setTimeout(showInfo, 300, [ searchResult, searchLayer ]);
+					}
+					else
+					{
+						// Hide the info window
+						hideInfoWindow();
+					}
+				}
+				
+			}
+
+			private var _hitimer:uint;
+
+			
+			/**
+			 * Handles calls to remove a highlight from a record in the current record selection for a search layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised to call to remove the highlight from a graphic in the selection.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function resultsLayer_RemoveRecordHighlightHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				clearTimeout(_hitimer);
+			}
+			
+			/**
+			 * Handles calls rom a double click of a record in the current record selection for a search layer.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised to handle the double click.</li>
+			 * </ul>
+			 * </p>			 
+			 */			
+			private function resultsLayer_RecordDoubleClickHandler(event:AppEvent):void
+			{
+				var searchLayer:SearchLayer = event.data.searchLayer as SearchLayer;
+				
+				// Check the layer is visible
+				if (searchLayer.resultsLayer.visible && event.data.resultItem)
+				{
+					clearTimeout(_hitimer);
+					var searchResult:ResultItem = event.data.resultItem as ResultItem;
+				
+					// Get the extent of the results geometry
+					var extent:Extent;
+					if (searchResult.geometry.type == Geometry.MAPPOINT)
+					{
+						extent = GeometryUtil.createExtentAroundMapPoint(searchResult.geometry as MapPoint, _pointSearchTolerance, map);	
+					}
+					else
+					{
+						extent = searchResult.geometry.extent;
+					}
+					
+					// If an extent is found, set map to its extent
+					if (extent)
+					{
+						map.extent = extent.expand(1.1);
+					}
+				}
+			}
+			
+			/* SEARCH FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Starts a search by text action
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function queryFeaturesExpression():void
+			{
+				var exp:Object = cboExpressions.selectedItem;
+				var queryText:String = exp.expression;
+				
+				var paramsvalid:Boolean = true;
+				
+				// Get each the parameter settings
+				for (var i:int = 0;i < exp.parameters.length(); i++)
+				{
+					var param:XML = exp.parameters[i];
+					
+					// Get the expression text
+					var id:String = String(param.@id);
+					var inputType:String = String(param.@datatype);
+					
+					// Find the form item
+					var formItem:FormItem = expressionParameters.getElementAt(i) as FormItem;
+					var val:String;
+					switch(inputType)
+					{
+						case "date":
+						{
+							var dateInput:DateField = formItem.getElementAt(0) as DateField;
+							
+							if (dateInput.selectedDate)
+							{
+								val = dateFormat.format(dateInput.selectedDate); 
+							}
+							else
+							{
+								paramsvalid = false;
+							}
+							break;
+						}
+							
+						case "integer":
+						{
+							var intGroup:VGroup = formItem.getElementAt(0) as VGroup;
+							var intInput:IntegerField = intGroup.getElementAt(0) as IntegerField;
+							
+							if (intInput.text.length > 0)
+							{
+								val = intInput.text;							
+							}
+							else
+							{
+								paramsvalid = false;
+							}
+							break;
+						}
+							
+						case "double":
+						{
+							var dblGroup:VGroup = formItem.getElementAt(0) as VGroup;
+							var dblInput:DoubleField = dblGroup.getElementAt(0) as DoubleField;
+							
+							if (dblInput.text.length > 0)
+							{
+								val = dblInput.text;
+							}
+							else
+							{
+								paramsvalid = false;
+							}
+							break;
+						}
+							
+						case "list":
+						case "domain":
+						{
+							var domInput:DropDownList = formItem.getElementAt(0) as DropDownList;
+							var domObj:Object = domInput.selectedItem;
+							
+							if (domObj)
+							{
+								val = domObj.code;	
+							}
+							else
+							{
+								paramsvalid = false;
+							}
+							break;
+						}
+							
+						default:
+						{
+							var textGroup:VGroup = formItem.getElementAt(0) as VGroup;
+							var textInput:TextInput = textGroup.getElementAt(0) as TextInput;
+							
+							if (textInput.text.length > 0)
+							{
+								val = textInput.text;
+							}
+							else
+							{
+								paramsvalid = false;
+							}
+						}
+					} // end switch
+					
+					// Substitute each copy of the value (if more than one is present) into expression string
+					if (val && paramsvalid)
+					{
+						// Check for funny characters in the value
+						if (val.indexOf("'") > 0)
+						{
+							val = val.replace(/\'/gi,"' + '''' + '");						
+						}
+						
+						while (queryText.indexOf(id) > 0)
+						{
+							queryText = queryText.replace(id,val);
+						}
+					}
+				} // end for
+				
+				// Call the execute action
+				if (paramsvalid)
+				{
+					executeQuery(cboLayer.selectedItem, queryText, null, cboSelectionMode.selectedItem.selectionName);
+				}
+				else
+				{
+					Alert.show("Not all of the required search parameters have been specified.  Please review and try again.",
+						"Search " + cboLayer.selectedItem.label,Alert.OK);  
+				}
+			}
+			
+			/**
+			 * Configures the drawing actions and activates the DrawTool component 
+			 * to begin the shape capture for a select by location action.  
+			 */
+			private function toggleDrawTool(event:MouseEvent):void
+			{
+				addSharedData("Deactivate_DrawTool", null); // to be able to deactivate drawTool on other widgets
+				
+				// Check if tool clicked is already active
+				if (_selectedDrawingIcon != FocusableImage(event.currentTarget))
+				{
+					// Activate the new tool
+					
+					// apply glow
+					_selectedDrawingIcon = FocusableImage(event.currentTarget);
+					clearSelectionFilter();
+					_selectedDrawingIcon.filters = [ glowFilter ];
+					
+					var value:String = _selectedDrawingIcon.name;
+					switch (value)
+					{
+						case DrawTool.MAPPOINT:
+						{
+							_selectedDrawingStatus = _pointLabel;
+							_drawSymbol = new SimpleMarkerSymbol(SimpleMarkerSymbol.STYLE_CIRCLE, 15, 0x3FAFDC, 1);
+							break;
+						}
+						case DrawTool.POLYLINE:
+						{
+							_selectedDrawingStatus = _lineLabel;
+							_drawSymbol = new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1);
+							break;
+						}
+						case DrawTool.EXTENT:
+						{
+							_selectedDrawingStatus = _rectangleLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+						case DrawTool.POLYGON:
+						{
+							_selectedDrawingStatus = _polygonLabel;
+							_drawSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, 0x3FAFDC, 0.5, new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, 0x3FAFDC, 1, 1));
+							break;
+						}
+					}
+					activateDrawTool();
+				}
+				else
+				{
+					deactivateDrawTool();
+				}
+			}
+			
+			/** 
+			 * Called when the user selects one of the drawing tools which sets how 
+			 * to define the shape that will be used to select the features 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function activateDrawTool():void
+			{
+				// Hide the info window
+				hideInfoWindow();
+
+				if (_selectedDrawingIcon)
+				{
+					setMapAction(_selectedDrawingIcon.name, _selectedDrawingStatus, _drawSymbol, searchDrawEnd);
+				}
+				else
+				{
+					Alert.show("Error - drawing tool not correctly initialised.  Please try again.", _graphicalsearchLabel, Alert.OK);					
+				}
+			}
+			
+			/**
+			 * Function deactivates the drawing tool stops any active select by grahic location actions
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function deactivateDrawTool():void
+			{
+				_selectedDrawingIcon = null;
+				_selectedDrawingStatus = null;
+				clearSelectionFilter();
+				
+				// Reset map action
+				setMapAction(null, null, null, null);
+			}
+			
+			/**
+			 * Called when the user completes a draw action
+			 */
+			private function searchDrawEnd(event:DrawEvent):void
+			{
+				// Get the drawn geometry 
+				var geom:Geometry = event.graphic.geometry;
+				
+				// Check for self-intersecting geometry
+				if (geom is Polygon && GeometryUtil.polygonSelfIntersecting(geom as Polygon))
+				{
+					geometryService.simplify([ geom ]);
+				}
+				else
+				{
+					//create extent around map point to improve search results
+					if (geom.type == Geometry.MAPPOINT)
+					{
+						geom = GeometryUtil.createExtentAroundMapPoint(geom as MapPoint, _pointSearchTolerance, map);
+					}
+					
+					// Call the execute action
+					executeQuery(cboLayer.selectedItem, null, geom, cboSelectionMode.selectedItem.selectionName);
+				}
+				
+				// Reactivate the drawing tool if still on the select by graphic location screen
+				if (this.currentState == "graphicalInput")
+				{
+					activateDrawTool();
+				}
+			}
+			
+			
+			
+			/* SEARCH BY DRAWN GRAPHICS FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Updated the draw graphics list.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateDrawingGraphicList():void
+			{
+				// Reset the graphics collection
+				_graphics.removeAll();
+				
+				if (_drawnGraphicsLayer.graphicProvider.length > 0)
+				{
+					var i:int = 0;
+					for each (var graphic:Graphic in _drawnGraphicsLayer.graphicProvider)
+					{
+						_graphics.addItem(new DrawnGraphicFeature(i, graphic));	
+						i++;
+					}
+				}
+			}
+			
+			/**
+			 * Called when a graphic is added to the drawing graphics layer
+			 */
+			protected function graphicsLayer_addHandler(event:GraphicEvent):void
+			{
+				updateDrawingGraphicList();
+			}
+			
+			/**
+			 * Called when a graphic is removed from the drawing graphics layer
+			 */
+			protected function graphicsLayer_removeHandler(event:GraphicEvent):void
+			{
+				updateDrawingGraphicList();
+			}
+			
+			/**
+			 * Called when the drawing graphics layer is clared.
+			 */
+			protected function graphicsLayer_clearHandler(event:GraphicsLayerEvent):void
+			{
+				updateDrawingGraphicList();
+			}
+			
+			/**
+			 * Called when the select all button is clicked on the graphics selection list
+			 */
+			protected function butDrawnGraphicsSelectAll_clickHandler(event:MouseEvent):void
+			{
+				graphicsList.selectAll(); // .selectedItems = graphicsList.dataProvider;
+			}
+			
+			/**
+			 * Called when the select none button is clicked on the graphics selection list
+			 */
+			protected function butDrawnGraphicsSelectNone_clickHandler(event:MouseEvent):void
+			{
+				graphicsList.clearSelection();
+			}
+			
+			/**
+			 * Called when a feature in the drawn graphics list is selected.
+			 */			
+			protected function graphicsList_valueCommitHandler(event:FlexEvent):void
+			{
+				// Check for any selected records
+				if (graphicsList.selectionLength > 0)
+				{
+					var graphics:Array = [];
+					for each (var row:DrawnGraphicFeature in graphicsList.selectedItems)
+					{
+						graphics.push(row);
+					}
+					
+					// Highlight the new selection
+					applyHighlight(graphics);
+				}
+				else
+				{
+					// Clear any selecion glows
+					removeHighlight();
+				}
+			}
+			
+			/**
+			 * Called when the execute search by drawing graphic button is clicked.  
+			 */
+			protected function butExecuteDrawingGraphicSearch_clickHandler(event:MouseEvent):void
+			{
+				var geometry:Geometry;
+				
+				if (graphicsList.selectionLength > 1)
+				{
+					// Build the search geometry polygon by buffering the feature by 1m
+					
+					// Craete a new buffer parameters object
+					var bufferParameters:BufferParameters = new BufferParameters();
+					
+					// Create list of geometries
+					var geoms:Array = [];
+					
+					for each (var row:DrawnGraphicFeature in graphicsList.selectedItems)
+					{
+						// Get graphic geometry
+						geometry = row.geometry;					
+						
+						// Check for extent type - buffers don't work with extents
+						switch(geometry.type) 
+						{
+							case Geometry.EXTENT: 
+							{
+								// Add geometry to list
+								geoms.push(Extent(geometry).toPolygon());
+								break;
+							}
+								
+							default:
+							{
+								// Add geometry to list
+								geoms.push(geometry);
+							}
+						}
+					}
+					
+					// Formated for 2.0 API 
+					bufferParameters.geometries = geoms;
+					
+					// Default to a minor buffer
+					bufferParameters.distances = [0.1]; 
+					bufferParameters.unit = GeometryService.UNIT_METER;
+					
+					// Set union results
+					bufferParameters.unionResults = true;
+					
+					// Set the spatial reference	
+					var ref:SpatialReference = map.spatialReference;
+					bufferParameters.bufferSpatialReference = ref;
+					
+					// Execute the buffer action
+					geometryService.buffer(bufferParameters,
+						new AsyncResponder(bufferFeatureWithMerge, bufferFeatureFaultHandler, null));
+				}
+				else
+				{
+					// Get the geometry
+					geometry = (graphicsList.selectedItem as DrawnGraphicFeature).geometry;
+					
+					// Call the search method
+					executeDrawnGraphicSearch(geometry);
+				}
+			}
+			
+			/** 
+			 * Handles the results returned by a buffer task
+			 */  
+			private function bufferFeatureWithMerge(result:Object, token:Object = null):void
+			{
+				var geometry:Geometry;
+				var mergeShapes:Array = new Array();
+				if (result is Array)
+				{
+					// Get number of graphics returned - Formatted for the 2.0 API
+					var graphicsCount:Number = result.length; // This should be 1.
+					
+					if (graphicsCount > 0) 
+					{
+						// Add the geometry to the merge array
+						geometry = result[0] as Geometry;
+						mergeShapes.push(geometry);
+						
+						// Call the merge task on the polygon array
+						geometryService.union(mergeShapes, new AsyncResponder(mergeFeatureCompleteHandler, bufferFeatureFaultHandler, null));
+					}
+					else
+					{
+						// Use the graceful fault message 
+						showGracefulFault();
+					}
+				} 
+				else if(result is Geometry)
+				{
+					// Add the geometry to the merge array
+					geometry = result as Geometry;
+					
+					// Call the search method
+					executeDrawnGraphicSearch(geometry);
+				}
+			}
+			
+			/** 
+			 * Handles the results returned by the union task.
+			 */  
+			private function mergeFeatureCompleteHandler(polygon:Polygon, token:Object = null):void
+			{
+				if (polygon) 
+				{
+					var geometry:Geometry = polygon;
+					
+					// Call the search method
+					executeDrawnGraphicSearch(geometry);
+				}
+				else 
+				{
+					// Use the graceful fault message 
+					showGracefulFault();
+				}
+			}
+			
+			/** 
+			 * Handles the results returned by a buffer task
+			 */  
+			private function bufferFeatureFaultHandler(event:FaultEvent, token:Object = null):void
+			{
+				// Use the graceful fault message 
+				showGracefulFault();
+			}
+			
+			/**
+			 * Starts the query execution
+			 */
+			public function executeDrawnGraphicSearch(geometry:Geometry):void
+			{
+				switch(geometry.type)
+				{
+					case Geometry.POLYLINE:
+					{
+						// Get the rough length
+						//var len:Number = GeometryUtil.geodesicLengths([geometry],
+						break;
+					}
+						
+					case Geometry.EXTENT:
+					{
+						break;
+					}
+						
+					case Geometry.POLYGON: 
+					{
+						// Calculate the area
+						var aparams:AreasAndLengthsParameters = new AreasAndLengthsParameters();
+						aparams.areaUnit = com.esri.ags.Units.SQUARE_METERS;
+						aparams.polygons = [geometry];
+						
+						geometryService.areasAndLengths(aparams, new AsyncResponder(areaCompleteHandler, bufferFeatureFaultHandler, geometry)); 	
+						break;
+					}
+						
+					default:
+					{
+						// Call the execute action
+						executeQuery(cboLayer.selectedItem, null, geometry, cboSelectionMode.selectedItem.selectionName);
+						break;
+					}
+				}
+				
+				function areaCompleteHandler(result:AreasAndLengthsResult, token:Object=null):void
+				{
+					if (result.areas.length > 0)
+					{
+						var area:Number = result.areas[0];
+						if (area < _areaLimit)
+						{
+							// Call the execute action
+							executeQuery(cboLayer.selectedItem, null, token as Geometry, cboSelectionMode.selectedItem.selectionName);
+						}
+						else
+						{
+							Alert.show("The area of the shape(s) you have selected is very large.  Are you sure you wish to perform this search?",
+								"Select By Drawn Graphic", Alert.YES|Alert.NO, map, 
+								function(event:CloseEvent):void { 
+									if (event.detail == Alert.YES) 
+									{ 
+										executeQuery(cboLayer.selectedItem, null, geometry, cboSelectionMode.selectedItem.selectionName);
+									} 
+								},
+								null, Alert.YES);
+						}
+					}
+					else
+					{
+						showGracefulFault();
+					}
+				}
+			}
+			
+			/**
+			 * Called if the buffer or merge actions fail
+			 */
+			public function showGracefulFault():void
+			{
+				showMessage("There was a problem executing this search.  Please contact the GIS administrator if this issue persists.",false);
+			}
+			
+			/**
+			 * Applies a highlight on the selected features in the drawn graphics list. 
+			 */
+			public function applyHighlight(graphics:Array):void
+			{
+				// Remove highlight filter from any selected graphics
+				removeHighlight();
+				
+				// Filter to the selected graphic
+				for each (var graphic:DrawnGraphicFeature in graphics)
+				{
+					showHighlight(graphic.graphic, true);
+				}
+			}
+			
+			/**
+			 * Clears highlight from any previously selected features in the drawn graphics list. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			public function removeHighlight():void
+			{
+				//  Stop any highlights
+				graphicHighlight.stop();
+				graphicHighlight.targets = [];
+			}
+			
+			/**
+			 * Used to apply a glow affect to the supplied feature.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>object [Object]: </i>UI Object that the glow effect should be applied to.</li>
+			 * <li><i>append [Boolean]: </i>Flag for whether the glow should be appended to any existing UI effects, or should replace those effects.</li>
+			 * </ul>
+			 * </p>				 
+			 */
+			private function showHighlight(object:Object, append:Boolean = false):void
+			{
+				if (!object)
+				{
+					return;
+				}
+				
+				// Stop the animation playing
+				graphicHighlight.stop();
+				
+				if (append)
+				{
+					graphicHighlight.targets.push(object);
+				}
+				else
+				{
+					graphicHighlight.targets = [object];
+				}
+				
+				// Ensure the animation is playing
+				graphicHighlight.play();
+			}			
+			
+			/**
+			 * Show the result details in the map info window
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>params [Array]: </i>Array object containing the result item to be displayed, and the layer settings object that the result item belongs to.</li>
+			 * </ul>
+			 * </p>				 
+			 */
+			private function showInfo(params:Array):void
+			{
+				var searchResult:ResultItem = params[0];
+				var searchLayer:SearchLayer = params[1];
+				
+				var showHighlightPoint:MapPoint = searchResult.center as MapPoint;
+				var linkAlias:String = searchResult.attributes.linkAlias;
+				
+				_popUpRenderer.popUpInfo = searchLayer.configurePopUpInfo(searchResult.attributes);
+				_popUpRenderer.graphic = searchResult.graphic;
+				
+				map.infoWindow.content = _popUpRenderer;
+				map.infoWindow.contentOwner = _popUpRenderer.graphic;
+				map.infoWindow.show(showHighlightPoint);
+			}
+			
+			
+			
+			/* QUERY BUILDER FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Called when one of the operator buttons is clicked by the user.
+			 */
+			private function operatorClick(event:Event):void
+			{
+				var str:String = event.currentTarget.label;
+				str = str.toUpperCase();
+				updateText(str);
+			}
+			
+			/**
+			 * Handler for when an item in the field list is doubled clicked
+			 */
+			private function fieldListDoublClick(event:Event):void
+			{	
+				retreiveFieldValues(event);
+				updateText(event.currentTarget.selectedItem.name);
+			}
+			
+			/**
+			 * Handler for when an item in the values list is doubled clicked
+			 */			
+			private function valListDoublClick(event:Event):void
+			{	
+				updateText(event.currentTarget.value);
+			}
+			
+			/**
+			 * Update the text displayed in the query filter expression box
+			 */
+			private function updateText(val:String):void
+			{
+				if (!val)
+				{
+					return;
+				}
+				
+				var beginIx:int = queryFilter.selectionBeginIndex;
+				var endIx:int = queryFilter.selectionEndIndex;
+
+				var tr1:TextRange = new TextRange(queryFilter, false, beginIx, endIx);
+				tr1.text = val;
+				
+				//dont add leading or trailing space to wildcard characters
+				if (val == '%' || val == '_' )
+				{
+					moveCursor(beginIx + tr1.text.length);
+					return;
+				}
+				
+				//only add leading space if cursor is not at the start of the text
+				if (beginIx > 0 )
+				{
+					//Check to see if there is a space before and after the selected text
+					//If not add one.
+					var trSpace:TextRange = new TextRange(queryFilter, false, beginIx -1, beginIx);
+					if (trSpace.text != " ")
+					{
+						tr1.text = " " +  val;
+					}
+				}
+				// add a trailing space	
+				trSpace = new TextRange(queryFilter, false, endIx, endIx + 1);
+				if (trSpace.text != " ")
+				{
+					tr1.text += " ";
+				}
+				moveCursor(beginIx + tr1.text.length);
+			}
+			
+			private function moveCursor(endIx:int):void
+			{
+				//move the cursor to the end of the selected text and reset the focus
+				queryFilter.setSelection(endIx, endIx); 
+				queryFilter.setFocus();
+			}  
+			
+			private function pagingQueryTask_complete(event:Event):void
+			{
+				this.cursorManager.removeBusyCursor();
+			}
+
+			/**
+			 * Label function used for labelling the fields in the pick list.
+			 */
+			private function targetLayerFieldsLabelFunc(item:Object):String 
+			{
+				return item.alias;
+			}
+			
+			/**
+			 * Retrieves sample values from the target layer for the selected field.
+			 */
+			private function retreiveFieldValues(event:Event):void
+			{	
+				this.cursorManager.setBusyCursor();
+				var fld:Object = fieldsLst.selectedItem as Object;
+				
+				_pagingQueryTask = new PagingQueryTask(cboLayer.selectedItem.url, 
+					fieldsLst.selectedItem.name,
+					fld.type);
+				_pagingQueryTask.addEventListener("pagingComplete", pagingQueryTask_complete);
+				_pagingQueryTask.execute();
+			}
+			
+			/**
+			 * Called when the query builder search button is clicked
+			 */
+			private function butExecuteQueryBuilderSearch_clickHandler(event:Event):void
+			{
+				// Execute the query
+				executeQuery(cboLayer.selectedItem, queryFilter.text, null, cboSelectionMode.selectedItem.selectionName);
+			}
+			
+			/** 
+			 * Used to update the field list settings whenever the layer is changed.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function updateFieldListSettings():void
+			{
+				if (cboLayer.selectedItem) 
+				{
+					var queryLayer:FeatureLayer = cboLayer.selectedItem.layer as FeatureLayer;
+					if (queryLayer && !queryLayer.loaded)
+					{
+						queryLayer.addEventListener(LayerEvent.LOAD, queryLayer_loadHandler);
+						function queryLayer_loadHandler(event:LayerEvent):void
+						{
+							// Remove the handler
+							queryLayer.removeEventListener(LayerEvent.LOAD, queryLayer_loadHandler);
+							
+							// Set the query fields list
+							_queryFields = queryLayer.layerDetails.fields;
+						}
+						return;
+					}
+
+					// Set the query fields list
+					_queryFields = queryLayer.layerDetails.fields;
+				}
+				else
+				{
+					_queryFields = new Array();					
+				}
+			}			
+		
+			
+			
+			/* QUERY EXECUTION FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Executes the query against the specified layer based on the supplied expression and/or geometry.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerObj [SearchLayer]: </i>Selected layer settings object containg the necessary info to complete a search.</li>
+			 * <li><i>queryText [String]: </i>SQL search expression being used to perform the search.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function executeQuery(layerObj:SearchLayer, queryText:String, queryShape:Geometry, 
+										  selectionMode:String = SELECT_NEWSELECTION, spatialRelation:String = null ):void
+			{
+				// Hide infowindow if any
+				hideInfoWindow();
+				
+				// Get the layer and check the load state
+				var queryLayer:FeatureLayer = layerObj.layer as FeatureLayer;
+				if (queryLayer && !queryLayer.loaded)
+				{
+					queryLayer.addEventListener(LayerEvent.LOAD, queryLayer_loadHandler);
+					function queryLayer_loadHandler(event:LayerEvent):void
+					{
+						// Remove the handler
+						queryLayer.removeEventListener(LayerEvent.LOAD, queryLayer_loadHandler);
+						
+						// Call this function again using the same parameters
+						executeQuery(layerObj, queryText, queryShape, selectionMode, spatialRelation);
+					}
+					return;
+				}
+				
+				// Execute the query
+				layerObj.query(queryText, queryShape, selectionMode, spatialRelation, map.spatialReference);
+				
+				// Add this layer to the queued searches collection
+				_queuedSearches.addItem(layerObj);
+				
+				if (_queuedSearchScale > 0 || layerObj.zoomscale < _queuedSearchScale)
+				{
+					_queuedSearchScale = layerObj.zoomscale;
+				}
+				
+				// Show the results page
+				if (showSelectionResults.selected)
+				{
+					showStateResultsList();				
+				}
+			}
+			
+			
+			
+			/* QUEUED SEARCH FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the request to check the datamanager for a queued search comes back.  Queued searches can be sent from other widgets 
+			 * and components like the URLSearchHandler or the predictive search in the header controller. 
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [AppEvent]: </i>Event raised when a data manager returns the Data Sent event.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function runQueuedSearch(event:AppEvent):void
+			{
+				// Chekc for any queued searchs sent from the data manager.
+				if (event.data && event.data.key == SearchSuggestion.SEARCH_RUN_QUEUED )
+				{
+					debug("Search Widget: runQueuedSearch - Suggestion Received " + _loadingLayers.length.toString() + " layers");
+
+					var dataAC:ArrayCollection = event.data.collection as ArrayCollection;
+					if (dataAC && dataAC.length > 0)
+					{
+						// Check that all the layers have loaded
+						if (_loadingLayers.length > 0)
+						{
+							if (_loadingCount < 5)
+							{
+								// Display the loading message
+								showMessage("Loading Settings...",true);
+								
+								// Delay until all the layers have loaded
+								setTimeout(runQueuedSearch, 1000, event);
+								debug("Search Widget: runQueuedSearch - Delay for loading " + _loadingLayers.length.toString() + " layers");
+								_loadingCount ++;
+								return;
+							}
+							else
+							{
+								// Clear the loading message
+								clearMessage();
+								
+								// Max wait reached - allow serach to continue
+								_loadingCount = 0;
+							}
+						}
+						
+						var queriesExecuted:Boolean = false;;
+						var layers:ArrayCollection;
+						var layer:SearchLayer;
+
+						debug("Search Widget: runQueuedSearch - Start Search: " + dataAC.length.toString() + " suggestions located");
+						
+						// Queued search located - start the search process
+						for (var i:int = 0; i < dataAC.length; i++)
+						{
+							var suggestion:Object = dataAC.getItemAt(i);// as SearchSuggestion;
+							
+							if (suggestion.searchclass)
+							{
+								// Get the value to search for
+								var val:String = suggestion.searchkey; 
+								if (val.indexOf("'") > 0)
+								{
+									val = val.replace(/\'/gi,"' + '''' + '");						
+								}
+
+								debug("Search Widget: runQueuedSearch - Search By Class: " + suggestion.searchclass + '|' + val);
+								
+								// Get all of the layers that work with this suggestion
+								layers = getSearchLayers(suggestion.searchclass);
+								for each(layer in layers)
+								{
+									// Get the expression settings
+									var expression:XML = layer.getExpression(suggestion.searchclass);
+									
+									// Get the expression string 
+									var queryText:String = expression.@expressiontext; 
+																	
+									// Set the value
+									var param:XML = expression.parameter[0];
+									
+									// Get the expression id
+									var id:String = String(param.@id);
+									
+									// Substitute value into expression string - updated 07/06/2014 by Ryan Elley - cahneg to make sure all instances of the value are replaced in the query string
+									while (queryText.indexOf(id) > 0)
+									{
+										queryText = queryText.replace(id,val);
+									}
+									
+									// Execute the query
+									executeQuery(layer, queryText, suggestion.searchgeometry, cboSelectionMode.selectedItem.selectionName);
+
+									debug("Search Widget: runQueuedSearch - Search By Class - Query Executed");
+									
+									// Update the executed flag
+									queriesExecuted = true;
+								}
+							}
+							else if (suggestion.searchurl)
+							{
+								debug("Search Widget: runQueuedSearch - Search By URL: " + suggestion.searchurl );
+
+								// Get the searchable layer by its url	
+								layer = findSearchLayerByUrl(suggestion.searchurl)
+									
+								// Execute the query
+								executeQuery(layer, suggestion.searchtext, suggestion.searchgeometry, cboSelectionMode.selectedItem.selectionName);
+								
+								// Update the executed flag
+								queriesExecuted = true;
+							}
+							
+							// If queries are running, check if the widget is open and open if not
+							var state:String = getState();
+							if (queriesExecuted && state != "open")
+							{
+								AppEvent.dispatch(AppEvent.WIDGET_RUN, this.widgetId);
+							}
+						}
+					}
+				}
+			}
+
+			/**
+			 * Returns all of the searchable layers that contain expressions with tagged with the given expression id.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>predictiveID [String]: </i>Preditive id to search for.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function getSearchLayers(predictiveID:String):ArrayCollection
+			{
+				var result:ArrayCollection = new ArrayCollection();
+				
+				for each (var searchLayer:SearchLayer in _layerCache)
+				{
+					if (searchLayer.hasExpression(predictiveID))
+					{
+						result.addItem(searchLayer);
+					}
+				}
+				
+				return result;
+			}
+
+			/**
+			 * Returns the searchable layer attached to the result feature layer id.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>layerid [String]: </i>Layer id to search for.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function findSearchLayerByResultID(layerid:String):SearchLayer
+			{
+				var result:SearchLayer;
+				
+				for each (var searchLayer:SearchLayer in _layerCache)
+				{
+					if (searchLayer.resultsLayer.id == layerid)
+					{
+						result = searchLayer;
+						break;
+					}
+				}
+
+				return result;
+			}
+
+			/**
+			 * Returns the searchable layer based on its url.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>url [String]: </i>Url of the layer to search for.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function findSearchLayerByUrl(url:String):SearchLayer
+			{
+				var result:SearchLayer;
+				var loweredurl:String = url.toLowerCase();
+				
+				for each (var searchLayer:SearchLayer in _layerCache)
+				{
+					if (searchLayer.url.toLowerCase() == loweredurl)
+					{
+						result = searchLayer;
+						break;
+					}
+				}
+				
+				return result;
+			}
+			
+			/**
+			 * Called when there is a change to the queued searches collection.  Used to control the working state and related searches.  All seraches get added to the queue.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [CollectionEvent]: </i>Event raised when a feature is add or removed from the queued searches collection, or when the collection is cleared.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function queuedSearch_CollectionChangeHandler(event:CollectionEvent):void
+			{
+				// Get the layer that was referred to
+				var searchLayer:SearchLayer;
+				
+				// Check the event type
+				switch (event.kind)
+				{
+					case CollectionEventKind.ADD:
+						// Show the working message
+						showMessage(_workingLabel, true);
+						break;
+					
+					case CollectionEventKind.REMOVE:
+					{
+						// Update the zoom extent of selected features
+						if (zoomSelectionResults.selected) 
+						{
+							// Update the _queuedSearch extent
+							for each(searchLayer in event.items)
+							{
+								var extent:Extent = searchLayer.resultsExtent;
+								if (extent)
+								{
+									if (_queuedSearchExtent)
+									{
+										_queuedSearchExtent = _queuedSearchExtent.union(extent);
+									}
+									else
+									{
+										_queuedSearchExtent = extent;
+									}
+								}
+							}
+						}
+
+						// Check if all the searches have been completed
+						if (_queuedSearches.length == 0)
+						{
+							// Update the map extent
+							if (_queuedSearchExtent && zoomSelectionResults.selected)
+							{
+								map.extent = _queuedSearchExtent.expand(1.1);
+								
+								_queuedSearchScale
+								if (_queuedSearchScale > 0 && map.scale < _queuedSearchScale)
+								{
+									map.scale = _queuedSearchScale;
+								}
+								
+								// CLear search extent flag
+								_queuedSearchExtent = null;
+								_queuedSearchScale = -1;
+							}
+							
+							// Remove the working message
+							clearMessage();
+						}
+						else
+						{
+							// Still searching - do nothing
+						}
+
+						break;
+					}
+					
+					case CollectionEventKind.RESET:
+						
+						break;
+					
+					default:
+						// Do nothing
+						break;
+				}
+			}
+
+			
+			
+			/* HELP FUNCTIONALITY
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Opens the help file assoicated with this widget.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showHelp():void
+			{
+				// Excute the navigation event to a new window
+				navigateToURL(new URLRequest(_helpLocation),"_blank");
+			}
+			
+			
+			
+			/* GENERAL HELPER FUNCTIONS
+			-------------------------------------------------------------------------- */
+
+			/**
+			 * Write output to the console if the _isDebug flag is set
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [string]: </i>Message to be displayed in the console</li>
+			 * </ul>
+			 * </p>				 
+			 */
+			private function debug(message:String):void
+			{
+				if (_isdebug)
+				{
+					var date:Date = new Date();
+					trace('Debug: ' + date.toString() + ' : ' +  message);
+				}
+			}
+
+			/**
+			 * Write output to the console if the _isDebug flag is set
+			 */
+			private function hideInfoWindow():void
+			{
+				var found:Boolean = false;
+				// Check if the current owner of the map infowidnow is one of the selection layers
+				for each (var searchLayer:SearchLayer in _layerCache)
+				{
+					if (map.infoWindow.contentOwner &&
+						((map.infoWindow.contentOwner is Graphic && Graphic(map.infoWindow.contentOwner).graphicsLayer === searchLayer.resultsLayer) || map.infoWindow.contentOwner is Map))
+					{
+						found = true; 
+						break;
+					}
+				}
+				
+				if (found)
+				{
+					map.infoWindow.hide();
+				}
+			}
+			
+			/**
+			 * Sorts an array collection of objects by the contents of of of those objects fields
+			 */
+			private function arrayCollectionSort(ar:ArrayCollection, fieldName:String, isNumeric:Boolean):void 
+			{
+				var dataSortField:SortField = new SortField();
+				dataSortField.name = fieldName;
+				dataSortField.numeric = isNumeric;
+				var numericDataSort:Sort = new Sort();
+				numericDataSort.fields = [dataSortField];
+				ar.sort = numericDataSort;
+				ar.refresh();
+			}
+						
+			/** 
+			 * Show the message on the results page
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>message [string]: </i>Message to be displayed in the message window</li>
+			 * <li><i>swfVisible [bool]: </i>Should the working animation swirl be displayed</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function showMessage(message:String, swfVisible:Boolean = false):void
+			{
+				txtMessage.text = message;
+				swfMessage.visible = swfVisible;
+				swfMessage.includeInLayout = swfVisible;
+				boxMessage.visible = boxMessage.includeInLayout = true;
+			}
+			
+			/** 
+			 * Hide the message area.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li>None.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function clearMessage():void
+			{
+				txtMessage.text = "";
+				boxMessage.visible = false;
+			}
+			
+			/** 
+			 * Called after the message area hide call has been made.
+			 */
+			private function messagefade_effectEndHandler(event:EffectEvent):void
+			{
+				boxMessage.includeInLayout = false;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<!--- Viewer states -->
+	<viewer:states>
+		<s:State name="graphicalInput"/>
+		<s:State name="textInput"/>
+		<s:State name="drawingGraphicInput"/>
+		<s:State name="queryInput"/>
+		<s:State name="resultsList"/>
+	</viewer:states>
+	
+	<!--- State transition effect -->
+	<viewer:transitions>
+		<s:Transition autoReverse="true" toState="*">
+			<s:Fade id="fade" />
+		</s:Transition>
+	</viewer:transitions>
+	
+	<fx:Declarations>
+		<!--- Glow effect used to highlight features of the UI -->
+		<s:GlowFilter id="glowFilter"
+					  alpha="1"
+					  color="{getStyle('focusColor')}"
+					  inner="true"
+					  strength="2"/>
+
+		<!--- Glow effect for select by drawn graphic -->
+		<s:GlowFilter id="highlightFilter"
+					  alpha="1"
+					  color="{getStyle('focusColor')}"
+					  inner="true"
+					  strength="2.5"
+					  blurX="15"
+					  blurY="15" />
+
+		<!--- Animated glow effect for select by drawn graphic -->
+		<s:AnimateFilter id="graphicHighlight"
+						 bitmapFilter="{highlightFilter}"
+						 duration="600"
+						 repeatCount="0"
+						 repeatBehavior="{RepeatBehavior.REVERSE}" > 
+			<s:SimpleMotionPath property="alpha" valueFrom="0" valueTo="1"/>
+		</s:AnimateFilter>
+		
+		<!--- Fade Effect -->
+		<!--- @private -->
+		<s:Fade id="messagefade"
+				alphaFrom="1"
+				alphaTo="0"
+				duration="1500"
+				effectEnd="messagefade_effectEndHandler(event)"/>
+		
+		<!--- Geometry service for simplifying graphics and generating buffers -->
+		<esri:GeometryService id="geometryService"
+							  fault="geometryService_faultHandler(event)" 
+							  simplifyComplete="geometryService_simplifyCompleteHandler(event)" />
+
+		<!--- Date formatter for date queries -->
+		<s:DateTimeFormatter id="dateFormat" dateTimePattern="d MMMM yyyy" />
+	</fx:Declarations>
+
+	<!--- Template and UI container -->
+	<viewer:WidgetTemplate id="wTemplate"
+						   closed="widgetClosedHandler(event)"
+						   open="widgetOpenedHandler(event)"
+						   minimized="widgetMinimizedHandler(event)" 
+						   visible="false">
+
+		<viewer:layout>
+			<s:VerticalLayout gap="0"/>
+		</viewer:layout>		
+
+		<!--- Layer selection -->
+		<s:Group id="layerSelection" 
+				 width="100%"
+				 visible="true" visible.resultsList="false"
+				 includeInLayout="true" includeInLayout.resultsList="false">
+			<s:layout>
+				<s:HorizontalLayout gap="5" horizontalAlign="center" verticalAlign="middle"
+									paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+			</s:layout>
+
+			<s:Label id="lblLayers" text="{_layerLabel}" width="75" height="25" verticalAlign="middle"/>
+			<s:DropDownList id="cboLayer" width="100%" height="25"
+							change="cboLayer_changeHandler(event)" 
+							skinClass="widgets.SearchEnhanced.skins.SearchWidgetDropDownListSkin"/>
+			
+			<s:DropDownList id="cboSelectionMode" 
+							width="40" height="25"
+							labelField="label" 
+							skinClass="widgets.supportClasses.skins.ViewerImageDropDownListSkin"
+							itemRenderer="widgets.supportClasses.itemRenderers.ViewerImageDropDownListItemRenderer"
+							toolTip="{_selectionModeTooltip}">
+				<s:dataProvider>
+					<s:ArrayCollection>
+						<fx:Object icon="@Embed('widgets/SearchEnhanced/assets/images/i_newselection.png')"
+								   label="{resourceManager.getString('ESRIMessages', 'editorNewSelectionLabel')}"
+								   selectionName="{SELECT_NEWSELECTION}"/>
+						<fx:Object icon="@Embed('widgets/SearchEnhanced/assets/images/i_addtoselection.png')"
+								   label="{resourceManager.getString('ESRIMessages', 'editorAddSelectionLabel')}"
+								   selectionName="{SELECT_ADDTOSELECTION}"/>
+						<fx:Object icon="@Embed('widgets/SearchEnhanced/assets/images/i_removefromselection.png')"
+								   label="{resourceManager.getString('ESRIMessages', 'editorSubtractSelectionLabel')}"
+								   selectionName="{SELECT_REMOVEFROMSELECTION}"/>
+						
+					</s:ArrayCollection>
+				</s:dataProvider>
+				
+			</s:DropDownList>
+			
+			<s:ToggleButton id="showSelectionResults" toolTip="{_showSelectionTooltip}" 
+							selected="true" width="25" height="25" 
+							skinClass="widgets.SearchEnhanced.skins.SearchWidgetShowSelectionResultsToggleButtonSkin" />
+
+			<s:ToggleButton id="zoomSelectionResults" toolTip="{_zoomToSelectionTooltip}" 
+							selected="true" width="25" height="25" 
+							skinClass="widgets.SearchEnhanced.skins.SearchWidgetZoomSelectionResultsToggleButtonSkin" />
+
+		</s:Group>
+
+		<!--- Graphical selection tools -->
+		<s:Group id="graphicalInput"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.graphicalInput="true"
+				 includeInLayout="false" 
+				 includeInLayout.graphicalInput="true">
+			<s:layout>
+				<s:VerticalLayout gap="10" horizontalAlign="center"/>
+			</s:layout>
+			
+			<s:Label id="txtLabelGraphical"
+					 width="100%"
+					 text=""
+					 textAlign="center"/>
+
+			<!--- Graphical selection -->
+			<s:HGroup id="imageGroup"
+					  width="100%"
+					  gap="10"
+					  horizontalAlign="center">
+				<components:FocusableImage name="{DrawTool.MAPPOINT}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_point.png"
+										   toolTip="{_pointLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}" />
+				<components:FocusableImage name="{DrawTool.POLYLINE}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_line.png"
+										   toolTip="{_lineLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+				<components:FocusableImage name="{DrawTool.FREEHAND_POLYLINE}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_freeline.png"
+										   toolTip="{_freehandLineLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+				<components:FocusableImage name="{DrawTool.EXTENT}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_rect.png"
+										   toolTip="{_rectangleLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+				<components:FocusableImage name="{DrawTool.CIRCLE}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_circle.png"
+										   toolTip="{_circleLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+				<components:FocusableImage name="{DrawTool.POLYGON}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_poly.png"
+										   toolTip="{_polygonLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+				<components:FocusableImage name="{DrawTool.FREEHAND_POLYGON}"
+										   width="40" height="40"
+										   buttonMode="true"
+										   click="toggleDrawTool(event)"
+										   rollOut="iconRollOutHandler(event)"
+										   rollOver="iconRollOverHandler(event)"
+										   source="assets/images/i_draw_freepoly.png"
+										   toolTip="{_freehandPolygonLabel}"
+										   useHandCursor="true"
+										   enabled="{_layerInScale}"/>
+			</s:HGroup>
+		</s:Group>
+		
+		<!--- Text selection tools -->
+		<s:Group id="textInput"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.textInput="true" 
+				 includeInLayout="false" 
+				 includeInLayout.textInput="true">
+			<s:layout>
+				<s:VerticalLayout gap="10" horizontalAlign="center"/>
+			</s:layout>
+		
+			<!--- Expression selection -->
+			<s:VGroup id="expressionSettings"
+					  width="100%"
+					  gap="5"
+					  paddingTop="5" paddingBottom="5" 
+					  paddingLeft="5" paddingRight="5"
+					  visible="{_showExpressions}"
+					  includeInLayout="{_showExpressions}">
+				
+				<!--- Expression selection -->
+				<s:HGroup id="expressionSelection" 
+						  width="100%" gap="5" 
+						  horizontalAlign="center" 
+						  verticalAlign="middle" >
+					<s:Label id="lblExpressions" text="{_expressionLabel}" width="100"/>
+					<s:DropDownList id="cboExpressions" width="100%" height="25"
+									change="cboExpressions_changeHandler(event)" />
+				</s:HGroup>
+				
+				<s:Scroller width="100%" height="100%">
+					<s:HGroup width="100%">
+						<!--- Expression parameters -->
+						<s:Form id="expressionParameters"
+								 width="100%" >
+						</s:Form>
+					</s:HGroup>
+				</s:Scroller>
+				
+				<!--- Execute button -->
+				<s:HGroup width="100%" horizontalAlign="center" >
+					<s:Button id="butExecuteExpressionSearch" 
+							  click="butExecuteExpressionSearch_clickHandler(event)" 
+							  label="{_executeSearchLabel}" enabled="{_showExpressions}" />
+				</s:HGroup>
+			</s:VGroup>
+			
+			
+			<!--- Message area displayed if there are no expressions for this layer -->
+			<s:HGroup id="noExpressions"
+					  width="100%"
+					  horizontalAlign="center"
+					  verticalAlign="middle"
+					  paddingTop="5" paddingBottom="5"
+					  paddingLeft="5" paddingRight="5"
+					  visible="{!_showExpressions}"
+					  includeInLayout="{!_showExpressions}">
+				<s:Label id="lblNoExpressions" 
+						 text="There are no searchable expressions configured for this layer." 
+						 maxDisplayedLines="3" />
+			</s:HGroup>
+			
+		</s:Group>
+
+		<!--- Query selection tools -->
+		<s:Group id="queryInput"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.queryInput="true" 
+				 includeInLayout="false" 
+				 includeInLayout.queryInput="true">
+			<s:layout>
+				<s:VerticalLayout gap="10" horizontalAlign="center"/>
+			</s:layout>
+			
+			<!--- Field Selection selection -->
+			<s:Label text="Fields:" width="100%"/>
+			<mx:List id="fieldsLst" 
+					 width="100%" height="85" 
+					 fontSize="10"
+					 dataProvider="{_queryFields}" 
+					 doubleClick="fieldListDoublClick(event)" 
+					 doubleClickEnabled="true" 
+					 labelFunction="targetLayerFieldsLabelFunc" />	
+			
+			<s:HGroup height="140" width="100%" 
+					  paddingTop="5" paddingBottom="5">	
+				<s:VGroup height="100%">
+					<s:Label text="Operators:"/>
+					<s:HGroup>
+						<s:VGroup>
+							<s:Button id="equal" label="=" 
+									  width="40" fontSize="10" 
+									  click="operatorClick(event)"/>
+							<s:Button id="less" label="&lt;" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="greater" label="&gt;" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="under" label="_" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+						</s:VGroup>
+						<s:VGroup>
+							<s:Button id="different" label="&lt;&gt;"
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="lessorqual" label="&lt;=" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="greaterorequal" label="&gt;=" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="perc" label="%" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+						</s:VGroup>
+						<s:VGroup>
+							<s:Button id="like" label="Like" 
+									  width="40" fontSize="10" 
+									  click="operatorClick(event)"/>
+							<s:Button id="and" label="and" 
+									  width="40" fontSize="10"
+									  click="operatorClick(event)"/>
+							<s:Button id="or" label="or" 
+									  width="40" fontSize="10"  
+									  click="operatorClick(event)"/>		
+						</s:VGroup>    	    	
+					</s:HGroup>		            
+				</s:VGroup>
+				<s:VGroup height="100%" width="100%">
+					<s:Label text="Values:" width="50"/> 
+					<mx:List
+						id="valuesLst" 
+						width="100%" height="100%"
+						fontSize="10"
+						dataProvider="{_pagingQueryTask.uniqueValues}"
+						doubleClick="valListDoublClick(event)" 
+						doubleClickEnabled="true"/>	
+					<s:Button id="getUniqueBtn"  label="Get Unique Values " fontSize="10" 
+							  click="retreiveFieldValues(event)"
+							  enabled="{fieldsLst.selectedIndex >= 0}"
+							  visible="{!_pagingQueryTask.isQuerying}" 
+							  includeInLayout="{!_pagingQueryTask.isQuerying}"/>
+					<s:Label id="uniqueIDStatus"
+							 text="{'Processing: ' + _pagingQueryTask.featuresProcessed + 
+							 ' of ' + _pagingQueryTask.featuresTotal + ' \n(Esc to Cancel)'}"
+							 width="100%"
+							 visible="{_pagingQueryTask.isQuerying}" 
+							 includeInLayout="{_pagingQueryTask.isQuerying}"/> 
+				</s:VGroup>		   	  		      
+			</s:HGroup>
+			
+			<s:Label text="SELECT * FROM {cboLayer.selectedItem.label} WHERE:"
+					 fontSize="10" fontWeight="normal"
+					 visible="{cboLayer.selectedItem}" width="100%" height="12"/>
+			<mx:TextArea id="queryFilter" 
+						 height="100%" width="100%"
+						 selectable="true" borderColor="{getStyle('borderColor')}" />
+			<s:HGroup width="100%" verticalAlign="middle" horizontalAlign="center">
+				<s:Button id="clearFilter" label="Clear"
+						  click="{queryFilter.text = ''; queryFilter.setFocus();}" 
+						  enabled="{queryFilter.text.length &gt; 0}"/>
+				<s:Button id="butExecuteQueryBuilderSearch" label="{_executeSearchLabel}"
+						  click="butExecuteQueryBuilderSearch_clickHandler(event)" 
+						  enabled="{queryFilter.text.length &gt; 0}"/>
+			</s:HGroup>
+			
+		</s:Group>
+		
+		<!--- Selection by drawing graphic tools -->
+		<s:Group id="drawingGraphicInput"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.drawingGraphicInput="true" 
+				 includeInLayout="false" 
+				 includeInLayout.drawingGraphicInput="true" >
+			<s:layout>
+				<s:VerticalLayout gap="10" horizontalAlign="center" clipAndEnableScrolling="true" />
+			</s:layout>
+		
+			<s:VGroup width="100%" height="100%">
+				<s:Label id="lblSelectGraphic" width="100%" 
+						 text="Select a drawn graphic from the following list to use as a search extent." />
+				<s:DataGrid id="graphicsList" 
+							width="100%" height="100%"
+							visible="{_graphics.length > 0}"
+							includeInLayout="{_graphics.length > 0}"
+							dataProvider="{_graphics}"
+							selectionMode="multipleRows" 
+							verticalScrollPolicy="auto"
+							requestedRowCount="{_graphics.length + 1}"
+							alternatingRowColors="[#CCCCCC, #999999]" 
+							rollOverColor="{getStyle('rollOverColor')}"
+							selectionColor="{getStyle('focusColor')}"
+							valueCommit="graphicsList_valueCommitHandler(event)">
+					<s:columns>
+						<s:ArrayList>
+							<s:GridColumn dataField="id" headerText="Graphic ID" width="60" />
+							<s:GridColumn dataField="GraphicType" headerText="Graphic Type" />
+						</s:ArrayList>
+					</s:columns>
+				</s:DataGrid>
+			</s:VGroup>
+			
+			<s:HGroup width="100%" gap="5" verticalAlign="middle" horizontalAlign="center" >
+				<s:Button id="butDrawnGraphicsSelectAll" label="Select All" click="butDrawnGraphicsSelectAll_clickHandler(event)" 
+						  enabled="{_graphics.length &gt; 0 &amp;&amp; graphicsList.selectionLength &lt; _graphics.length }" 
+						  visible="{_graphics.length &gt; 0}" includeInLayout="{_graphics.length &gt; 0}" />
+				<s:Button id="butDrawnGraphicsSelectNone" label="Select None" click="butDrawnGraphicsSelectNone_clickHandler(event)" 
+						  enabled="{_graphics.length &gt; 0 &amp;&amp; graphicsList.selectionLength &gt; 0 }" 
+						  visible="{_graphics.length &gt; 0}" includeInLayout="{_graphics.length &gt; 0}"  />
+				<s:Label text="{_graphics.length} graphics available" /> 
+				
+			</s:HGroup>
+			<s:HGroup width="100%" gap="5" verticalAlign="middle" horizontalAlign="center">
+				<s:Button id="butExecuteDrawingGraphicSearch" label="Execute Search" 
+						  enabled="{_graphics.length &gt; 0 &amp;&amp; graphicsList.selectionLength &gt; 0}" 
+						  click="butExecuteDrawingGraphicSearch_clickHandler(event)" />
+			</s:HGroup>			
+			
+		</s:Group>
+		
+		<!--- Results display area -->
+		<s:Group id="resultsList"
+				 width="100%" height="100%"
+				 visible="false"
+				 visible.resultsList="true"
+				 includeInLayout="false"
+				 includeInLayout.resultsList="true">
+			
+			<s:layout>
+				<s:VerticalLayout gap="10" horizontalAlign="center"/>
+			</s:layout>
+			<s:Scroller width="100%" height="100%">
+				<sc:SearchLayerDataGroup id="layersDG" width="100%" dataProvider="{_layerCache}" >
+					<sc:layout>
+						<s:VerticalLayout 
+							gap="0"
+							horizontalAlign="justify"
+							useVirtualLayout="false" 
+							variableRowHeight="true"
+							clipAndEnableScrolling="true" />
+					</sc:layout>
+				</sc:SearchLayerDataGroup>
+			</s:Scroller>
+		</s:Group>
+		
+		<!--- Message display area -->
+		<s:HGroup id="boxMessage"
+				  width="100%"
+				  includeInLayout="false"
+				  visible="false"
+				  verticalAlign="middle"
+				  hideEffect="{messagefade}"
+				  paddingTop="5">
+			<mx:SWFLoader id="swfMessage" source="assets/images/loader.swf"
+						  visible="false"
+						  includeInLayout="false"/>
+			<s:Label id="txtMessage"
+					 width="98%"
+					 text=""/>
+		</s:HGroup>
+		
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>

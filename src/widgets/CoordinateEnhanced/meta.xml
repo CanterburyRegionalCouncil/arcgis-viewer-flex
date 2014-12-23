@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<configuration>
+	<openbydefault>true</openbydefault>
+	<icon>widgets/CoordinateEnhanced/assets/images/icon.png</icon>
+	<label>Enhanced Coordinate Widget</label>
+	<description>This widget displays the coordinates on the map of the position where the mouse is currently located.  If the map isbeing displayed in a geographic coordinate system (or web mercator), the coordinates can be displayed in decimal degrees, degrees minutes seconds or web mercator coordinates. The widget can also display the current map scale.  This is a layout type widget.</description>
+	<widgetversion>1.0</widgetversion>
+	<helpurl>widgets/CoordinateEnhanced/README.md</helpurl>
+</configuration>

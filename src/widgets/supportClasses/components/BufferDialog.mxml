@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SUMMARY				: 	Dialog which can be popped to allow user to generate a buffer around a 
+						feature from another feature layer or graphics layer currently in the 
+						map.  The dialog then dispatches an AppEvent which a listening component 
+						can use to signal that they can take the selected feature and perform 
+						some action (in this perfrom the buffer with the given settings it). 
+
+SOURCE				: 	ECAN
+
+DEVELOPED BY	 	: 	Ryan Elley, ECan.
+
+CREATED				: 	27/06/2013
+DEPENDENCIES		: 	None.
+
+CHANGES 
+Change By 			| Change Date 	| Change Description
+Ryan Elley (ECan)	| 27/06/2013	| Initial Development.
+-->
+<s:TitleWindow xmlns:fx=			"http://ns.adobe.com/mxml/2009" 
+			   xmlns:s=				"library://ns.adobe.com/flex/spark" 
+			   xmlns:mx=			"library://ns.adobe.com/flex/mx" 
+			   width=				"400" 
+			   height=				"200"
+			   title=				"{Title}"
+			   close=				"closeHandler(event)"
+			   creationComplete=	"creationCompleteHandler(event)"
+			   currentState=		"bufferOne" >
+	<fx:Script>
+		<![CDATA[
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			
+			
+			/* COMPONENT VARIABLES
+			---------------------------------------------------------------------------- */
+
+			// LABELS
+			
+			/** Label text for the dialog title. Defaults to "Buffer Features"  */
+			[Bindable]
+			public static var Title:String = "Buffer Features";
+
+			/** Label text for the dialog instructions. Defaults to "Enter the radius to buffer the selected feature(s) by and press BUFFER."  */
+			[Bindable]
+			public static var InstructionLabel:String = "Enter the radius to buffer the selected feature(s) by and press BUFFER.";
+
+
+			/** Label text for the buffer radius input text box. Defaults to "Buffer Radius:"  */
+			[Bindable]
+			public static var BufferRadiusInputLabel:String = "Buffer Radius:";
+
+			/** Label text for the merge buffers check box. Defaults to "Merge Overlapping Buffers:"  */
+			[Bindable]
+			public static var MergeBuffersLabel:String = "Merge Overlapping Buffers:";
+
+			/** Label text for the merge buffers check box. Defaults to "Check to merge any overlaps together.  If unchecked separate buffers will be gnerated for each feature."  */
+			[Bindable]
+			public static var MergeBuffersTooltip:String = "Check to merge any overlaps together.  If unchecked separate buffers will be gnerated for each feature.";
+
+			
+			/** Validation error message for required fields. Defaults to "Required"  */
+			[Bindable]
+			public static var RequiredFieldLabel:String = "Required";
+
+			/** Label text for the cancel button.  Defaults to "Cancel" */
+			[Bindable]
+			public static var CancelButtonLabel:String = "Cancel";
+			
+			/** Tooltip text for the cancel button.  Defaults to "Click to cancel the buffer action and close dialog" */
+			[Bindable]
+			public static var CancelButtonTooltip:String = "Click to cancel the buffer action and close dialog";
+
+			/** Label text for the buffer button.  Defaults to "Buffer" */
+			[Bindable]
+			public static var CreateBufferButtonLabel:String = "Buffer";
+			
+			/** Tooltip text for the vuffer button.  Defaults to "Click to create a buffer feature and close dialog" */
+			[Bindable]
+			public static var CreateBufferButtonTooltip:String = "Click to create a buffer feature and close dialog";
+
+			
+			
+			/* COMPONENT PROPERTIES
+			---------------------------------------------------------------------------- */
+
+			
+			
+			/* COMPONENT EVENT HANDLERS
+			---------------------------------------------------------------------------- */
+
+			/**
+			 * Called when the dialog is closed
+			 */
+			protected function closeHandler(event:CloseEvent):void
+			{
+				
+				
+			}
+			
+			/** 
+			 * Called when the title window gets the focus
+			 */ 
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{
+				focusManager.setFocus(txtRadius);
+			}
+			
+		]]>
+	</fx:Script>	
+	
+	<fx:Declarations>
+		<s:NumberValidator 	id="radValidator" source="{txtRadius}" required="true" property="text" 
+							domain="real" enabled="true" triggerEvent="change" requiredFieldError="{RequiredFieldLabel}"
+							valid="Validator_validHandler(event)" invalid="Validator_invalidHandler(event)" />
+	</fx:Declarations>
+	
+	<!--- State and transition details -->
+	<s:states>
+		<s:State name="bufferOne" />
+		<s:State name="bufferMany" />
+	</s:states>
+	
+	<s:VGroup width="100%" height="100%">
+
+		<!--- Instructions -->
+		<s:HGroup width="100%" paddingLeft="10" paddingRight="10" paddingTop="10">
+			<s:Label id="labInstructions" width="100%" text="{InstructionLabel}" />
+		</s:HGroup>
+		
+		<mx:Form width="100%" height="100%" id="frmBufferRadius" visible="true" >
+			<mx:FormItem id="frmRadius" label="{BufferRadiusInputLabel}" width="100%" 
+						 visible="true">
+				<s:TextInput id="txtRadius" width="100%" restrict="-1234567890." />
+			</mx:FormItem>
+			
+			<mx:FormItem id="frmMerge" label="{MergeBuffersLabel}" width="100%" 
+						 visible="false" visible.bufferMany="true"
+						 includeInLayout="false" includeInLayout.bufferMany="true" >
+				<s:CheckBox id="chkMerge" selected="true" toolTip="{MergeBuffersTooltip" />
+			</mx:FormItem>
+		</mx:Form>
+		
+		<s:HGroup width="100%" horizontalAlign="right" paddingLeft="10" paddingRight="10" paddingBottom="10" paddingTop="10" gap="10">
+			<s:Button id="butCancel" 
+					  label="{CancelButtonLabel}" 
+					  toolTip="{CancelButtonTooltip}"
+					  buttonMode="true"
+					  useHandCursor="true" />
+			<s:Button id="butBuffer" 
+					  label="{CreateBufferButtonLabel}" 
+					  toolTip="{CreateBufferButtonTooltip}" 
+					  enabled="{(txtRadius.text.length &gt; 0)}"
+					  buttonMode="true"
+					  useHandCursor="true" />
+		</s:HGroup>
+		
+	</s:VGroup>
+	
+</s:TitleWindow>

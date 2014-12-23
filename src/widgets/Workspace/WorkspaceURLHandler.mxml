@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+SUMMARY					: This widget adds functionality to the viewer that looks for URL parameters that 
+will load a workspace on startup of the viewer.  It requires the Workspace 
+Widget to be configured and available within the viewer (this widget can use 
+the same config file as the workspace widget.
+
+SOURCE					: This code largely based on SearchEnhanced\URLSearchHandlerWidget by Ryan Elley, 
+ECan. which in turn has some code based on code provided by Auckland Regional 
+Council.
+
+DEVELOPED BY 			: Matthew Simmons, Geographic Business Solutions.
+
+CREATED					: 18/02/2011
+DEPENDENCIES			: widgets.Workspace.WorkspaceWidget
+
+CHANGES 
+Change By 				| Change Date 	| Change Description
+Matthew Simmons			| 18/02/2011	| Initial Development
+Ryan Elley (ECan) 		| 17/06/2011 	| Flex Viewer Port 2.3.1 API and 2.3.1 viewer
+Ryan Elley (ECan)	 	| 09/01/2012 	| Flex Viewer Port 2.5 API and 2.5 viewer
+Ryan Elley (ECan)		| 25/05/2013	| Flex Viewer Port 3.3 API and 3.3 viewer
+Change to communications method between widgets.  Now uses 
+"addSharedData" method to to queue up the request to load the 
+workspace.  The workspace widget checks for a queued item when
+this when it first openes. 
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright © 2008 - 2009 ESRI
+//
+// All rights reserved under the copyright laws of the United States.
+// You may freely redistribute and use this software, with or
+// without modification, provided you include the original copyright
+// and use restrictions.  See use restrictions in the file:
+// <install location>/FlexViewer/License.txt
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+
+<viewer:BaseWidget xmlns:fx				="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s				="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx				="library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer			="com.esri.viewer.*"
+				   widgetConfigLoaded	="widgetConfigLoaded(event)" >
+	
+	<fx:Script>
+		<![CDATA[ 
+			import com.esri.viewer.AppEvent;
+			import com.esri.viewer.ViewerContainer;
+			
+			import flash.utils.setTimeout;
+			
+			
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			
+			
+			/* WIDGET CONSTANTS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * This event type is used by the Controller to indicate a widget run request
+			 */
+			public static const WIDGET_RUN:String = "widgetRunRequested";
+			
+			
+			
+			/* WIDGET VARIABLES
+			-------------------------------------------------------------------------- */
+
+			/** Workspace widget's name in the main viever config XML file */
+			protected var _workspaceWidgetLabel:String = "Workspaces";
+			
+			/** ID value associated with the workspace widget */
+			protected var _workspacewidgetID:Number = -1;
+
+			/** ID of the workspace to be loaded from the url parameters */
+			protected var _workspaceID:String = null;
+
+			/** Delay to use in the timeout when calling the workspace widgte.  Used to make sure that viewer widgets have all loaded correctly */
+			protected var _URLHandlerPreloadDelay:Number = 1000;
+			
+			
+			
+			/* WIDGET EVENT HANDLERS
+			-------------------------------------------------------------------------- */
+			
+			/**
+			 * Called when the widget config has loaded.  Initialises the widget and checks for any workspace parameters in the application's calling url.
+			 * <p>
+			 * <b>Parameters</b><br/>
+			 * <ul>
+			 * <li><i>event [Event]: </i>Event raised when the config has finished loading.</li>
+			 * </ul>
+			 * </p>			 
+			 */
+			private function widgetConfigLoaded(event:Event):void 
+			{
+				if (configXML)
+				{
+					// Get the name of the workspaces widget
+					if (configXML.WorkspaceWidgetLabel != null)
+					{
+						_workspaceWidgetLabel = configXML.WorkspaceWidgetLabel || "Workspaces";
+					}
+					
+					// Get the preload delay value to use for the setTimout
+					if (configXML.URLHandlerPreloadDelay != null)
+					{
+						_URLHandlerPreloadDelay = new Number(configXML.URLHandlerPreloadDelay);
+					}
+					
+					// Get the param setting
+					for(var param:String in ViewerContainer.urlConfigParams)
+					{
+						if (param.toLowerCase() == "workspace")
+						{
+							_workspaceID = ViewerContainer.urlConfigParams[param];
+							break;
+						}
+					}
+					
+					// If there is a workspace in the url parameters, call the workspace widget
+					if (_workspaceID && _workspaceID != "")
+					{
+						// Force the workspace widget to be loaded
+						var widgetList:Array = configData.widgets;
+						for (var w:int = 0; w < widgetList.length; w++)
+						{
+							if (widgetList[w].label == _workspaceWidgetLabel)
+							{
+								_workspacewidgetID = w;
+
+								// Dispatch a shared data containing the info about the workspace to open
+								addSharedData("WorkspaceWidget_QueueWorkspace", new ArrayCollection([_workspaceID]));
+								
+								// Call a request to run after a short time delay - only because the app is quite swamped at startup and otherwise the event never heard 
+								setTimeout(
+									function ():void 
+									{
+										// Open the id widget
+										AppEvent.dispatch(WIDGET_RUN, _workspacewidgetID);
+									}, 
+									_URLHandlerPreloadDelay );
+								break;
+							}
+						}
+					}
+				}
+			}			
+		]]>
+	</fx:Script>
+</viewer:BaseWidget>

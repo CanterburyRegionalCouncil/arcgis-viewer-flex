@@ -1,0 +1,31 @@
+<?xml version="1.0" ?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//
+// CONFIGURATION:
+// aioSelectionMethod can be "extent" or "draw."
+// dataExtractionService is the url to the GP service.
+//
+////////////////////////////////////////////////////////////////////////////////
+-->
+<configuration label="Extract incident data">
+    <dataextractionservice>http://sampleserver4.arcgisonline.com/ArcGIS/rest/services/HomelandSecurity/Incident_Data_Extraction/GPServer/Extract%20Data%20Task</dataextractionservice>>
+    <aioselectionmethod>draw</aioselectionmethod>
+
+	<!-- Maximum number of layers to be allowed to extract - set to -1 if allowing all layers to be selected. -->
+	<extractlayerlimit>10</extractlayerlimit>
+
+	<!-- Labels -->
+	<labels>
+		<step2label>2. Select layers to extract (max. 10)</step2label>
+		<layerlimitlabel>Maximum number of layers to extract reached.</layerlimitlabel>
+	</labels>
+
+	<!-- Help Location Settings -->
+	<helplocationurl>http://somewebsite.com/HelpTopic</helplocationurl>
+</configuration>
+
+<!--
+    See Data Extract widget tag reference at
+    http://links.esri.com/dataextractwidget
+-->

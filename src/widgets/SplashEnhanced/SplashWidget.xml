@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+<configuration>
+    <!--
+        Refer to the doc below for valid HTML tags that can be used for the content
+        http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flashx/textLayout/conversion/TextConverter.html#TEXT_FIELD_HTML_FORMAT
+    -->
+
+	<!-- Force popup to be displayed.  Default is true=splash shown every time viewer is started.  false=only show if local messagedate flag does not match value in messagedate tag below -->
+	<alwaysshow>false</alwaysshow>
+
+	<!-- Date of last update - used as a flag to determine in the popup has already been displayed.  Needs to be in format mmm DD yyyy hh:MM:ss GMT-1200 -->
+    <messagedate>Jun 08 2013 15:11:00 GMT-1200</messagedate> 
+    
+	<!-- Display dimenesions -->
+    <width>375</width>
+    <height>375</height>
+    <content>
+    	<![CDATA[ 
+    	<p align='center'>
+    		<font size="18"><b>New update to GISmo now available</b></font>
+    	</p>
+    	<p>
+    		This new splash screen will appear from now on to tell you about any changes to GISmo or relevant information.
+    	</p> 
+	    <font size="14"><b>Updates as of 16 July 2012</b></font>
+        <textformat blockindent="20">
+			<p>
+				* The workspace widget will now display the scrollbar at all times.<br/>
+				* 
+			</p>
+        </textformat>
+        ]]>
+    </content>
+    <btnlabel>Click to continue</btnlabel>
+
+</configuration>
+
+<!--
+    See Splash widget tag reference at
+    http://links.esri.com/splashwidget
+-->
