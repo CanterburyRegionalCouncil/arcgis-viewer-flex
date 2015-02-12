@@ -12,6 +12,11 @@
 		 contains spatial info). -->
   <searchWidgetName>Search</searchWidgetName>
 
+  <!-- Format of dates returned from the Identify task results.  This has 2 possible values:
+  		DMY when dates returned have the format DD/MM/YYYY 
+  		MDY when dates returned have the format MM/MM/YYYY -->
+  <identifyDateFormat>DMY</identifyDateFormat>
+
   <!-- Search Layer Settings -->
   <mapLayers>
     <mapLayer url="http://arcgis.ecan.govt.nz/ArcGIS/rest/services/Public/Region_Base/MapServer" >

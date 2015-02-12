@@ -145,7 +145,8 @@ Ryan Elley (ECan) 	| 21/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer
 			
 			[Bindable]
 			private var _dateFormatPattern:String = "EEEE, MMMM dd, yyyy h:mm:ss a";
-
+			private var _inputDateFormat:String = "MDY";
+			
 			// Labels
 			private var _helpLabel:String;
 
@@ -222,6 +223,11 @@ Ryan Elley (ECan) 	| 21/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer
 					else if (configXML.geometryservice.length() > 0) // look in widget's config if not using GeometryServiceSingleton
 					{
 						geometryService.url = configXML.geometryservice;
+					}
+					
+					// Set the identify date format
+					if (configXML.identifyDateFormat) {
+						_inputDateFormat = configXML.identifyDateFormat[0];
 					}
 					
 					// Create graphics layer for map
@@ -2095,13 +2101,24 @@ Ryan Elley (ECan) 	| 21/07/2014 	| Flex Viewer Port 3.6 API and 3.6 viewer
 					{
 						case Field.TYPE_DATE:
 						{
-							var dateMS:Number = Date.parse(graphic.attributes[field.alias]);
-							//var dateMS:Number = Number(graphic.attributes[field.alias]);
-							if (!isNaN(dateMS))
-							{
-								//value = msToDate(dateMS, dateFormat, useUTC);
-								//var date:Date = dateFormatter.format(dateMS);
-								obj.value =  dateFormatter.format(dateMS); //date.toLocaleString();
+							var d:String =  graphic.attributes[field.alias].toString();
+							if (d != "" && d != "Null") {
+								var parts:Array = d.split("/");
+								if (parts.length == 3) {
+									var date:Date = null;
+									if (_inputDateFormat == "DMY") {
+										date = new Date(Number(parts[2]),Number(parts[1])-1,Number(parts[0]));
+									} else {
+										date = new Date(Number(parts[2]),Number(parts[0])-1,Number(parts[1]));
+									}
+									
+									var f:String = dateFormatter.format(date);
+									if (f != "") {
+										obj.value = f;
+									} else {
+										obj.value = d;
+									}
+								}
 							}
 							break;
 						}
