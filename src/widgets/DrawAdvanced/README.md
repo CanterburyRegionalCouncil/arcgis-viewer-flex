@@ -327,5 +327,7 @@ The following lists the history of changes/updates made.
 <li>Flex Viewer Port 3.7 API and 3.7 viewer</li>
 <li>Bug fix for copy feature not creating a clone but referencing the original graphic's geometry.</li>
 </ul></td></tr>
-</tbody>
+<tr><td>Ryan Elley (ECan)</td><td>05 March 2015</td><td><ul>
+<li>Bug fix/enhancement for loading saved graphics or graphics from GPX files.  The graphic data group now implements a bulk loading setting that prevents the data update from being displayed when graphics are added or removed.  This has increased performance when large numbers of graphics are added (previously the screen would update after each graphic is added, which caused progressively slower performance).</li>
+</ul></td></tr></tbody>
 </table>

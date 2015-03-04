@@ -138,6 +138,9 @@
 			/* WIDGET VARIABLES
 			---------------------------------------------------------------------------------- */
 			
+			[Bindable]
+			private var _bulkLoading:Boolean = false;
+			
 			// Toolbar visibility
 			[Bindable]
 			private var _showToolbar:Boolean = true; 
@@ -2153,11 +2156,17 @@
 								{
 									if (isWebMercator(map.spatialReference.wkid))
 									{
+										// Set bulk loading flag to prevent graphics list updates
+										_bulkLoading = true;
+										
 										for each (graphic in features.points)
 										{
 											graphic.geometry = WebMercatorUtil.geographicToWebMercator(graphic.geometry);
 											_graphicsLayer.add(graphic);
 										}
+
+										// CLear bulk loading flag
+										_bulkLoading = false;
 									}
 									else
 									{
@@ -2185,12 +2194,17 @@
 								{
 									if (isWebMercator(map.spatialReference.wkid))
 									{
+										// Set bulk loading flag to prevent graphics list updates
+										_bulkLoading = true;
+										
 										for each (graphic in features.lines)
 										{
 											graphic.geometry = WebMercatorUtil.geographicToWebMercator(graphic.geometry);
 											_graphicsLayer.add(graphic);
 										}
-	
+
+										// Clear bulk loading flag
+										_bulkLoading = false;
 									}
 									else
 									{
@@ -2244,6 +2258,9 @@
 							}
 							else
 							{
+								// Set bulk loading flag to prevent graphics list updates
+								_bulkLoading = true;
+
 								// Add the graphics to the map
 								for each (graphic in features.points)
 								{
@@ -2259,6 +2276,10 @@
 								{
 									_graphicsLayer.add(graphic);
 								}
+								
+								// CLear bulk loading flag
+								_bulkLoading = false;
+								
 	
 								// Show the finished message
 								CursorManager.removeBusyCursor();
@@ -2303,6 +2324,10 @@
 						
 						// Add the graphics to the map.
 						var hasProjected:Boolean = false;
+
+						// Set bulk loading flag to prevent graphics list updates
+						_bulkLoading = true;
+						
 						for each (graphic in graphics)
 						{
 							// Check if coordinate system of graphic matches the map
@@ -2322,7 +2347,10 @@
 								_projectTaskCount ++;
 								geometryService.project(projParam, new AsyncResponder( project_resultHandler, project_faultHandler, [graphic])); 
 							}
-						}						
+						}	
+						// Clear bulk loading flag 
+						_bulkLoading = false;
+						
 						
 						// Show the finished message
 						if (!hasProjected) 
@@ -2340,6 +2368,9 @@
 				{
 					if (result)
 					{
+						// Set bulk loading flag to prevent graphics list updates
+						_bulkLoading = true;
+
 						var i:Number;
 						for (i = 0; i < token.length; i++)
 						{
@@ -2352,6 +2383,9 @@
 							// Add the graphic to the map
 							_graphicsLayer.add(graphic);
 						}
+
+						// Clear bulk loading flag
+						_bulkLoading = false;
 					}
 
 					// Show the finished message
@@ -5641,7 +5675,9 @@
 												 
 												 areaFormat="{cboArea.selectedItem}" 
 												 lengthFormat="{cboDistance.selectedItem}"
-												 numberFormatter="{numberFormatter}" >
+												 numberFormatter="{numberFormatter}"
+												 
+												 bulkLoading="{_bulkLoading}" >
 						<components:layout>
 							<s:VerticalLayout gap="2"
 											  horizontalAlign="justify"

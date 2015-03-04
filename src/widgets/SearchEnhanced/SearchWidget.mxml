@@ -20,6 +20,7 @@ Ryan Elley (ECan)	| 08/09/2013	| Bug fix in DateField use code not getting corre
 Ryan Elley (ECan)	| 20/03/2014	| Updates to work with Add Shapefile widget.
 									| Addition of query builder functionality widget.  Based on code from Mark Hoylund Selction Widget ver 1.5
 Ryan Elley (ECan)	| 07/06/2014	| Bug fix to Queued Search function to ensure all instances of variable in the query string are updated with the suggested value.
+Ryan Elley (ECan)	| 26/02/2015	| Bug fix for configuration setting matching to layers loaded in map.  Issue was not identifying layers where the url contained text that was not the same "case" as the xml setting.
 -->
 
 <viewer:BaseWidget xmlns:esri=				"http://www.esri.com/2008/ags"
@@ -1488,20 +1489,42 @@ Ryan Elley (ECan)	| 07/06/2014	| Bug fix to Queued Search function to ensure all
 			 */
 			private function getLayerXML(layerUrl:String):XML
 			{
+				var layerUrlLowered:String = layerUrl.toLowerCase();
+				
 				var result:XML;
 				if (configXML.layers)
 				{
+					/* CHANGE BY RYAN ELLEY 26/02/2015 - ORIGINAL CODE
+					
 					// Check for the primary url
-					result = configXML.layers.layer.(url == layerUrl)[0];
-
+					//result = configXML.layers.layer.(url == layerUrl)[0];
+					*/
+					
+					for each (var layer:XML in configXML.layers.layer.url) {
+						var xmlurl:String = layer.toString().toLowerCase();
+						if (xmlurl == layerUrlLowered) {
+							result = layer.parent();
+							break;
+						}
+					} 
+					
 					if (!result)
 					{
+						/* CHANGE BY RYAN ELLEY 26/02/2015 - ORIGINAL CODE					
 						// Check for urlaliases
 						var alias:XML  = configXML.layers.layer.alias.(@url == layerUrl)[0];
 						
 						if (alias) {
 							result = alias.parent();
-						}
+						} */
+						
+						for each (var alias:XML in configXML.layers.layer.alias) {
+							var xmlaliasurl:String = alias.@url.toString().toLowerCase();
+							if (xmlaliasurl == layerUrlLowered) {
+								result = alias.parent();
+								break;
+							}
+						} 
 					}
 				}
 				
@@ -2529,6 +2552,8 @@ Ryan Elley (ECan)	| 07/06/2014	| Bug fix to Queued Search function to ensure all
 					}
 				}
 			}
+			
+			
 			
 			/* SEARCH FUNCTIONALITY
 			-------------------------------------------------------------------------- */

@@ -10,3 +10,5 @@ dist/
 # Other files
 *.swc
 *-ecan.xml
+src/config-PRO-Assets.xml
+src/config-cm.xml

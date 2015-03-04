@@ -171,8 +171,8 @@
 
 		<layer>
 			<name>ECAN Resource Consents - All Activities</name>
-			<url>http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0</url>
-			<alias url="http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
+			<url>http://gis1.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0</url>
+			<alias url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
 			<alias url="http://gis2.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
 			<alias url="http://gis3.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0"/>
 			<useamf>true</useamf>

@@ -4,7 +4,6 @@ package widgets.DrawAdvanced.components
 	import com.esri.ags.events.GraphicEvent;
 	import com.esri.ags.events.GraphicsLayerEvent;
 	import com.esri.ags.layers.GraphicsLayer;
-	import widgets.DrawAdvanced.components.GraphicPropertiesItemRenderer;
 	
 	import mx.collections.*;
 	import mx.core.ClassFactory;
@@ -15,6 +14,9 @@ package widgets.DrawAdvanced.components
 	import spark.components.supportClasses.ItemRenderer;
 	import spark.effects.AnimateFilter;
 	import spark.formatters.NumberFormatter;
+	
+	import widgets.DrawAdvanced.components.GraphicPropertiesItemRenderer;
+	import widgets.Geoprocessing.parameters.BooleanParameter;
 	
 	// these events bubble up from the GraphicPropertiesItemRenderer
 	[Event(name="graphicClick", type="widgets.DrawAdvanced.events.GraphicPropertiesItemRendererEvent")]
@@ -76,10 +78,28 @@ package widgets.DrawAdvanced.components
 		private var _graphicsLayer:GraphicsLayer;
 		
 		
+		private var _bulkLoading:Boolean = false;
+		
 		/* -------------------------------------------------------------------
 		Component properties
 		---------------------------------------------------------------------- */
 
+		[Bindable]
+		public function set bulkLoading(value:Boolean):void
+		{
+			_bulkLoading = value;
+			
+			if (!value) 
+			{
+				updateDataProvider();
+			}
+		}
+		
+		public function get bulkLoading():Boolean
+		{
+			return _bulkLoading;
+		}
+		
 
 		/* Number Formatter Property
 		------------------------------------------------------*/
@@ -242,21 +262,24 @@ package widgets.DrawAdvanced.components
 		 */
 		private function updateDataProvider():void
 		{
-			invalidateDisplayList();
-			
-			// Reset the data provider to a new collection
-			this.dataProvider = new ArrayCollection();
-			
-			// Insert the graphics in the reverse order into the new array collection
-			if (_graphicsLayer && (_graphicsLayer.graphicProvider as ArrayCollection).length > 0)
+			if (!_bulkLoading) 
 			{
-				for each (var graphic:Graphic in (_graphicsLayer.graphicProvider as ArrayCollection))
+				invalidateDisplayList();
+				
+				// Reset the data provider to a new collection
+				this.dataProvider = new ArrayCollection();
+				
+				// Insert the graphics in the reverse order into the new array collection
+				if (_graphicsLayer && (_graphicsLayer.graphicProvider as ArrayCollection).length > 0)
 				{
-					ArrayCollection(this.dataProvider).addItemAt(graphic,0);
+					for each (var graphic:Graphic in (_graphicsLayer.graphicProvider as ArrayCollection))
+					{
+						ArrayCollection(this.dataProvider).addItemAt(graphic,0);
+					}
 				}
+				
+				validateNow();
 			}
-			
-			validateNow();
 		}
 		
 		/* -------------------------------------------------------------------
@@ -268,21 +291,24 @@ package widgets.DrawAdvanced.components
 		 */
 		private function updateGraphicList(event:CollectionEvent):void
 		{
-			invalidateDisplayList();
-			
-			// Reset the data provider to a new collection
-			this.dataProvider = new ArrayCollection();
-			
-			// Insert the graphics in the reverse order into the new array collection
-			if (_graphics && _graphics.length > 0)
+			if (!_bulkLoading) 
 			{
-				for each (var graphic:Graphic in _graphics)
+				invalidateDisplayList();
+				
+				// Reset the data provider to a new collection
+				this.dataProvider = new ArrayCollection();
+				
+				// Insert the graphics in the reverse order into the new array collection
+				if (_graphics && _graphics.length > 0)
 				{
-					ArrayCollection(this.dataProvider).addItemAt(graphic,0);
+					for each (var graphic:Graphic in _graphics)
+					{
+						ArrayCollection(this.dataProvider).addItemAt(graphic,0);
+					}
 				}
+				
+				validateNow();
 			}
-			
-			validateNow();
 		}
 		
 		/* -------------------------------------------------------------------

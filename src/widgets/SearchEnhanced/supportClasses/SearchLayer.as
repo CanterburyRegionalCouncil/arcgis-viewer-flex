@@ -361,6 +361,11 @@ package widgets.SearchEnhanced.supportClasses
 			var found:Boolean = false;
 			var checkURLLowered:String = checkurl.toLowerCase();
 			
+			if (checkurl == "http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer/0" )
+			{
+				var iii:int = 0;
+			}
+			
 			if (checkURLLowered == this.url.toLowerCase())
 			{
 				found = true;
