@@ -59,6 +59,7 @@ Ryan Elley (ECan)	| 20/07/2014	| Flex Viewer Port 3.6 API and 3.6 viewer.
 			import mx.rpc.AsyncResponder;
 			import mx.rpc.events.FaultEvent;
 			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
 			
 			import spark.events.TextOperationEvent;
 			
@@ -531,6 +532,9 @@ Ryan Elley (ECan)	| 20/07/2014	| Flex Viewer Port 3.6 API and 3.6 viewer.
 				// Check that service has a url 
 				if (_predictiveServiceURL)
 				{
+					/* Added by Ryan Elley - 25/05/2015 Trim search text to remove preceeding and trailing spaces */
+					searchText = StringUtil.trim(searchText);
+					
 					/* New code for change to json task */
 					requesttask.url = _predictiveServiceURL;
 					

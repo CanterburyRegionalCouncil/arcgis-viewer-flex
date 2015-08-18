@@ -12,14 +12,14 @@
 	<!-- Additional map services to load settings -->
 	<additionalservices>
 		<layer label="Water Quality and Monitoring" type="dynamic"
-			visible="false" alpha="1" useProxy="false"
+			visible="false" alpha="1" useproxy="false"
 			keywords="Water Quality, Qualarc, Surface Water, Groundwater"
 			description="Layers related to surface water and groundwater quality." 
 			url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/WaterQualityandMonitoring/MapServer" >
 		</layer>
 
 		<layer label="Resource Consents, Wells and Springs"
-			type="dynamic" visible="false" alpha="1" useProxy="false"
+			type="dynamic" visible="false" alpha="1" useproxy="false"
 			keywords="Resource Consents, RMA, Wells, Springs, Surface Water, Groundwater, Landuse"
 			description="Layers commonly used in applications for Resource Consents with Environment Canterbury."
 			url="http://gis.ecan.govt.nz/ArcGIS/rest/services/Public/Resource_Consents/MapServer">

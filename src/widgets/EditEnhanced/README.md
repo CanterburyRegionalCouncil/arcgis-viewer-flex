@@ -293,5 +293,8 @@ The following lists the history of changes/updates made.
 <tr><td>Ryan Elley (ECan)</td><td>30 September 2014</td><td><ul><li>Flex Viewer Port 3.6 API and 3.6 viewer</li></ul></td></tr>
 <tr><td>Ryan Elley (ECan)</td><td>23 December 2014</td><td><ul><li>Flex Viewer Port 3.7 API and 3.7 viewer</li>
 <li>Check added for self-intersecting polygons before applying edits on adds and updates.</li></ul></td></tr>
+</tr>
+<tr><td>Ryan Elley (ECan)</td><td>17 August 2015</td><td><ul><li>Bug fix for Edit Widget URL Parameter control</li>
+</ul></td></tr>
 </tbody>
 </table>

@@ -770,9 +770,16 @@
 						var msKeywords:String = servicesList[i].@keywords;
 						
 						var msDescription:String = servicesList[i].@description;
+
+						var msUseProxy:Boolean = false;
+						var useProxString:String = servicesList[i].@useproxy;
+						
+						if (useProxString != null && useProxString.toLowerCase() == "true") {
+							msUseProxy = true;
+						}
 						
 						var mapservice:MapLayer = new MapLayer(servicesList[i], msLabel, msType, msIcon, msIconTip, 
-							msKeywords, msDescription, null, false, configData.proxyUrl);
+							msKeywords, msDescription, null, false, msUseProxy, configData.proxyUrl, msURL);
 						serviceNameList.push(mapservice);
 					}
 				}
@@ -1313,13 +1320,13 @@
 								</fx:Component>
 							</mx:itemRenderer>
 						</mx:DataGridColumn>
-						<mx:DataGridColumn headerText="Info" dataField="url" width="35" resizable="false" >
+						<mx:DataGridColumn headerText="Info" dataField="metaurl" width="35" resizable="false" >
 							<mx:itemRenderer>									
 								<fx:Component>
 									<mx:LinkButton width="14" height="17" 
 												   icon="@Embed('widgets/LayerListEnhanced/assets/images/metadata.png')" 
 												   downIcon="@Embed('widgets/LayerListEnhanced/assets/images/metadata.png')" 
-												   click="{outerDocument.openMetaData(data.url)}" 
+												   click="{outerDocument.openMetaData(data.metaurl)}" 
 												   toolTip="Show Additional Info"/>
 								</fx:Component>
 							</mx:itemRenderer>

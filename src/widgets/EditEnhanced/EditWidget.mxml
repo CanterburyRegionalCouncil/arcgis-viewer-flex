@@ -1144,7 +1144,7 @@
 							// Check for feature layers with these settings
 							for each(var layer:FeatureLayer in featureLayers)
 							{
-								if (layerSettings.url == layer.url)
+								if ((layerSettings.url as String).toLowerCase() == layer.url.toLowerCase())
 								{
 									filtered.push(layer);
 									//break;
@@ -1181,13 +1181,16 @@
 					{
 						if (layerSettings.keyfield != null)
 						{
+							// Change to account for case sensitivity when comparing layer settings urls to the layer urls
+							var checkurl:String = (layerSettings.url as String).toLowerCase();
+							
 							// Get the feature layer
 							for each (var layer:Layer in map.layers)
 							{
 								if (layer is FeatureLayer)
 								{
 									var featureLayer:FeatureLayer = layer as FeatureLayer;
-									if (featureLayer.url == layerSettings.url)
+									if (featureLayer.url.toLowerCase() == checkurl)
 									{
 										hasLayers = featureLayer.visible = true;
 										break;
@@ -2151,7 +2154,7 @@
                 {
                     var layer:Layer = layerObj.layer;
                     if (layer is FeatureLayer
-                        && FeatureLayer(layer).url == featureLayerURL
+                        && FeatureLayer(layer).url.toLowerCase() == featureLayerURL.toLowerCase()
                         && FeatureLayer(layer).gdbVersion == gdbVersion)
                     {
                         result = true;
@@ -2180,7 +2183,7 @@
                 for (var n:int = 0; n < mapLayers.length; )
                 {
                     if (mapLayers.getItemAt(n) is FeatureLayer
-                        && FeatureLayer(mapLayers.getItemAt(n)).url == featureLayerURL
+                        && FeatureLayer(mapLayers.getItemAt(n)).url.toLowerCase() == featureLayerURL.toLowerCase()
                         && FeatureLayer(mapLayers.getItemAt(n)).gdbVersion == gdbVersion)
                     {
                         result = mapLayers.getItemAt(n) as FeatureLayer;
@@ -3817,7 +3820,7 @@
 						// Get the edit settings
 						for each (var layerSettings:Object in layerToSettings)
 						{
-							if (layer.url == layerSettings.url)
+							if (layer.url.toLowerCase() == (layerSettings.url as String).toLowerCase())
 							{
 								// Check the keyfield and get the field type
 								for each (var fld:Field in layer.layerDetails.fields)

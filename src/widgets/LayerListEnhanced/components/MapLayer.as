@@ -9,7 +9,7 @@ package widgets.LayerListEnhanced.components
 	{
 		public function MapLayer( layerxml:XML, label:String, type:String, icon:Class, icontip:String, 
 								  keywords:String, description:String='', layer:Layer=null, 
-								  add:Boolean=false, proxyurl:String = null, target:IEventDispatcher=null)
+								  add:Boolean=false, useproxy:Boolean = false, proxyurl:String = null, metaurl:String = null, target:IEventDispatcher=null)
 		{
 			super(target);
 			this.layerXML = layerxml;
@@ -22,16 +22,16 @@ package widgets.LayerListEnhanced.components
 			this.layer = layer;
 			this.add = add;
 			
-			if (layerxml.@url)
+			if (metaurl != null)
 			{
 				// Check for proxy
-				if (layerxml.@useproxy && layerxml.@useproxy == "true") 
+				if (layerxml[0].@useproxy && layerxml[0].@useproxy == "true") 
 				{
-					this.url = proxyurl + "?" + (layerxml.@url as String);
+					this.metaurl = proxyurl + "?" + metaurl;
 				}
 				else
 				{
-					this.url = layerxml.@url as String;
+					this.metaurl = metaurl;
 				}
 			}
 		}
@@ -55,7 +55,7 @@ package widgets.LayerListEnhanced.components
 		
 		public var layerXML:XML;
 		
-		
-		public var url:String;
+		[Bindable]
+		public var metaurl:String;
 	}
 }
