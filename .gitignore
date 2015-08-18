@@ -12,3 +12,5 @@ dist/
 *-ecan.xml
 src/config-PRO-Assets.xml
 src/config-cm.xml
+src/config-EIR-Complaints-EDIT.xml
+src/widgets/EditEnhanced/EditWidget-EIR-Complaints-EDIT.xml
