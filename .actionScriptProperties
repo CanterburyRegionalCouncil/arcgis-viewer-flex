@@ -73,6 +73,7 @@
     <module application="src/index.mxml" destPath="widgets/StreetView/StreetViewWidget.swf" optimize="true" sourcePath="src/widgets/StreetView/StreetViewWidget.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Workspace/WorkspaceURLHandler.swf" optimize="true" sourcePath="src/widgets/Workspace/WorkspaceURLHandler.mxml"/>
     <module application="src/index.mxml" destPath="widgets/Workspace/WorkspaceWidget.swf" optimize="true" sourcePath="src/widgets/Workspace/WorkspaceWidget.mxml"/>
+    <module application="src/index.mxml" destPath="widgets/Workspace/WorkspaceConverterWidget.swf" optimize="true" sourcePath="src/widgets/Workspace/WorkspaceConverterWidget.mxml"/>
   </modules>
   <buildCSSFiles/>
   <flashCatalyst validateFlashCatalystCompatibility="false"/>

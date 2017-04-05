@@ -177,9 +177,9 @@ package widgets.Workspace
 				var glayer:Object = {
 					id: graphicsLayer.id,
 					layerType: "ArcGISFeatureLayer",
-					visibility: glayer.visible,
-					opacity: glayer.alpha,
-					title: glayer.name,
+					visibility: graphicsLayer.visible,
+					opacity: graphicsLayer.alpha,
+					title: graphicsLayer.name,
 					featureCollection: {
 						layers: [],
 						showLegend: false
